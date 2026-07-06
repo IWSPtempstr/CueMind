@@ -4,7 +4,7 @@
 
 TwinMind Live Suggestions is a **meeting copilot**: three columns, one conversation, and a stubborn belief that the best nudge is the one that arrives *while you’re still in the sentence*, not five minutes later.
 
-I built this as a **take-home for TwinMind**. The product bet is simple: during a live call, people do not need more noise - they need the *right* suggestion at the *right* moment. This repo is my answer: live transcription on a fixed cadence, contextual suggestion batches every ~30 seconds, streaming chat grounded in the same transcript, runtime prompt/settings control from a modal, and one-click JSON session export.
+The product bet is simple: during a live call, people do not need more noise - they need the *right* suggestion at the *right* moment. This repo is my answer: live transcription on a fixed cadence, contextual suggestion batches every ~30 seconds, streaming chat grounded in the same transcript, runtime prompt/settings control from a modal, and one-click JSON session export.
 
 ---
 
