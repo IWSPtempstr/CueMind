@@ -17,7 +17,7 @@ There is **no test suite** in this project. The verification loop is: `npx tsc -
 
 ## Big-picture architecture
 
-A single-page **meeting copilot** (Next.js 15 App Router, React 19, Tailwind v4, no database, no auth). One client shell orchestrates three columns; four API routes are thin server-side proxies to **Groq** (OpenAI-compatible endpoints). All live state lives in React; recent sessions autosave to `localStorage`.
+**CueMind** is a single-page **meeting copilot** (Next.js 15 App Router, React 19, Tailwind v4, no database, no auth). One client shell orchestrates three columns; four API routes are thin server-side proxies to **Groq** (OpenAI-compatible endpoints). All live state lives in React; recent sessions autosave to `localStorage`.
 
 **The client owns everything; routes are stateless proxies.** [app/page.tsx](app/page.tsx) is the only page. It composes three hooks — `useMicRecorder`, `useSuggestions`, `useChat` — and passes their state down to the three column components ([MicTranscript](components/MicTranscript.tsx), [LiveSuggestions](components/LiveSuggestions.tsx), [ChatPanel](components/ChatPanel.tsx)). The hooks are the source of truth; components are presentational. To understand any feature, start at the hook, not the component.
 
@@ -32,6 +32,7 @@ A single-page **meeting copilot** (Next.js 15 App Router, React 19, Tailwind v4,
 ## Conventions that will bite you if missed
 
 - **`@/*` path alias** maps to the repo root (see `tsconfig.json` paths). Import as `@/hooks/...`, `@/lib/...`.
+- **All browser storage is namespaced `cuemind_*`** (`cuemind_settings`, `cuemind_groq_api_key` / `cuemind_session_groq_api_key`, `cuemind_sessions_v1`); exports use `cuemind-session-*` filenames. Only `groq_api_key` (unprefixed) is a recognized legacy key the settings loader migrates. Renaming any of these keys orphans existing users' saved data — treat them as a stable contract.
 - **Prompts, models, and all caps/limits live in [lib/prompts.ts](lib/prompts.ts).** Models are `whisper-large-v3` for transcription and `openai/gpt-oss-120b` for everything else. Don't hardcode these elsewhere — add a constant here.
 - **API-route security is centralized in [lib/api-security.ts](lib/api-security.ts)** and applied uniformly: every route calls `enforceRateLimit(request, bucket, limit)`, resolves the key via `resolveGroqApiKey` (custom `x-groq-api-key` header → `GROQ_API_KEY` env fallback), and clamps request-body inputs with `cappedText`/`cappedPrompt` against the `MAX_*` constants in `lib/prompts.ts`. Any new route must follow this same shape. The rate limiter is a per-instance safety net, not a distributed limiter.
 - **Never trust client-supplied sizes.** Context/prompt/message lengths are clamped server-side to `MAX_*` ceilings regardless of what the client sends; transcript content is wrapped in `<meeting_transcript>` delimiters and labeled as untrusted data (prompt-injection hardening). Keep both.
