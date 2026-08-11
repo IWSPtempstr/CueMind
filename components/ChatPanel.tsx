@@ -14,6 +14,12 @@ import ReactMarkdown from "react-markdown";
 import type { ChatMessage } from "@/types/chat";
 import type { Suggestion } from "@/types/suggestions";
 
+const FOLLOW_UP_PROMPTS = [
+  "Expand on this",
+  "Draft what I should say",
+  "What should I ask next?",
+] as const;
+
 interface InfoCardProps {
   children: ReactNode;
 }
@@ -37,6 +43,9 @@ interface ChatPanelProps {
   error: string | null;
   pendingSuggestion: Suggestion | null;
   onSuggestionHandled: () => void;
+  stopGenerating: () => void;
+  retryLastFailed: () => void;
+  canRetry: boolean;
 }
 
 interface ChatBubbleProps {
@@ -54,7 +63,9 @@ function ChatBubble({ message }: ChatBubbleProps): ReactElement {
         <div
           className={`${baseBubble} max-w-[80%] bg-blue-600 text-white`}
         >
+          <time className="mb-1 block text-[10px] text-blue-200">{message.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
           {message.content}
+          <button type="button" onClick={() => void navigator.clipboard.writeText(message.content)} className="mt-2 block text-[10px] text-blue-200">Copy</button>
         </div>
       </div>
     );
@@ -76,8 +87,9 @@ function ChatBubble({ message }: ChatBubbleProps): ReactElement {
           </span>
         ) : null}
         <div className={assistantVisual}>
+          <div className="mb-1 flex items-center justify-between gap-4"><time className="text-[10px] text-neutral-500">{message.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><button type="button" onClick={() => void navigator.clipboard.writeText(message.content)} className="text-[10px] text-neutral-500 hover:text-white">Copy</button></div>
           <div className="prose prose-invert prose-sm max-w-none">
-            <ReactMarkdown>{assistantContent}</ReactMarkdown>
+            <ReactMarkdown components={{ a: ({ ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>{assistantContent}</ReactMarkdown>
           </div>
         </div>
       </div>
@@ -93,6 +105,9 @@ export default function ChatPanel({
   error,
   pendingSuggestion,
   onSuggestionHandled,
+  stopGenerating,
+  retryLastFailed,
+  canRetry,
 }: ChatPanelProps): ReactElement {
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState("");
@@ -151,10 +166,32 @@ export default function ChatPanel({
         </div>
 
         {error ? (
-          <p className="shrink-0 px-5 pb-2 text-xs text-red-500">{error}</p>
+          <div className="flex shrink-0 items-center gap-2 px-5 pb-2 text-xs text-red-500">
+            <span>{error}</span>
+            {canRetry ? (
+              <button type="button" onClick={retryLastFailed} className="rounded border border-red-900 px-2 py-1 text-red-300">
+                Retry
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <footer className="shrink-0 border-t border-neutral-800 bg-[#0a0a0a]/95 px-5 py-4 backdrop-blur-sm">
+          {messages.some((message) => message.isDetail) ? (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {FOLLOW_UP_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  disabled={isStreaming}
+                  onClick={() => void sendMessage(prompt)}
+                  className="rounded-full border border-neutral-700 px-2.5 py-1 text-[10px] text-neutral-400 hover:text-white disabled:opacity-40"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="flex gap-3">
             <input
               id="chat-input"
@@ -171,20 +208,16 @@ export default function ChatPanel({
                   void submitFromInput();
                 }
               }}
-              disabled={isStreaming}
               placeholder="Ask anything..."
               className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               type="button"
-              disabled={isStreaming}
-              aria-label="Send message"
-              onClick={() => {
-                void submitFromInput();
-              }}
-              className="shrink-0 rounded-md bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={isStreaming ? "Stop generating" : "Send message"}
+              onClick={() => { if (isStreaming) stopGenerating(); else void submitFromInput(); }}
+              className={`shrink-0 rounded-md px-5 py-2.5 text-sm font-semibold text-white ${isStreaming ? "bg-red-600 hover:bg-red-500" : "bg-blue-600 hover:bg-blue-500"}`}
             >
-              Send
+              {isStreaming ? "Stop" : "Send"}
             </button>
           </div>
         </footer>

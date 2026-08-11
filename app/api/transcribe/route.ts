@@ -3,20 +3,36 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { enforceRateLimit, resolveGroqApiKey } from "@/lib/api-security";
 import { groqApiErrorMessage } from "@/lib/groq-route-helpers";
-import { GROQ_API_KEY_HEADER, MODELS } from "@/lib/prompts";
+import { MODELS } from "@/lib/prompts";
 
 const GROQ_TRANSCRIBE_URL =
   "https://api.groq.com/openai/v1/audio/transcriptions";
 /** Audio smaller than this is treated as noise and skipped without calling Groq. */
 const MIN_AUDIO_BYTES_FOR_GROQ = 1000;
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const TRANSCRIBE_UPLOAD_FILENAME = "chunk.webm";
+const WEBM_MAGIC = [0x1a, 0x45, 0xdf, 0xa3] as const;
+
+async function isWebm(audio: Blob): Promise<boolean> {
+  const bytes = new Uint8Array(await audio.slice(0, 4).arrayBuffer());
+  return WEBM_MAGIC.every((byte, index) => bytes[index] === byte);
+}
 
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<{ text: string } | { error: string }>> {
-  const apiKey = request.headers.get(GROQ_API_KEY_HEADER);
-  if (!apiKey?.trim()) {
+  const limited = enforceRateLimit(request, "transcribe", 12);
+  if (limited) return limited;
+
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_AUDIO_BYTES + 64_000) {
+    return NextResponse.json({ error: "Audio upload is too large" }, { status: 413 });
+  }
+
+  const apiKey = resolveGroqApiKey(request);
+  if (!apiKey) {
     return NextResponse.json(
       { error: "No API key provided" },
       { status: 401 },
@@ -45,17 +61,29 @@ export async function POST(
     return NextResponse.json({ text: "" });
   }
 
+  if (audio.size > MAX_AUDIO_BYTES) {
+    return NextResponse.json({ error: "Audio upload is too large" }, { status: 413 });
+  }
+
+  if (!(await isWebm(audio))) {
+    return NextResponse.json({ error: "Audio must be a valid WebM file" }, { status: 415 });
+  }
+
   const outbound = new FormData();
   outbound.append("file", audio, TRANSCRIBE_UPLOAD_FILENAME);
   outbound.append("model", MODELS.transcription);
   outbound.append("response_format", "json");
+  const language = incoming.get("language");
+  if (typeof language === "string" && /^[a-z]{2,3}$/i.test(language)) {
+    outbound.append("language", language.toLowerCase());
+  }
 
   let groqResponse: Response;
   try {
     groqResponse = await fetch(GROQ_TRANSCRIBE_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey.trim()}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: outbound,
     });

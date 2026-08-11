@@ -8,6 +8,7 @@ export type SuggestionType =
   | "clarify";
 
 export interface Suggestion {
+  id?: string;
   type: SuggestionType;
   preview: string;
   detail: string;

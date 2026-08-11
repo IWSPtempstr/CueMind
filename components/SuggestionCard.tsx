@@ -5,11 +5,14 @@ import type {
   ReactElement,
 } from "react";
 import type { Suggestion } from "@/types/suggestions";
+import type { SuggestionFeedback } from "@/hooks/useSuggestions";
 
 interface SuggestionCardProps {
   suggestion: Suggestion;
   onSelect: (suggestion: Suggestion) => void;
   isLatestBatch: boolean;
+  isPinned: boolean;
+  onFeedback: (suggestion: Suggestion, feedback: SuggestionFeedback) => void;
 }
 
 function typeBadgeClasses(type: Suggestion["type"]): string {
@@ -35,6 +38,8 @@ export default function SuggestionCard({
   suggestion,
   onSelect,
   isLatestBatch,
+  isPinned,
+  onFeedback,
 }: SuggestionCardProps): ReactElement {
   const dimmed = !isLatestBatch ? "opacity-50" : "";
 
@@ -62,6 +67,12 @@ export default function SuggestionCard({
         {suggestion.type.replaceAll("_", " ")}
       </span>
       <p className="mt-2 text-sm text-white">{suggestion.preview}</p>
+      <div className="mt-3 flex gap-3 border-t border-neutral-800 pt-2 text-xs text-neutral-500">
+        <button type="button" aria-label={isPinned ? "Unpin suggestion" : "Pin suggestion"} onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "pin"); }} className={isPinned ? "text-blue-300" : "hover:text-white"}>{isPinned ? "★ Pinned" : "☆ Pin"}</button>
+        <button type="button" aria-label="Dismiss suggestion" onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "dismiss"); }} className="hover:text-white">Dismiss</button>
+        <button type="button" aria-label="Mark suggestion unhelpful" onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "down"); }} className="hover:text-white">👎</button>
+        <button type="button" aria-label="Copy suggestion details" onClick={(event) => { event.stopPropagation(); void navigator.clipboard.writeText(`${suggestion.preview}\n\n${suggestion.detail}`); }} className="ml-auto hover:text-white">Copy</button>
+      </div>
     </div>
   );
 }

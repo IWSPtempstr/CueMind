@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Meeting Copilot",
-  description: "Live meeting assistant shell",
+  title: "CueMind — Live Meeting Copilot",
+  description: "Real-time meeting transcription, suggestions, and follow-ups",
 };
 
 interface RootLayoutProps {

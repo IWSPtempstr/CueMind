@@ -1,25 +1,45 @@
-# TwinMind Live Suggestions
+# CueMind Live Suggestions
 
 ## What This Is
 
-TwinMind Live Suggestions is a **meeting copilot**: three columns, one conversation, and a stubborn belief that the best nudge is the one that arrives *while you’re still in the sentence*, not five minutes later.
+CueMind is a **meeting copilot**: three columns, one conversation, and a stubborn belief that the best nudge is the one that arrives *while you’re still in the sentence*, not five minutes later.
 
-The product bet is simple: during a live call, people do not need more noise - they need the *right* suggestion at the *right* moment. This repo is my answer: live transcription on a fixed cadence, contextual suggestion batches every ~30 seconds, streaming chat grounded in the same transcript, runtime prompt/settings control from a modal, and one-click JSON session export.
+The product bet behind CueMind is simple: during a live call, people do not need more noise—they need the *right* suggestion at the *right* moment. This repo delivers live transcription on a configurable cadence, contextual suggestion batches, streaming chat grounded in the same transcript, runtime controls, resumable sessions, and friendly JSON or Markdown exports.
 
 ---
 
 ## Getting Started
 
-**Live demo:** https://twinmind-live-suggestions-jet.vercel.app
+**Live demo:** https://cuemind-live-suggestions-jet.vercel.app/
 
-You need **Node 18+** and a **Groq API key**.
+You need **Node 18+** and a **Groq API key**. You can enter the key in Settings, or set `GROQ_API_KEY` in the server environment so browsers never need a copy.
 1. Clone the repo and install dependencies: `npm install`
 2. Start the app: `npm run dev`
 3. Open **Settings** (gear icon, top right) and paste your Groq API key
 4. Click the mic and start talking
 5. Transcript chunks and live suggestions refresh automatically every ~30s
 6. Click any suggestion card to open it in chat (instant preview + streamed answer)
-7. Use **Export Session** to download transcript + suggestions + chat as JSON
+7. Export the full session as JSON for machines or Markdown for humans
+
+---
+
+## Security upgrades: the bouncer got a clipboard 🛡️
+
+The API no longer trusts a browser merely because it asked nicely. Chat context has a hard **32,000-character server ceiling**, every editable context setting is bounded, and large audio is rejected before it is parsed. Audio must also fit Groq’s 25 MB limit and carry a real WebM header.
+
+Each API route now has a small per-IP burst limiter. It is a useful first fence for a single function instance; a large multi-region deployment should add Vercel Firewall or a shared limiter too. Responses also ship with CSP, clickjacking, MIME-sniffing, referrer, and microphone-permission headers.
+
+The Groq key now lives in exactly one place. Old keys are migrated once and removed, while Settings offers browser, tab-session, or memory-only storage. A deployment can instead use `GROQ_API_KEY` server-side, and the new **Test key** button catches a bad key before a meeting does. In short: fewer loose keys, smaller inputs, and fewer surprise bills.
+
+## Feature & UX upgrades: fewer “wait, did it hear that?” moments ✨
+
+- Failed transcription chunks stay in a retry queue with exponential backoff instead of disappearing into the void. Overlapping recorders close the old stop/start gap, a live level meter shows the mic is listening, silence skips unnecessary calls, and recording can pause for coffee breaks.
+- The suggestion countdown now follows the actual recording timer. Cadence and transcription language are configurable, batches have timestamps, and cards can be pinned, dismissed, rated, or copied. Dismissed ideas feed the anti-repeat context so they are less likely to boomerang back.
+- Stopping a meeting creates a compact decisions/action-items/follow-ups report. Transcript search and timestamps make long calls skimmable, while copy buttons cover the transcript, report, suggestions, and chat.
+- Chat can be stopped mid-stream, retried after failure, and continued with handy follow-up chips. Markdown links open safely in a new tab.
+- Sessions autosave locally, the last one can be resumed after refresh, and a small session picker keeps recent meetings within reach. Exports now come in JSON and clean Markdown.
+
+The fun part is that none of these features need a database: the browser keeps a short local shelf of recent sessions, while the live model traffic still flows through the same narrow API routes.
 
 ---
 
@@ -29,7 +49,7 @@ You need **Node 18+** and a **Groq API key**.
 
 **Tailwind CSS** — No component library. I wanted speed and a dark, dense UI without fighting a design system I didn’t own. Tailwind let me iterate on spacing and borders until the three columns *felt* like a control room, not a slide deck.
 
-**No database, no auth** — For this assignment, persistence would be a distraction. Everything interesting lives in **React state for the session**: recording, transcript chunks, suggestion batches, and chat messages. If you refresh, you’re starting a new mental session anyway—that matches how I’d use a copilot in a real meeting.
+**No database, no auth** — Live state stays in React and recent session snapshots autosave to browser storage. A refresh offers to resume the last meeting, without introducing account or database machinery.
 
 **Three Groq call families** — The architecture lines up like this:
 
@@ -43,11 +63,11 @@ Transcription, the suggestion pipeline (summarize + suggest), and streaming chat
 
 ## How the Transcription Works
 
-The browser’s **MediaRecorder** runs on a **30 second stop/restart cycle** on the **same** `MediaStream`: I `start()` with **no timeslice**, let audio accumulate, then **`stop()`** so the recorder emits a **single, self-contained WebM/Opus blob** for that window. That blob goes to **`POST /api/transcribe`**, which forwards multipart data to Groq’s **Whisper Large V3** endpoint. Immediately after `onstop` (unless you’ve pressed stop for real), I spin up a **fresh** `MediaRecorder` on the same stream and `start()` again—rinse and repeat. I’m not re-encoding: Chrome/Firefox already give us WebM + Opus, and Whisper is fine with it.
+The browser’s **MediaRecorder** runs on a configurable cycle on the same `MediaStream`. One second before recorder A ends, recorder B starts; then A finalizes a self-contained WebM/Opus blob for `POST /api/transcribe`. That small overlap preserves the seam without returning to invalid timeslice fragments.
 
 **Why I walked away from timeslice.** With `start(timeslice)`, **`ondataavailable` only carries the full WebM container header in the first chunk**; later chunks are mostly codec deltas without a valid standalone header. Whisper quite reasonably **400**s those “orphan” blobs. You can try to glue the header onto every delta (I did for a while), but then Whisper happily **re-transcribes the same opening audio** on every request—duplicate transcript hell. The stop/restart pattern sidesteps both problems: each upload is a real file.
 
-**The honest cost: a small gap.** Stopping the recorder, finalizing the blob, POSTing, and starting again isn’t free in wall-clock time. In practice I see on the order of **~1–2 seconds of dead air per ~30 second cycle**—call it **roughly 6% of the timeline** if you’re feeling statistical. That’s a deliberate tradeoff: **I’d rather lose a sliver of continuity than ship garbage audio or duplicate text.** If that gap ever matters for a productized version, the next levers are overlapping recorders or a native pipeline—not going back to naive timeslice uploads.
+**The seam is intentionally overlapped.** Starting the next recorder before stopping the current one removes the old dead-air window. The tradeoff is roughly one second of shared audio at each boundary, which is preferable to dropping a sentence; a future native pipeline could reconcile that overlap more precisely.
 
 **Tiny blobs still happen.** The tail of a segment can still be effectively empty. On the client I **skip the transcribe call** if the finalized blob is under **1KB**; on the server **`/api/transcribe`** still returns **`{ text: "" }` with 200** for sub-1KB uploads so Groq never sees noise. Same spirit as before, updated for “one blob per segment” instead of “every timeslice tick.”
 
@@ -79,11 +99,11 @@ The browser’s **MediaRecorder** runs on a **30 second stop/restart cycle** on 
 
 **We skip audio conversion** because WebM/Opus is already what Whisper accepts in practice, and every conversion step adds latency and failure modes. This keeps the transcription path short and debuggable. If mobile Safari constraints force a format bridge later, I will add it with clear justification.
 
-**The Groq key lives in `localStorage`** for this assignment because account systems and vault management are outside scope. The key is not committed and not hardcoded server-side; it is provided by the user in Settings and forwarded per request header. That is a pragmatic local-dev security posture, not an enterprise auth model.
+**Groq key storage is a choice.** Browser storage is convenient, session storage is safer on shared machines, and memory-only mode forgets the key on reload. A hosted instance can set `GROQ_API_KEY` server-side and leave the browser field empty entirely.
 
-**All state in React** keeps the mental model small: one session, one tab, one source of truth. This avoids persistence complexity, migrations, and sync bugs for a workflow that is naturally session-oriented. The cost is explicit: refresh resets runtime state, which is acceptable for this scope.
+**React owns live state; browser storage owns recovery.** Autosaved snapshots keep the last ten sessions and restore Date values explicitly, so refresh is recoverable without making live updates depend on storage writes.
 
-**Stop/restart transcription vs MediaRecorder timeslice.** Timeslice produced non-standalone chunks that Whisper rejected (or duplicated when header-glued). Stop/restart gives one valid WebM per segment and removes duplicate transcript failure modes. The cost is a small **~1-2s** gap per **~30s** cycle (~6% timeline).
+**Overlapped recorders vs MediaRecorder timeslice.** Timeslice produced non-standalone chunks that Whisper rejected. Independent, slightly overlapped recorders keep every upload valid while covering the rollover boundary.
 
 **Two Groq calls per suggestion refresh (summarize, then suggest).** The summarize hop buys coherent earlier context without flooding the suggestion prompt with raw transcript. Sequential latency is real, but bounded because the summary output is capped at 200 tokens. If latency becomes the top bottleneck, collapsing into one call is the straightforward optimization.
 
@@ -104,14 +124,14 @@ The app captures microphone input only. In an in-person meeting this works well 
 
 We explored getDisplayMedia-based tab audio capture to mix both mic and system audio into a single MediaRecorder stream via the Web Audio API's AudioContext. It works for standard browser tab audio (YouTube, etc.) but fails for virtual meeting tools like Google Meet because WebRTC routes received audio through a separate internal pipeline that tab capture doesn't intercept. This is a known platform-level limitation, not a code bug.
 
-How TwinMind solves this in their product: their mobile app runs on-device with their Ear-3 ASR model and physically captures room audio — the phone mic hears both the local speaker and the remote participant's voice coming through laptop speakers. Their planned native desktop app will have system-level audio access that browsers fundamentally cannot provide. Both approaches require leaving the browser sandbox entirely.
+A mobile version can work around this by physically capturing room audio—the phone microphone hears both the local speaker and the remote participant through the laptop speakers. A native desktop app can instead use system-level audio access that browsers fundamentally do not provide. Both approaches require leaving the browser sandbox.
 
 The practical workaround for virtual interviews: the suggestion engine generates useful nudges from the speaker's side alone. Narrating or paraphrasing what the other person says ("so you're asking about X...") feeds their context into the transcript naturally.
 
 ### No speaker diarization
-The app transcribes speech as a single stream without identifying who said what. TwinMind's Ear-3 model achieves a 3.8% Speaker Diarization Error Rate — world-class performance that comes from a dedicated pipeline: voice activity detection, speaker embedding extraction (pitch, tone, cadence fingerprinting), and clustering to label segments by speaker.
+The app transcribes speech as a single stream without identifying who said what. Reliable diarization requires a dedicated pipeline: voice activity detection, speaker embedding extraction (pitch, tone, and cadence fingerprinting), and clustering to label segments by speaker.
 
-Whisper Large V3 does not perform diarization — it transcribes only. Adding diarization would require either a separate diarization API (AssemblyAI, Deepgram, or Pyannote) or TwinMind's own Ear-3 API (which they've announced plans to open). It also conflicts architecturally with our real-time 30s chunk approach since diarization typically needs a complete audio segment to accurately cluster speakers. It's a meaningful pipeline change, not a drop-in add-on.
+Whisper Large V3 does not perform diarization—it transcribes only. Adding diarization would require a separate diarization API such as AssemblyAI, Deepgram, or Pyannote. It also conflicts architecturally with the real-time 30-second chunk approach because diarization usually needs a complete audio segment to cluster speakers accurately. It is a meaningful pipeline change, not a drop-in add-on.
 
 ---
 
@@ -120,4 +140,3 @@ Whisper Large V3 does not perform diarization — it transcribes only. Adding di
 The layout is desktop-first by design — a meeting copilot lives on the same screen as your video call, not on a phone. On large screens (1024px+) you get the full three-column experience. Below that, the columns stack vertically, each taking full width and 50vh of height with independent scroll, so the app remains usable on smaller displays without the layout collapsing.
 
 On the accessibility side: the mic button carries `aria-label` and `aria-pressed` so screen readers announce recording state. Suggestion cards are fully keyboard navigable with Enter/Space activation. The chat message list has `aria-live="polite"` so new messages are announced. The settings modal traps focus when open and auto-focuses the API key field. All icon-only buttons have explicit `aria-label` attributes.
-

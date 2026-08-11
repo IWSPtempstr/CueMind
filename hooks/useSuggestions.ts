@@ -1,208 +1,111 @@
 "use client";
 
-// Fetches /api/summarize then /api/suggestions using windowed transcript text while recording (plus manual refresh).
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadTwinmindSettings } from "@/hooks/useSettings";
+import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
-import { GROQ_API_KEY_HEADER } from "@/lib/prompts";
+import type { TranscriptChunk } from "@/types/session";
 import type { Suggestion, SuggestionBatch } from "@/types/suggestions";
 
-const GROQ_STORAGE_KEY = "groq_api_key";
-const REFRESH_INTERVAL_MS = 30000;
+export type SuggestionFeedback = "dismiss" | "down" | "pin";
 
 interface UseSuggestionsArgs {
-  transcriptChunks: string[];
+  transcriptChunks: TranscriptChunk[];
   isRecording: boolean;
 }
 
-interface SummarizeSuccessResponse {
-  summary: string;
+interface SummarizeSuccessResponse { summary: string }
+interface SuggestionsSuccessResponse { suggestions: Suggestion[] }
+
+function isSummarizeSuccess(value: unknown): value is SummarizeSuccessResponse {
+  return typeof value === "object" && value !== null && "summary" in value && typeof (value as SummarizeSuccessResponse).summary === "string";
 }
 
-interface SuggestionsSuccessResponse {
-  suggestions: Suggestion[];
+function isSuggestionsSuccess(value: unknown): value is SuggestionsSuccessResponse {
+  return typeof value === "object" && value !== null && "suggestions" in value && Array.isArray((value as SuggestionsSuccessResponse).suggestions) && (value as SuggestionsSuccessResponse).suggestions.length === 3;
 }
 
-function isSummarizeSuccess(
-  value: unknown,
-): value is SummarizeSuccessResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "summary" in value &&
-    typeof (value as SummarizeSuccessResponse).summary === "string"
-  );
+function buildContextStrings(chunks: readonly TranscriptChunk[], recentChars: number, earlierChars: number): { recentText: string; earlierText: string } {
+  const fullText = chunks.map((chunk) => chunk.text).join("\n");
+  const recentText = fullText.slice(-recentChars);
+  const earlierPart = fullText.slice(0, Math.max(0, fullText.length - recentText.length));
+  return { recentText, earlierText: earlierPart.slice(-earlierChars) };
 }
 
-function isSuggestionsSuccess(
-  value: unknown,
-): value is SuggestionsSuccessResponse {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("suggestions" in value) ||
-    !Array.isArray((value as SuggestionsSuccessResponse).suggestions)
-  ) {
-    return false;
-  }
-  return (value as SuggestionsSuccessResponse).suggestions.length === 3;
-}
-
-function buildContextStrings(
-  chunks: readonly string[],
-  recentContextChars: number,
-  earlierContextChars: number,
-): {
-  recentText: string;
-  earlierText: string;
-} {
-  const fullText = chunks.join("\n");
-  if (fullText.length === 0) {
-    return { recentText: "", earlierText: "" };
-  }
-  const recentText = fullText.slice(-recentContextChars);
-  const earlierPart = fullText.slice(
-    0,
-    Math.max(0, fullText.length - recentText.length),
-  );
-  const earlierText =
-    earlierPart.length <= earlierContextChars
-      ? earlierPart
-      : earlierPart.slice(-earlierContextChars);
-  return { recentText, earlierText };
-}
-
-function previousPreviewsLine(batches: SuggestionBatch[]): string {
-  if (batches.length === 0) {
-    return "";
-  }
-  const latest = batches[0];
-  return latest.suggestions.map((suggestion) => suggestion.preview).join("\n");
-}
-
-export default function useSuggestions({
-  transcriptChunks,
-  isRecording,
-}: UseSuggestionsArgs): {
+export default function useSuggestions({ transcriptChunks, isRecording }: UseSuggestionsArgs): {
   batches: SuggestionBatch[];
+  setBatches: (batches: SuggestionBatch[]) => void;
   isLoading: boolean;
   triggerRefresh: () => void;
+  nextRefreshAt: number | null;
+  dismissedIds: ReadonlySet<string>;
+  pinnedIds: ReadonlySet<string>;
+  recordFeedback: (suggestion: Suggestion, feedback: SuggestionFeedback) => void;
   error: string | null;
 } {
-  const [batches, setBatches] = useState<SuggestionBatch[]>([]);
+  const [batches, setBatchState] = useState<SuggestionBatch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const batchesRef = useRef(batches);
+  const transcriptRef = useRef(transcriptChunks);
+  const isLoadingRef = useRef(false);
+  const dismissedPreviewsRef = useRef<string[]>([]);
 
-  const batchesRef = useRef<SuggestionBatch[]>(batches);
-  const transcriptRef = useRef<string[]>(transcriptChunks);
-  const isLoadingRef = useRef<boolean>(false);
+  useEffect(() => { batchesRef.current = batches; }, [batches]);
+  useEffect(() => { transcriptRef.current = transcriptChunks; }, [transcriptChunks]);
 
-  useEffect(() => {
-    batchesRef.current = batches;
-  }, [batches]);
-
-  useEffect(() => {
-    transcriptRef.current = transcriptChunks;
-  }, [transcriptChunks]);
+  const setBatches = useCallback((next: SuggestionBatch[]): void => {
+    const hydrated = next.map((batch) => ({
+      ...batch,
+      timestamp: new Date(batch.timestamp),
+      suggestions: batch.suggestions.map((suggestion) => ({ ...suggestion, id: suggestion.id ?? crypto.randomUUID() })),
+    }));
+    setBatchState(hydrated);
+  }, []);
 
   const runCycle = useCallback(async (): Promise<void> => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const chunks = transcriptRef.current;
-    if (chunks.length === 0) {
-      return;
-    }
-
-    if (isLoadingRef.current) {
-      return;
-    }
-
-    const settings = loadTwinmindSettings();
-    const apiKey = settings.groqApiKey.trim() || localStorage.getItem(GROQ_STORAGE_KEY)?.trim();
-    if (!apiKey) {
-      setError("No Groq API key set — open Settings to add one");
-      return;
-    }
-
+    if (isLoadingRef.current || transcriptRef.current.length === 0) return;
+    const settings = loadCueMindSettings();
     isLoadingRef.current = true;
     setIsLoading(true);
     setError(null);
 
     try {
-      const { recentText, earlierText } = buildContextStrings(
-        chunks,
-        settings.recentContextChars,
-        settings.earlierContextChars,
-      );
-
+      const { recentText, earlierText } = buildContextStrings(transcriptRef.current, settings.recentContextChars, settings.earlierContextChars);
       let earlierSummary = "";
-      if (earlierText.length > 0) {
-        const summarizeResponse = await fetch("/api/summarize", {
+      if (earlierText) {
+        const response = await fetch("/api/summarize", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            [GROQ_API_KEY_HEADER]: apiKey,
-          },
-          body: JSON.stringify({
-            earlierTranscript: earlierText,
-            summarizationPrompt: settings.summarizationPrompt,
-          }),
+          headers: { "Content-Type": "application/json", ...groqRequestHeaders(settings) },
+          body: JSON.stringify({ earlierTranscript: earlierText, summarizationPrompt: settings.summarizationPrompt }),
         });
-        const summarizePayload: unknown = await summarizeResponse.json();
-        if (!summarizeResponse.ok) {
-          const message = isErrorResponseBody(summarizePayload)
-            ? summarizePayload.error
-            : "Summarization failed";
-          setError(message);
-          return;
-        }
-        if (!isSummarizeSuccess(summarizePayload)) {
-          setError("Invalid summarization response");
-          return;
-        }
-        earlierSummary = summarizePayload.summary;
+        const payload: unknown = await response.json();
+        if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Summarization failed");
+        if (!isSummarizeSuccess(payload)) throw new Error("Invalid summarization response");
+        earlierSummary = payload.summary;
       }
 
-      const previousSuggestions = previousPreviewsLine(batchesRef.current);
-
-      const suggestionsResponse = await fetch("/api/suggestions", {
+      const latestPreviews = batchesRef.current[0]?.suggestions.map((suggestion) => suggestion.preview) ?? [];
+      const previousSuggestions = [...latestPreviews, ...dismissedPreviewsRef.current.slice(-12)].join("\n");
+      const response = await fetch("/api/suggestions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          [GROQ_API_KEY_HEADER]: apiKey,
-        },
-        body: JSON.stringify({
-          recentTranscript: recentText,
-          earlierSummary,
-          previousSuggestions,
-          suggestionsPrompt: settings.suggestionsPrompt,
-        }),
+        headers: { "Content-Type": "application/json", ...groqRequestHeaders(settings) },
+        body: JSON.stringify({ recentTranscript: recentText, earlierSummary, previousSuggestions, suggestionsPrompt: settings.suggestionsPrompt }),
       });
-
-      const suggestionsPayload: unknown = await suggestionsResponse.json();
-      if (!suggestionsResponse.ok) {
-        const message = isErrorResponseBody(suggestionsPayload)
-          ? suggestionsPayload.error
-          : "Suggestions failed";
-        setError(message);
-        return;
-      }
-      if (!isSuggestionsSuccess(suggestionsPayload)) {
-        setError("Invalid suggestions response");
-        return;
-      }
+      const payload: unknown = await response.json();
+      if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Suggestions failed");
+      if (!isSuggestionsSuccess(payload)) throw new Error("Invalid suggestions response");
 
       const batch: SuggestionBatch = {
         id: crypto.randomUUID(),
         timestamp: new Date(),
-        suggestions: suggestionsPayload.suggestions,
+        suggestions: payload.suggestions.map((suggestion) => ({ ...suggestion, id: crypto.randomUUID() })),
       };
-      setBatches((previous) => [batch, ...previous]);
-    } catch {
-      setError("Network error while fetching suggestions.");
+      setBatchState((previous) => [batch, ...previous]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Network error while fetching suggestions.");
     } finally {
       isLoadingRef.current = false;
       setIsLoading(false);
@@ -210,43 +113,47 @@ export default function useSuggestions({
   }, []);
 
   const triggerRefresh = useCallback((): void => {
+    const interval = loadCueMindSettings().suggestionRefreshSeconds * 1000;
+    setNextRefreshAt(isRecording ? Date.now() + interval : null);
     void runCycle();
-  }, [runCycle]);
-
-  const immediateCycleFiredRef = useRef(false);
-
-  useEffect(() => {
-    if (!isRecording) {
-      immediateCycleFiredRef.current = false;
-      return;
-    }
-    if (transcriptChunks.length === 0) {
-      return;
-    }
-    if (immediateCycleFiredRef.current) {
-      return;
-    }
-    immediateCycleFiredRef.current = true;
-    void runCycle();
-  }, [isRecording, transcriptChunks.length, runCycle]);
-
-  useEffect(() => {
-    if (!isRecording) {
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      if (transcriptRef.current.length === 0) {
-        return;
-      }
-      void runCycle();
-    }, REFRESH_INTERVAL_MS);
-    return () => window.clearInterval(intervalId);
   }, [isRecording, runCycle]);
 
-  return {
-    batches,
-    isLoading,
-    triggerRefresh,
-    error,
-  };
+  const recordFeedback = useCallback((suggestion: Suggestion, feedback: SuggestionFeedback): void => {
+    if (!suggestion.id) return;
+    if (feedback === "pin") {
+      setPinnedIds((previous) => {
+        const next = new Set(previous);
+        if (next.has(suggestion.id!)) next.delete(suggestion.id!); else next.add(suggestion.id!);
+        return next;
+      });
+      return;
+    }
+    dismissedPreviewsRef.current = [...dismissedPreviewsRef.current, suggestion.preview];
+    setDismissedIds((previous) => new Set(previous).add(suggestion.id!));
+  }, []);
+
+  useEffect(() => {
+    if (!isRecording) {
+      setNextRefreshAt(null);
+      return;
+    }
+    const interval = loadCueMindSettings().suggestionRefreshSeconds * 1000;
+    setNextRefreshAt(Date.now() + interval);
+    const id = window.setInterval(() => {
+      setNextRefreshAt(Date.now() + interval);
+      void runCycle();
+    }, interval);
+    return () => window.clearInterval(id);
+  }, [isRecording, runCycle]);
+
+  const firstTranscriptRef = useRef(false);
+  useEffect(() => {
+    if (!isRecording) { firstTranscriptRef.current = false; return; }
+    if (transcriptChunks.length > 0 && !firstTranscriptRef.current) {
+      firstTranscriptRef.current = true;
+      void runCycle();
+    }
+  }, [isRecording, runCycle, transcriptChunks.length]);
+
+  return { batches, setBatches, isLoading, triggerRefresh, nextRefreshAt, dismissedIds, pinnedIds, recordFeedback, error };
 }

@@ -8,4 +8,5 @@ export interface ChatMessage {
   content: string;
   isStreaming?: boolean;
   isDetail?: boolean;
+  timestamp: Date;
 }

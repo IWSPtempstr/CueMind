@@ -1,50 +1,50 @@
-// Exports current TwinMind session state as a downloadable JSON file.
-import type { ChatMessage } from "@/types/chat";
-import type { SuggestionBatch } from "@/types/suggestions";
+import type { SessionSnapshot } from "@/types/session";
 
-export function exportSession({
-  transcriptChunks,
-  suggestionBatches,
-  chatMessages,
-}: {
-  transcriptChunks: string[];
-  suggestionBatches: SuggestionBatch[];
-  chatMessages: ChatMessage[];
-}): void {
-  const exportData = {
-    exportedAt: new Date().toISOString(),
-    transcript: transcriptChunks.map((text, index) => ({
-      chunk: index + 1,
-      text,
-    })),
-    suggestionBatches: suggestionBatches.map((batch) => ({
-      id: batch.id,
-      timestamp: batch.timestamp.toISOString(),
-      suggestions: batch.suggestions.map((s) => ({
-        type: s.type,
-        preview: s.preview,
-        detail: s.detail,
-      })),
-    })),
-    chat: chatMessages
-      .filter((m) => !m.isDetail)
-      .map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        timestamp: new Date().toISOString(),
-      })),
-  };
-
-  const serialized = JSON.stringify(exportData, null, 2);
-  const blob = new Blob([serialized], { type: "application/json" });
+function download(content: string, type: string, extension: "json" | "md"): void {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const date = new Date().toISOString().split("T")[0];
   link.href = url;
-  link.download = `twinmind-session-${date}.json`;
+  link.download = `cuemind-session-${new Date().toISOString().split("T")[0]}.${extension}`;
   document.body.append(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export function exportSession(session: SessionSnapshot, format: "json" | "md"): void {
+  if (format === "json") {
+    download(JSON.stringify({ ...session, exportedAt: new Date().toISOString() }, null, 2), "application/json", "json");
+    return;
+  }
+
+  const lines = [
+    `# ${session.title}`,
+    "",
+    `Exported ${new Date().toLocaleString()}`,
+    "",
+    "## Transcript",
+    "",
+    ...session.transcriptChunks.flatMap((chunk) => [
+      `**${new Date(chunk.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}** — ${chunk.text}`,
+      "",
+    ]),
+    "## Suggestions",
+    "",
+    ...session.suggestionBatches.flatMap((batch) => [
+      `### ${new Date(batch.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`,
+      "",
+      ...batch.suggestions.flatMap((suggestion) => [`- **${suggestion.type.replaceAll("_", " ")}**: ${suggestion.preview}`, `  ${suggestion.detail}`, ""]),
+    ]),
+    "## Chat",
+    "",
+    ...session.chatMessages.filter((message) => !message.isDetail).flatMap((message) => [
+      `**${message.role === "user" ? "You" : "CueMind"} · ${new Date(message.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}**`,
+      "",
+      message.content,
+      "",
+    ]),
+    ...(session.meetingReport ? ["## Meeting report", "", session.meetingReport.content, ""] : []),
+  ];
+  download(lines.join("\n"), "text/markdown", "md");
 }

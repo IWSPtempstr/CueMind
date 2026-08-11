@@ -3,13 +3,12 @@
 // Manages chat messages, Groq SSE streaming via /api/chat, and bridging suggestion preview/detail into the thread.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadTwinmindSettings } from "@/hooks/useSettings";
+import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
-import { CHAT_HISTORY_MAX_MESSAGES, GROQ_API_KEY_HEADER } from "@/lib/prompts";
+import { CHAT_HISTORY_MAX_MESSAGES } from "@/lib/prompts";
+import type { TranscriptChunk } from "@/types/session";
 import type { ChatMessage } from "@/types/chat";
 import type { Suggestion } from "@/types/suggestions";
-
-const GROQ_STORAGE_KEY = "groq_api_key";
 
 interface ChatHistoryEntry {
   role: "user" | "assistant";
@@ -52,15 +51,19 @@ function extractDeltaContent(data: unknown): string | null {
 export default function useChat({
   transcriptChunks,
 }: {
-  transcriptChunks: string[];
+  transcriptChunks: TranscriptChunk[];
 }): {
   messages: ChatMessage[];
+  setMessages: (messages: ChatMessage[]) => void;
   isStreaming: boolean;
   sendMessage: (
     message: string,
     options?: { skipUserMessage?: boolean },
   ) => Promise<void>;
   addSuggestionToChat: (suggestion: Suggestion) => void;
+  stopGenerating: () => void;
+  retryLastFailed: () => void;
+  canRetry: boolean;
   error: string | null;
 } {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -68,9 +71,11 @@ export default function useChat({
   const [error, setError] = useState<string | null>(null);
 
   const messagesRef = useRef<ChatMessage[]>(messages);
-  const transcriptChunksRef = useRef<string[]>(transcriptChunks);
+  const transcriptChunksRef = useRef<TranscriptChunk[]>(transcriptChunks);
   const isStreamingRef = useRef(false);
   const pendingHistoryForSkipRef = useRef<ChatHistoryEntry[] | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -79,6 +84,10 @@ export default function useChat({
   useEffect(() => {
     transcriptChunksRef.current = transcriptChunks;
   }, [transcriptChunks]);
+
+  const setMessagesFromSession = useCallback((next: ChatMessage[]): void => {
+    setMessages(next.map((message) => ({ ...message, timestamp: new Date(message.timestamp), isStreaming: false })));
+  }, []);
 
   const removeMessageById = useCallback((messageId: string): void => {
     setMessages((previous) => previous.filter((m) => m.id !== messageId));
@@ -173,14 +182,7 @@ export default function useChat({
         return;
       }
 
-      const settings = loadTwinmindSettings();
-      const apiKey =
-        settings.groqApiKey.trim() ||
-        localStorage.getItem(GROQ_STORAGE_KEY)?.trim();
-      if (!apiKey) {
-        setError("No Groq API key set — open Settings to add one");
-        return;
-      }
+      const settings = loadCueMindSettings();
 
       const trimmed = message.trim();
       if (trimmed === "") {
@@ -188,6 +190,7 @@ export default function useChat({
       }
 
       setError(null);
+      setLastFailedPrompt(null);
 
       const skipUserMessage = options?.skipUserMessage === true;
       const chatHistory = skipUserMessage
@@ -201,12 +204,13 @@ export default function useChat({
         const userId = crypto.randomUUID();
         setMessages((previous) => [
           ...previous,
-          { id: userId, role: "user", content: trimmed },
+          { id: userId, role: "user", content: trimmed, timestamp: new Date() },
           {
             id: assistantId,
             role: "assistant",
             content: "",
             isStreaming: true,
+            timestamp: new Date(),
           },
         ]);
       } else {
@@ -217,6 +221,7 @@ export default function useChat({
             role: "assistant",
             content: "",
             isStreaming: true,
+            timestamp: new Date(),
           },
         ]);
       }
@@ -225,15 +230,18 @@ export default function useChat({
       setIsStreaming(true);
 
       const transcriptContext = transcriptChunksRef.current
+        .map((chunk) => chunk.text)
         .join("\n")
         .slice(-settings.chatContextChars);
 
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            [GROQ_API_KEY_HEADER]: apiKey,
+            ...groqRequestHeaders(settings),
           },
           body: JSON.stringify({
             message: trimmed,
@@ -242,6 +250,7 @@ export default function useChat({
             chatPrompt: settings.chatPrompt,
             chatContextChars: settings.chatContextChars,
           }),
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -255,26 +264,34 @@ export default function useChat({
             /* use default */
           }
           setError(messageText);
+          setLastFailedPrompt(trimmed);
           removeMessageById(assistantId);
           return;
         }
 
         if (!response.body) {
           setError("No response body from chat");
+          setLastFailedPrompt(trimmed);
           removeMessageById(assistantId);
           return;
         }
 
         await readSseStream(response.body, assistantId);
-      } catch {
-        setError("Network error while chatting.");
-        removeMessageById(assistantId);
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") {
+          finishAssistantStream(assistantId);
+        } else {
+          setError("Network error while chatting.");
+          setLastFailedPrompt(trimmed);
+          removeMessageById(assistantId);
+        }
       } finally {
+        abortControllerRef.current = null;
         isStreamingRef.current = false;
         setIsStreaming(false);
       }
     },
-    [readSseStream, removeMessageById],
+    [finishAssistantStream, readSseStream, removeMessageById],
   );
 
   const addSuggestionToChat = useCallback(
@@ -287,12 +304,13 @@ export default function useChat({
 
       setMessages((previous) => [
         ...previous,
-        { id: userId, role: "user", content: suggestion.preview },
+        { id: userId, role: "user", content: suggestion.preview, timestamp: new Date() },
         {
           id: detailId,
           role: "assistant",
           content: suggestion.detail,
           isDetail: true,
+          timestamp: new Date(),
         },
       ]);
 
@@ -301,11 +319,25 @@ export default function useChat({
     [sendMessage],
   );
 
+  const stopGenerating = useCallback((): void => {
+    abortControllerRef.current?.abort();
+  }, []);
+
+  const retryLastFailed = useCallback((): void => {
+    if (lastFailedPrompt && !isStreamingRef.current) void sendMessage(lastFailedPrompt);
+  }, [lastFailedPrompt, sendMessage]);
+
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
+
   return {
     messages,
+    setMessages: setMessagesFromSession,
     isStreaming,
     sendMessage,
     addSuggestionToChat,
+    stopGenerating,
+    retryLastFailed,
+    canRetry: lastFailedPrompt !== null,
     error,
   };
 }

@@ -1,277 +1,299 @@
 "use client";
 
-// Captures mic audio: each ~30s the MediaRecorder is stopped so the WebM is self-contained, transcribed, then a new recorder starts on the same stream until the user stops.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
+import type { TranscriptChunk } from "@/types/session";
 
-import { useCallback, useRef, useState } from "react";
-import { GROQ_API_KEY_HEADER } from "@/lib/prompts";
-
-const CHUNK_INTERVAL_MS = 30000;
-const GROQ_STORAGE_KEY = "groq_api_key";
-/** Final segment blobs below this size skip transcription (e.g. empty flush). */
 const MIN_TRANSCRIBE_BYTES = 1000;
 const TRANSCRIBE_UPLOAD_FILENAME = "chunk.webm";
 const AUDIO_WEBM_FALLBACK_MIME = "audio/webm";
+const RECORDER_OVERLAP_MS = 1000;
+const SILENCE_RMS_THRESHOLD = 0.012;
+const MAX_RETRY_ATTEMPTS = 4;
 
-interface TranscribeSuccessResponse {
-  text: string;
+interface Segment {
+  recorder: MediaRecorder;
+  parts: Blob[];
+  startedAt: Date;
+  peakLevel: number;
 }
 
-interface TranscribeErrorResponse {
-  error: string;
-}
+interface TranscribeSuccessResponse { text: string }
+interface TranscribeErrorResponse { error: string }
 
 interface UseMicRecorderResult {
   isRecording: boolean;
-  transcriptChunks: string[];
+  isPaused: boolean;
+  micLevel: number;
+  retryCount: number;
+  transcriptChunks: TranscriptChunk[];
+  setTranscriptChunks: (chunks: TranscriptChunk[]) => void;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
+  pauseRecording: () => void;
+  resumeRecording: () => void;
   flushCurrentChunk: () => void;
   error: string | null;
 }
 
-function isTranscribeSuccess(
-  value: unknown,
-): value is TranscribeSuccessResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "text" in value &&
-    typeof (value as TranscribeSuccessResponse).text === "string"
-  );
+function isTranscribeSuccess(value: unknown): value is TranscribeSuccessResponse {
+  return typeof value === "object" && value !== null && "text" in value && typeof (value as TranscribeSuccessResponse).text === "string";
 }
 
 function isTranscribeError(value: unknown): value is TranscribeErrorResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "error" in value &&
-    typeof (value as TranscribeErrorResponse).error === "string"
-  );
+  return typeof value === "object" && value !== null && "error" in value && typeof (value as TranscribeErrorResponse).error === "string";
 }
 
 function pickMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") {
-    return undefined;
-  }
-  if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-    return "audio/webm;codecs=opus";
-  }
-  if (MediaRecorder.isTypeSupported("audio/webm")) {
-    return "audio/webm";
-  }
+  if (typeof MediaRecorder === "undefined") return undefined;
+  if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) return "audio/webm;codecs=opus";
+  if (MediaRecorder.isTypeSupported("audio/webm")) return "audio/webm";
   return undefined;
 }
 
 export default function useMicRecorder(): UseMicRecorderResult {
   const [isRecording, setIsRecording] = useState(false);
-  const [transcriptChunks, setTranscriptChunks] = useState<string[]>([]);
+  const [isPaused, setIsPaused] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
+  const [transcriptChunks, setTranscriptState] = useState<TranscriptChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const chunkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const segmentsRef = useRef(new Set<Segment>());
+  const primarySegmentRef = useRef<Segment | null>(null);
+  const rotationTimerRef = useRef<number | null>(null);
+  const overlapTimerRef = useRef<number | null>(null);
   const isStoppingRef = useRef(false);
-  const chunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string | undefined>(undefined);
+  const cadenceMsRef = useRef(30_000);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const meterFrameRef = useRef<number | null>(null);
+  const retryTimersRef = useRef(new Set<number>());
 
-  const clearChunkInterval = useCallback((): void => {
-    if (chunkIntervalRef.current !== null) {
-      clearInterval(chunkIntervalRef.current);
-      chunkIntervalRef.current = null;
-    }
+  const setTranscriptChunks = useCallback((chunks: TranscriptChunk[]): void => {
+    setTranscriptState(chunks);
+  }, []);
+
+  const clearRotationTimers = useCallback((): void => {
+    if (rotationTimerRef.current !== null) window.clearTimeout(rotationTimerRef.current);
+    if (overlapTimerRef.current !== null) window.clearTimeout(overlapTimerRef.current);
+    rotationTimerRef.current = null;
+    overlapTimerRef.current = null;
+  }, []);
+
+  const cleanupMeter = useCallback((): void => {
+    if (meterFrameRef.current !== null) cancelAnimationFrame(meterFrameRef.current);
+    meterFrameRef.current = null;
+    analyserRef.current = null;
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    if (context) void context.close();
+    setMicLevel(0);
   }, []);
 
   const cleanupStream = useCallback((): void => {
-    clearChunkInterval();
-    isStoppingRef.current = false;
-    const stream = streamRef.current;
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  }, [clearChunkInterval]);
+    clearRotationTimers();
+    cleanupMeter();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    primarySegmentRef.current = null;
+    segmentsRef.current.clear();
+  }, [clearRotationTimers, cleanupMeter]);
 
-  const flushCurrentChunk = useCallback((): void => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
+  const transcribeBlob = useCallback(async (blob: Blob, timestamp: Date, attempt = 1): Promise<void> => {
+    const settings = loadCueMindSettings();
+    const formData = new FormData();
+    formData.append("audio", blob, TRANSCRIBE_UPLOAD_FILENAME);
+    if (settings.transcriptionLanguage !== "auto") formData.append("language", settings.transcriptionLanguage);
+
+    try {
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+        headers: groqRequestHeaders(settings),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) throw new Error(isTranscribeError(payload) ? payload.error : "Transcription failed");
+      if (isTranscribeSuccess(payload) && payload.text.trim()) {
+        setTranscriptState((previous) => [
+          ...previous,
+          { id: crypto.randomUUID(), text: payload.text.trim(), timestamp },
+        ].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()));
+      }
+      setError(null);
+    } catch (caught) {
+      if (attempt >= MAX_RETRY_ATTEMPTS) {
+        setError(caught instanceof Error ? `${caught.message} (audio kept through 4 retries)` : "Transcription failed after retries.");
+        return;
+      }
+      setRetryCount((count) => count + 1);
+      const timer = window.setTimeout(() => {
+        retryTimersRef.current.delete(timer);
+        void transcribeBlob(blob, timestamp, attempt + 1).finally(() => {
+          setRetryCount((count) => Math.max(0, count - 1));
+        });
+      }, 1000 * 2 ** (attempt - 1));
+      retryTimersRef.current.add(timer);
+      setError(`Transcription paused by a hiccup — retry ${attempt} queued.`);
     }
   }, []);
 
-  const stopRecording = useCallback((): void => {
-    clearChunkInterval();
-    // User-initiated stop: onstop must tear down the stream, not spin up another recorder.
-    isStoppingRef.current = true;
-    const recorder = mediaRecorderRef.current;
-    setIsRecording(false);
-
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop();
-    } else {
-      isStoppingRef.current = false;
-      cleanupStream();
-      mediaRecorderRef.current = null;
+  const finalizeSegment = useCallback((segment: Segment): void => {
+    segmentsRef.current.delete(segment);
+    const blob = new Blob(segment.parts, { type: mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME });
+    if (blob.size >= MIN_TRANSCRIBE_BYTES && segment.peakLevel >= SILENCE_RMS_THRESHOLD) {
+      void transcribeBlob(blob, segment.startedAt);
     }
-  }, [cleanupStream, clearChunkInterval]);
+    if (isStoppingRef.current && segmentsRef.current.size === 0) cleanupStream();
+  }, [cleanupStream, transcribeBlob]);
+
+  const createSegment = useCallback((stream: MediaStream): Segment | null => {
+    try {
+      const recorder = mimeTypeRef.current
+        ? new MediaRecorder(stream, { mimeType: mimeTypeRef.current })
+        : new MediaRecorder(stream);
+      const segment: Segment = { recorder, parts: [], startedAt: new Date(), peakLevel: analyserRef.current ? 0 : 1 };
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) segment.parts.push(event.data); };
+      recorder.onerror = () => setError("Recording error.");
+      recorder.onstop = () => finalizeSegment(segment);
+      segmentsRef.current.add(segment);
+      recorder.start();
+      return segment;
+    } catch {
+      setError("Could not create MediaRecorder for this device.");
+      return null;
+    }
+  }, [finalizeSegment]);
+
+  const scheduleRotationRef = useRef<(segment: Segment) => void>(() => undefined);
+  scheduleRotationRef.current = (segment: Segment): void => {
+    clearRotationTimers();
+    const leadTime = Math.max(1000, cadenceMsRef.current - RECORDER_OVERLAP_MS);
+    rotationTimerRef.current = window.setTimeout(() => {
+      const stream = streamRef.current;
+      if (!stream || isStoppingRef.current || segment.recorder.state !== "recording") return;
+      const next = createSegment(stream);
+      if (!next) return;
+      primarySegmentRef.current = next;
+      overlapTimerRef.current = window.setTimeout(() => {
+        if (segment.recorder.state !== "inactive") segment.recorder.stop();
+        scheduleRotationRef.current(next);
+      }, RECORDER_OVERLAP_MS);
+    }, leadTime);
+  };
+
+  const startMeter = useCallback((stream: MediaStream): void => {
+    try {
+      const context = new AudioContext();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 256;
+      context.createMediaStreamSource(stream).connect(analyser);
+      audioContextRef.current = context;
+      analyserRef.current = analyser;
+      const samples = new Uint8Array(analyser.fftSize);
+      const measure = (): void => {
+        analyser.getByteTimeDomainData(samples);
+        let sum = 0;
+        for (const sample of samples) sum += ((sample - 128) / 128) ** 2;
+        const level = Math.min(1, Math.sqrt(sum / samples.length) * 4);
+        setMicLevel(level);
+        for (const segment of segmentsRef.current) segment.peakLevel = Math.max(segment.peakLevel, level);
+        meterFrameRef.current = requestAnimationFrame(measure);
+      };
+      measure();
+    } catch {
+      // Recording still works when Web Audio is unavailable.
+    }
+  }, []);
 
   const startRecording = useCallback(async (): Promise<void> => {
     setError(null);
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const apiKey = localStorage.getItem(GROQ_STORAGE_KEY);
-    if (!apiKey?.trim()) {
-      setError("No Groq API key set — open Settings to add one");
-      return;
-    }
-
     if (typeof MediaRecorder === "undefined") {
       setError("MediaRecorder is not supported in this browser.");
       return;
     }
-
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    ) {
-      return;
-    }
+    if (streamRef.current) return;
 
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (caught) {
-      if (caught instanceof DOMException && caught.name === "NotAllowedError") {
-        setError("Microphone permission denied.");
-      } else {
-        setError("Could not access the microphone.");
-      }
+      setError(caught instanceof DOMException && caught.name === "NotAllowedError" ? "Microphone permission denied." : "Could not access the microphone.");
       return;
     }
 
+    const settings = loadCueMindSettings();
+    cadenceMsRef.current = settings.chunkIntervalSeconds * 1000;
     streamRef.current = stream;
-
-    const mimeType = pickMimeType();
-    mimeTypeRef.current = mimeType;
-    chunksRef.current = [];
+    mimeTypeRef.current = pickMimeType();
     isStoppingRef.current = false;
-
-    const attachRecorder = (recorder: MediaRecorder): void => {
-      recorder.ondataavailable = (event: BlobEvent): void => {
-        if (event.data && event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.onerror = (): void => {
-        setError("Recording error.");
-      };
-
-      recorder.onstop = (): void => {
-        void (async (): Promise<void> => {
-          const parts = [...chunksRef.current];
-          chunksRef.current = [];
-          const mime = mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME;
-          const blob = new Blob(parts, { type: mime });
-
-          const key = localStorage.getItem(GROQ_STORAGE_KEY);
-          if (blob.size >= MIN_TRANSCRIBE_BYTES && key?.trim()) {
-            const formData = new FormData();
-            formData.append("audio", blob, TRANSCRIBE_UPLOAD_FILENAME);
-
-            try {
-              const response = await fetch("/api/transcribe", {
-                method: "POST",
-                body: formData,
-                headers: {
-                  [GROQ_API_KEY_HEADER]: key,
-                },
-              });
-
-              const payload: unknown = await response.json();
-
-              if (!response.ok) {
-                const message = isTranscribeError(payload)
-                  ? payload.error
-                  : "Transcription failed";
-                setError(message);
-              } else if (
-                isTranscribeSuccess(payload) &&
-                payload.text.trim() !== ""
-              ) {
-                setTranscriptChunks((previous) => [...previous, payload.text]);
-              }
-            } catch {
-              setError("Network error while transcribing.");
-            }
-          }
-
-          // Interval-driven stop leaves isStoppingRef false so we start the next segment on the same stream.
-          if (isStoppingRef.current) {
-            cleanupStream();
-            mediaRecorderRef.current = null;
-            return;
-          }
-
-          const activeStream = streamRef.current;
-          if (!activeStream) {
-            mediaRecorderRef.current = null;
-            return;
-          }
-
-          let nextRecorder: MediaRecorder;
-          try {
-            nextRecorder = mimeTypeRef.current
-              ? new MediaRecorder(activeStream, {
-                  mimeType: mimeTypeRef.current,
-                })
-              : new MediaRecorder(activeStream);
-          } catch {
-            setError("Could not create MediaRecorder for this device.");
-            cleanupStream();
-            mediaRecorderRef.current = null;
-            return;
-          }
-
-          mediaRecorderRef.current = nextRecorder;
-          attachRecorder(nextRecorder);
-          nextRecorder.start();
-        })();
-      };
-    };
-
-    let recorder: MediaRecorder;
-    try {
-      recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-    } catch {
+    startMeter(stream);
+    const segment = createSegment(stream);
+    if (!segment) {
       cleanupStream();
-      setError("Could not create MediaRecorder for this device.");
       return;
     }
-
-    attachRecorder(recorder);
-    mediaRecorderRef.current = recorder;
-    recorder.start();
-
-    // Periodic stop() yields a complete WebM per segment; onstop transcribes then calls start() again until the user stops.
-    chunkIntervalRef.current = setInterval(() => {
-      if (mediaRecorderRef.current?.state === "recording") {
-        mediaRecorderRef.current.stop();
-      }
-    }, CHUNK_INTERVAL_MS);
-
+    primarySegmentRef.current = segment;
+    scheduleRotationRef.current(segment);
+    setIsPaused(false);
     setIsRecording(true);
-  }, [cleanupStream]);
+  }, [cleanupStream, createSegment, startMeter]);
 
-  return {
-    isRecording,
-    transcriptChunks,
-    startRecording,
-    stopRecording,
-    flushCurrentChunk,
-    error,
-  };
+  const stopRecording = useCallback((): void => {
+    clearRotationTimers();
+    isStoppingRef.current = true;
+    setIsRecording(false);
+    setIsPaused(false);
+    const segments = [...segmentsRef.current];
+    if (segments.length === 0) cleanupStream();
+    for (const segment of segments) if (segment.recorder.state !== "inactive") segment.recorder.stop();
+  }, [cleanupStream, clearRotationTimers]);
+
+  const pauseRecording = useCallback((): void => {
+    if (!isRecording || isPaused) return;
+    clearRotationTimers();
+    const primary = primarySegmentRef.current;
+    for (const segment of [...segmentsRef.current]) {
+      if (segment !== primary && segment.recorder.state !== "inactive") segment.recorder.stop();
+    }
+    if (primary?.recorder.state === "recording") primary.recorder.pause();
+    setIsPaused(true);
+    setMicLevel(0);
+  }, [clearRotationTimers, isPaused, isRecording]);
+
+  const resumeRecording = useCallback((): void => {
+    const primary = primarySegmentRef.current;
+    if (!isRecording || !isPaused || !primary) return;
+    if (primary.recorder.state === "paused") primary.recorder.resume();
+    scheduleRotationRef.current(primary);
+    setIsPaused(false);
+  }, [isPaused, isRecording]);
+
+  const flushCurrentChunk = useCallback((): void => {
+    const primary = primarySegmentRef.current;
+    const stream = streamRef.current;
+    if (!primary || !stream || primary.recorder.state !== "recording" || isStoppingRef.current) return;
+    clearRotationTimers();
+    // Stop the primary plus any recorder still lingering in an overlap window,
+    // so a manual flush never strands an orphan segment recording forever.
+    for (const segment of [...segmentsRef.current]) {
+      if (segment.recorder.state === "recording") segment.recorder.stop();
+    }
+    const next = createSegment(stream);
+    if (next) {
+      primarySegmentRef.current = next;
+      scheduleRotationRef.current(next);
+    }
+  }, [clearRotationTimers, createSegment]);
+
+  useEffect(() => () => {
+    clearRotationTimers();
+    cleanupMeter();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    for (const timer of retryTimersRef.current) window.clearTimeout(timer);
+  }, [clearRotationTimers, cleanupMeter]);
+
+  return { isRecording, isPaused, micLevel, retryCount, transcriptChunks, setTranscriptChunks, startRecording, stopRecording, pauseRecording, resumeRecording, flushCurrentChunk, error };
 }

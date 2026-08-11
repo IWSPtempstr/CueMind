@@ -6,10 +6,12 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent,
   type ReactElement,
 } from "react";
 import useSettings from "@/hooks/useSettings";
+import { GROQ_API_KEY_HEADER } from "@/lib/prompts";
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   const selector =
@@ -32,6 +34,8 @@ export default function SettingsModal({
     useSettings();
   const panelRef = useRef<HTMLDivElement>(null);
   const groqKeyInputRef = useRef<HTMLInputElement>(null);
+  const [keyStatus, setKeyStatus] = useState<string | null>(null);
+  const [isTestingKey, setIsTestingKey] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -90,6 +94,29 @@ export default function SettingsModal({
     onClose();
   }, [saveSettings, onClose]);
 
+  const testKey = useCallback(async (): Promise<void> => {
+    setIsTestingKey(true);
+    setKeyStatus(null);
+    try {
+      const headers = settings.groqApiKey.trim()
+        ? { [GROQ_API_KEY_HEADER]: settings.groqApiKey.trim() }
+        : undefined;
+      const response = await fetch("/api/validate-key", { headers });
+      const payload = (await response.json()) as { error?: unknown };
+      setKeyStatus(
+        response.ok
+          ? "✓ Key works — the mic is cleared for takeoff."
+          : typeof payload.error === "string"
+            ? payload.error
+            : "Key validation failed.",
+      );
+    } catch {
+      setKeyStatus("Could not reach the validation service.");
+    } finally {
+      setIsTestingKey(false);
+    }
+  }, [settings.groqApiKey]);
+
   if (!isOpen) {
     return null;
   }
@@ -136,22 +163,38 @@ export default function SettingsModal({
               >
                 Groq API Key
               </label>
-              <input
-                ref={groqKeyInputRef}
-                id="settings-groq-key"
-                type="password"
-                autoComplete="off"
-                value={settings.groqApiKey}
-                onChange={(event) => {
-                  updateSetting("groqApiKey", event.target.value);
-                }}
-                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
-                placeholder="Paste your Groq API key"
-              />
+              <div className="flex gap-2">
+                <input
+                  ref={groqKeyInputRef}
+                  id="settings-groq-key"
+                  type="password"
+                  autoComplete="off"
+                  value={settings.groqApiKey}
+                  onChange={(event) => {
+                    updateSetting("groqApiKey", event.target.value);
+                  }}
+                  className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                  placeholder="Paste your Groq API key"
+                />
+                <button type="button" onClick={() => void testKey()} disabled={isTestingKey} className="rounded-md border border-neutral-600 px-3 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50">
+                  {isTestingKey ? "Testing…" : "Test key"}
+                </button>
+              </div>
+              <label htmlFor="settings-key-storage" className="text-xs font-medium text-neutral-400">Keep key for</label>
+              <select
+                id="settings-key-storage"
+                value={settings.apiKeyStorage}
+                onChange={(event) => updateSetting("apiKeyStorage", event.target.value as typeof settings.apiKeyStorage)}
+                className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
+              >
+                <option value="local">This browser</option>
+                <option value="session">This tab session</option>
+                <option value="memory">Until this page reloads</option>
+              </select>
               <p className="text-xs leading-relaxed text-neutral-500">
-                Your key is stored locally and never sent to our servers — only
-                to Groq directly.
+                The browser sends your key only to this app&apos;s API proxy. Choose session or memory mode on a shared machine. You can also leave it blank when the server has GROQ_API_KEY configured.
               </p>
+              {keyStatus ? <p className="text-xs text-blue-300" role="status">{keyStatus}</p> : null}
             </section>
 
             <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
@@ -170,11 +213,12 @@ export default function SettingsModal({
                     id="settings-recent-chars"
                     type="number"
                     min={1}
+                    max={32000}
                     value={settings.recentContextChars}
                     onChange={(event) => {
                       const n = Number.parseInt(event.target.value, 10);
                       if (!Number.isNaN(n) && n >= 1) {
-                        updateSetting("recentContextChars", n);
+                        updateSetting("recentContextChars", Math.min(32000, n));
                       }
                     }}
                     className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
@@ -194,11 +238,12 @@ export default function SettingsModal({
                     id="settings-earlier-chars"
                     type="number"
                     min={1}
+                    max={32000}
                     value={settings.earlierContextChars}
                     onChange={(event) => {
                       const n = Number.parseInt(event.target.value, 10);
                       if (!Number.isNaN(n) && n >= 1) {
-                        updateSetting("earlierContextChars", n);
+                        updateSetting("earlierContextChars", Math.min(32000, n));
                       }
                     }}
                     className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
@@ -218,11 +263,12 @@ export default function SettingsModal({
                     id="settings-chat-chars"
                     type="number"
                     min={1}
+                    max={32000}
                     value={settings.chatContextChars}
                     onChange={(event) => {
                       const n = Number.parseInt(event.target.value, 10);
                       if (!Number.isNaN(n) && n >= 1) {
-                        updateSetting("chatContextChars", n);
+                        updateSetting("chatContextChars", Math.min(32000, n));
                       }
                     }}
                     className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
@@ -231,6 +277,33 @@ export default function SettingsModal({
                     Full transcript tail passed into chat as meeting context.
                   </p>
                 </div>
+              </div>
+            </section>
+
+            <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
+              <h3 className="text-sm font-medium text-neutral-200">Recording & refresh</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                  Audio chunk (seconds)
+                  <input type="number" min={15} max={120} value={settings.chunkIntervalSeconds} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) updateSetting("chunkIntervalSeconds", Math.min(120, Math.max(15, value))); }} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                  Suggestions (seconds)
+                  <input type="number" min={15} max={300} value={settings.suggestionRefreshSeconds} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) updateSetting("suggestionRefreshSeconds", Math.min(300, Math.max(15, value))); }} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                  Transcription language
+                  <select value={settings.transcriptionLanguage} onChange={(event) => updateSetting("transcriptionLanguage", event.target.value)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
+                    <option value="auto">Auto-detect</option>
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="hi">Hindi</option>
+                    <option value="ja">Japanese</option>
+                    <option value="pt">Portuguese</option>
+                  </select>
+                </label>
               </div>
             </section>
 
