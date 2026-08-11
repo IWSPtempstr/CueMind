@@ -30,7 +30,9 @@ export default function MicTranscript(props: Props): ReactElement {
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => transcriptChunks.filter((chunk) => chunk.text.toLowerCase().includes(search.trim().toLowerCase())), [search, transcriptChunks]);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [transcriptChunks.length]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcriptChunks.length]);
   const copyTranscript = async (): Promise<void> => {
     await navigator.clipboard.writeText(transcriptChunks.map((chunk) => `[${chunk.timestamp.toLocaleTimeString()}] ${chunk.text}`).join("\n\n"));
   };
