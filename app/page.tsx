@@ -6,6 +6,7 @@ import LiveSuggestions from "@/components/LiveSuggestions";
 import MicTranscript from "@/components/MicTranscript";
 import SettingsModal from "@/components/SettingsModal";
 import useChat from "@/hooks/useChat";
+import useContextCards from "@/hooks/useContextCards";
 import useDesktopTranscript from "@/hooks/useDesktopTranscript";
 import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
@@ -27,6 +28,7 @@ export default function Home(): ReactElement {
   const desktopRecorder = useDesktopTranscript();
   const recorder = desktopRecorder.isDesktop ? desktopRecorder : browserRecorder;
   const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: recorder.isRecording && !recorder.isPaused });
+  const contextCards = useContextCards({ transcriptChunks: recorder.transcriptChunks, isRecording: recorder.isRecording && !recorder.isPaused });
   const chat = useChat({ transcriptChunks: recorder.transcriptChunks });
   const [pendingSuggestion, setPendingSuggestion] = useState<Suggestion | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -214,6 +216,10 @@ export default function Home(): ReactElement {
           dismissedIds={suggestions.dismissedIds}
           pinnedIds={suggestions.pinnedIds}
           onFeedback={suggestions.recordFeedback}
+          contextCards={contextCards.cards}
+          contextCardFailures={contextCards.failures}
+          contextCardsLoading={contextCards.isLoading}
+          contextCardsError={contextCards.error}
         />
         <ChatPanel
           messages={chat.messages}

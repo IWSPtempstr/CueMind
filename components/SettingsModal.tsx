@@ -348,6 +348,41 @@ export default function SettingsModal({
               </label>
             </section>
 
+            <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
+              <div>
+                <h3 className="text-sm font-medium text-neutral-200">实时认知卡片</h3>
+                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                  Ollama 在本机提取关键词和生成中文解释；搜索只发送关键词，不发送整段音频。
+                </p>
+              </div>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                Ollama 地址
+                <input type="url" value={settings.ollamaBaseUrl} onChange={(event) => updateSetting("ollamaBaseUrl", event.target.value)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                Ollama 模型
+                <input type="text" value={settings.ollamaModel} onChange={(event) => updateSetting("ollamaModel", event.target.value)} placeholder="qwen2.5:3b" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+              </label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                  搜索 provider
+                  <select value={settings.searchProvider} onChange={(event) => updateSetting("searchProvider", event.target.value as typeof settings.searchProvider)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
+                    <option value="tavily">Tavily</option>
+                    <option value="bing">Bing</option>
+                    <option value="serpapi">SerpAPI</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                  卡片冷却（秒）
+                  <input type="number" min={5} max={300} value={settings.contextCardCooldownSeconds} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) updateSetting("contextCardCooldownSeconds", Math.min(300, Math.max(5, value))); }} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                搜索 API Key
+                <input type="password" autoComplete="off" value={settings.searchApiKey} onChange={(event) => updateSetting("searchApiKey", event.target.value)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+              </label>
+            </section>
+
             <section className="flex flex-col gap-4">
               <div>
                 <h3 className="text-sm font-medium text-neutral-200">

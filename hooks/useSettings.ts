@@ -48,6 +48,11 @@ export function getDefaultSettings(): Settings {
     localWhisperPath: "",
     localWhisperModelPath: "",
     localWhisperLanguage: "auto",
+    ollamaBaseUrl: "http://127.0.0.1:11434",
+    ollamaModel: "qwen2.5:3b",
+    searchProvider: "tavily",
+    searchApiKey: "",
+    contextCardCooldownSeconds: 20,
   };
 }
 
@@ -95,6 +100,11 @@ export function loadCueMindSettings(): Settings {
     localWhisperPath: typeof o.localWhisperPath === "string" ? o.localWhisperPath : defaults.localWhisperPath,
     localWhisperModelPath: typeof o.localWhisperModelPath === "string" ? o.localWhisperModelPath : defaults.localWhisperModelPath,
     localWhisperLanguage: o.localWhisperLanguage === "zh" || o.localWhisperLanguage === "en" ? o.localWhisperLanguage : "auto",
+    ollamaBaseUrl: typeof o.ollamaBaseUrl === "string" ? o.ollamaBaseUrl : defaults.ollamaBaseUrl,
+    ollamaModel: typeof o.ollamaModel === "string" ? o.ollamaModel : defaults.ollamaModel,
+    searchProvider: o.searchProvider === "bing" || o.searchProvider === "serpapi" ? o.searchProvider : "tavily",
+    searchApiKey: typeof o.searchApiKey === "string" ? o.searchApiKey : defaults.searchApiKey,
+    contextCardCooldownSeconds: clampInt(o.contextCardCooldownSeconds, defaults.contextCardCooldownSeconds, 5, 300),
   };
 
   // One-time migration only: fold a legacy or embedded key into the chosen store

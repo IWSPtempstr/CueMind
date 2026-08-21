@@ -38,6 +38,8 @@ CueMind Desktop is a Windows meeting cognition assistant. It listens to default 
 | 2026-08-21 | WSL2 | Electron shell TypeScript/lint | Pass | `desktop/electron/*` |
 | 2026-08-21 | WSL2 | `npm run desktop:dev` | Blocked before Electron launch: npm Electron binary download did not complete within bounded probe; Next dev server returned HTTP 200 | local terminal |
 | 2026-08-21 | WSL2 | Local ASR route TypeScript/lint/build | Pass | `app/api/local-transcribe`, `lib/local-asr.ts` |
+| 2026-08-21 | WSL2 | Context-card route validation smoke | Pass: invalid body returns 400; unavailable Ollama returns structured `{ card: null, failure }` | `app/api/context-cards` |
+| 2026-08-21 | WSL2 | Real Ollama + web-source card | Pending: local Ollama endpoint/model and search API key not configured |  |
 | 2026-08-21 | WSL2 | `.NET helper build` | Blocked: `dotnet` not installed in WSL | local terminal |
 | 2026-08-21 | Windows 10/11 x64 | Dual-track capture | Pending |  |
 | 2026-08-21 | Windows 10/11 x64 | Local ASR tiny/base WAV smoke | Pending: requires whisper.cpp executable and model on Windows |  |

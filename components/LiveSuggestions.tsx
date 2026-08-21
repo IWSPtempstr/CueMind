@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactElement } from "react";
-import SuggestionCard from "@/components/SuggestionCard";
+import SuggestionCard, { ContextCardView } from "@/components/SuggestionCard";
 import type { SuggestionFeedback } from "@/hooks/useSuggestions";
-import type { Suggestion, SuggestionBatch } from "@/types/suggestions";
+import type { ContextCard, ContextCardFailure, Suggestion, SuggestionBatch } from "@/types/suggestions";
 
 interface Props {
   batches: SuggestionBatch[];
@@ -16,10 +16,14 @@ interface Props {
   dismissedIds: ReadonlySet<string>;
   pinnedIds: ReadonlySet<string>;
   onFeedback: (suggestion: Suggestion, feedback: SuggestionFeedback) => void;
+  contextCards: ContextCard[];
+  contextCardFailures: ContextCardFailure[];
+  contextCardsLoading: boolean;
+  contextCardsError: string | null;
 }
 
 export default function LiveSuggestions(props: Props): ReactElement {
-  const { batches, isLoading, isRecording, nextRefreshAt, onManualRefresh, error, onSuggestionSelect, dismissedIds, pinnedIds, onFeedback } = props;
+  const { batches, isLoading, isRecording, nextRefreshAt, onManualRefresh, error, onSuggestionSelect, dismissedIds, pinnedIds, onFeedback, contextCards, contextCardFailures, contextCardsLoading, contextCardsError } = props;
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!isRecording || nextRefreshAt === null) return;
@@ -46,6 +50,27 @@ export default function LiveSuggestions(props: Props): ReactElement {
           </span>
         </div>
         {error ? <p className="text-xs text-red-500">{error}</p> : null}
+        {contextCardsError ? <p className="text-xs text-amber-300">{contextCardsError}</p> : null}
+        {contextCardsLoading ? <p className="animate-pulse text-xs text-blue-300">正在检索并整理关键词背景...</p> : null}
+        {contextCards.length > 0 ? (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-blue-300">CONTEXT CARDS</h3>
+              <span className="text-[10px] text-neutral-600">本地模型 + Web 来源</span>
+            </div>
+            {contextCards.map((card) => <ContextCardView key={card.id} card={card} />)}
+          </section>
+        ) : null}
+        {contextCardFailures.length > 0 ? (
+          <details className="rounded border border-neutral-800 bg-neutral-950/70 px-3 py-2 text-xs text-neutral-500">
+            <summary className="cursor-pointer">调试记录：{contextCardFailures.length} 次卡片未生成</summary>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {contextCardFailures.slice(0, 5).map((failure) => (
+                <p key={failure.id}>{failure.failedAt.toLocaleTimeString()} · {failure.reason}</p>
+              ))}
+            </div>
+          </details>
+        ) : null}
         {isLoading ? <p className="animate-pulse text-center text-sm text-neutral-500">Generating suggestions...</p> : null}
         {!isLoading && batches.length === 0 ? <p className="text-center text-sm text-neutral-600">Suggestions appear here once recording starts.</p> : null}
         <div className="flex flex-col gap-6">

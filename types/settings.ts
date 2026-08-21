@@ -15,4 +15,9 @@ export interface Settings {
   localWhisperPath: string;
   localWhisperModelPath: string;
   localWhisperLanguage: "auto" | "zh" | "en";
+  ollamaBaseUrl: string;
+  ollamaModel: string;
+  searchProvider: "tavily" | "bing" | "serpapi";
+  searchApiKey: string;
+  contextCardCooldownSeconds: number;
 }
