@@ -9,7 +9,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron -r tsx/cjs desktop/electron/main.ts\"",
+    "desktop:build": "npm run build && electron-builder --win nsis",
+    "helper:build": "dotnet publish native/CueMind.Audio/CueMind.Audio.csproj -c Release -r win-x64 --self-contained false"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
@@ -24,9 +27,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.5",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "15.5.15",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "wait-on": "^9.1.0"
   }
 }
