@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
+import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
 import type { ContextCard, ContextCardFailure } from "@/types/suggestions";
 
@@ -20,11 +21,13 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
   isLoading: boolean;
   error: string | null;
   setCards: (cards: ContextCard[]) => void;
+  latencySamples: LatencySample[];
 } {
   const [cards, setCardState] = useState<ContextCard[]>([]);
   const [failures, setFailures] = useState<ContextCardFailure[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
   const lastProcessedIdsRef = useRef<Set<string>>(new Set());
   const lastRunAtRef = useRef(0);
   const runningRef = useRef(false);
@@ -63,7 +66,22 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
       const payload: unknown = await response.json();
       if (!isContextCardResponse(payload)) throw new Error("Invalid context card response");
       if (payload.card) {
-        setCardState((previous) => [hydrateCard(payload.card), ...previous]);
+        const card = hydrateCard(payload.card);
+        setCardState((previous) => [card, ...previous]);
+        setLatencySamples((previous) => [
+          ...previous,
+          ...([
+            ["keyword", card.latencyMs.keyword],
+            ["search", card.latencyMs.search],
+            ["generation", card.latencyMs.generation],
+            ["total", card.latencyMs.total],
+          ] as const).map(([stage, durationMs]) => ({
+            id: crypto.randomUUID(),
+            stage,
+            durationMs,
+            createdAt: new Date(),
+          })),
+        ]);
       } else if (payload.failure) {
         setFailures((previous) => [{
           id: crypto.randomUUID(),
@@ -97,7 +115,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
     }
   }, [isRecording]);
 
-  return { cards, failures, isLoading, error, setCards };
+  return { cards, failures, isLoading, error, setCards, latencySamples };
 }
 
 function hydrateCard(card: ContextCard): ContextCard {

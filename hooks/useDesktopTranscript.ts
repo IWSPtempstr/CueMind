@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import { parseDesktopEvent, type AudioChunkReadyEvent } from "@/lib/desktop-events";
+import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
 
 interface UseDesktopTranscriptResult {
@@ -19,6 +20,7 @@ interface UseDesktopTranscriptResult {
   pauseRecording: () => void;
   resumeRecording: () => void;
   flushCurrentChunk: () => void;
+  latencySamples: LatencySample[];
 }
 
 export default function useDesktopTranscript(): UseDesktopTranscriptResult {
@@ -26,6 +28,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   const [isRecording, setIsRecording] = useState(false);
   const [transcriptChunks, setTranscriptState] = useState<TranscriptChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cuemindDesktop));
@@ -66,6 +69,11 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       if (!payload.text.trim()) return;
 
       const asrEndedAt = new Date();
+      setLatencySamples((previous) => [
+        ...previous,
+        { id: crypto.randomUUID(), stage: "capture", durationMs: Math.max(0, event.endMs - event.startMs), createdAt: new Date() },
+        { id: crypto.randomUUID(), stage: "asr", durationMs: payload.latencyMs, createdAt: asrEndedAt },
+      ]);
       setTranscriptState((previous) => [
         ...previous,
         {
@@ -145,6 +153,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
     pauseRecording: unsupportedControl,
     resumeRecording: unsupportedControl,
     flushCurrentChunk: unsupportedControl,
+    latencySamples,
   };
 }
 

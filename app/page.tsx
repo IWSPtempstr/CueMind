@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import ChatPanel from "@/components/ChatPanel";
 import LiveSuggestions from "@/components/LiveSuggestions";
+import LatencyPanel from "@/components/LatencyPanel";
 import MicTranscript from "@/components/MicTranscript";
 import SettingsModal from "@/components/SettingsModal";
 import useChat from "@/hooks/useChat";
@@ -191,6 +192,7 @@ export default function Home(): ReactElement {
           {persistenceError}
         </div>
       ) : null}
+      <LatencyPanel samples={[...desktopRecorder.latencySamples, ...contextCards.latencySamples]} skippedFailures={contextCards.failures.length} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <main className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
         <MicTranscript

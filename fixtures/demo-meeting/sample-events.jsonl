@@ -1,0 +1,3 @@
+{"type":"transcript_ready","id":"t1","audioChunkId":"a1","source":"system","text":"我们今天讨论 whisper.cpp 在 Windows 桌面端的本地转写延迟。","timestamp":"2026-08-21T10:00:00.000Z","startMs":0,"endMs":5000,"latencyMs":1200}
+{"type":"transcript_ready","id":"t2","audioChunkId":"a2","source":"microphone","text":"关键词卡片需要在十五秒内给出来源。","timestamp":"2026-08-21T10:00:06.000Z","startMs":6000,"endMs":10000,"latencyMs":900}
+{"type":"transcript_ready","id":"t3","audioChunkId":"a3","source":"system","text":"我们还要比较 Ollama 和云端 API 在隐私与成本上的取舍。","timestamp":"2026-08-21T10:00:14.000Z","startMs":14000,"endMs":19000,"latencyMs":1100}
