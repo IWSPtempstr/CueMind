@@ -11,8 +11,10 @@ const currentDir = __dirname;
 let mainWindow: BrowserWindow | null = null;
 type AudioHelperProcess = ChildProcessByStdio<null, Readable, Readable>;
 let audioHelper: AudioHelperProcess | null = null;
+let uiServer: AudioHelperProcess | null = null;
 let lastError: string | null = null;
 let audioOutputDir: string | null = null;
+const UI_PORT = 4173;
 
 function runtimeStatus(): DesktopRuntimeStatus {
   return {
@@ -93,6 +95,40 @@ async function stopAudioHelper(): Promise<DesktopRuntimeStatus> {
   return runtimeStatus();
 }
 
+async function startPackagedUiServer(): Promise<string> {
+  const serverPath = path.join(process.resourcesPath, "app.asar", ".next", "standalone", "server.js");
+  const child = spawn(process.execPath, [serverPath], {
+    cwd: path.dirname(serverPath),
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", HOSTNAME: "127.0.0.1", PORT: String(UI_PORT) },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  uiServer = child;
+  child.stdout.on("data", (chunk) => process.stdout.write(`[CueMind.UI] ${chunk.toString()}`));
+  child.stderr.on("data", (chunk) => process.stderr.write(`[CueMind.UI] ${chunk.toString()}`));
+  child.once("exit", () => {
+    if (uiServer === child) uiServer = null;
+  });
+
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${UI_PORT}/`);
+      if (response.ok) return `http://127.0.0.1:${UI_PORT}`;
+    } catch {
+      // The standalone server may need several seconds to bind.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("Packaged Next standalone server did not become ready");
+}
+
+async function stopPackagedUiServer(): Promise<void> {
+  const child = uiServer;
+  uiServer = null;
+  if (child && child.exitCode === null) child.kill();
+}
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -108,7 +144,7 @@ async function createWindow(): Promise<void> {
     },
   });
 
-  const uiUrl = process.env.CUEMIND_UI_URL ?? "http://localhost:3000";
+  const uiUrl = process.env.CUEMIND_UI_URL ?? (app.isPackaged ? await startPackagedUiServer() : "http://localhost:3000");
   await mainWindow.loadURL(uiUrl);
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -128,6 +164,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   void stopAudioHelper();
+  void stopPackagedUiServer();
 });
 
 app.on("window-all-closed", () => {

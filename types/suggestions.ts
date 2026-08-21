@@ -19,3 +19,33 @@ export interface SuggestionBatch {
   timestamp: Date;
   suggestions: Suggestion[];
 }
+
+export interface ContextCardSource {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export interface ContextCard {
+  id: string;
+  keyword: string;
+  explanation: string;
+  whyNow: string;
+  sources: [ContextCardSource, ContextCardSource];
+  createdAt: Date;
+  transcriptChunkIds: string[];
+  latencyMs: {
+    keyword: number;
+    search: number;
+    generation: number;
+    total: number;
+  };
+}
+
+export interface ContextCardFailure {
+  id: string;
+  keyword: string;
+  reason: string;
+  failedAt: Date;
+  transcriptChunkIds: string[];
+}

@@ -1,14 +1,25 @@
-import type { SessionSnapshot } from "@/types/session";
+import type { LatencyTrace, SessionSnapshot } from "@/types/session";
 
 const SESSIONS_KEY = "cuemind_sessions_v1";
 const MAX_SAVED_SESSIONS = 10;
+
+function reviveLatency(latency: LatencyTrace | undefined): LatencyTrace | undefined {
+  if (!latency) return latency;
+  return Object.fromEntries(
+    Object.entries(latency).map(([key, value]) => [key, value ? new Date(value) : value]),
+  ) as LatencyTrace;
+}
 
 function revive(session: SessionSnapshot): SessionSnapshot {
   return {
     ...session,
     createdAt: new Date(session.createdAt),
     updatedAt: new Date(session.updatedAt),
-    transcriptChunks: session.transcriptChunks.map((chunk) => ({ ...chunk, timestamp: new Date(chunk.timestamp) })),
+    transcriptChunks: session.transcriptChunks.map((chunk) => ({
+      ...chunk,
+      timestamp: new Date(chunk.timestamp),
+      latency: reviveLatency(chunk.latency),
+    })),
     suggestionBatches: session.suggestionBatches.map((batch) => ({ ...batch, timestamp: new Date(batch.timestamp) })),
     chatMessages: session.chatMessages.map((message) => ({ ...message, timestamp: new Date(message.timestamp), isStreaming: false })),
     meetingReport: session.meetingReport ? { ...session.meetingReport, generatedAt: new Date(session.meetingReport.generatedAt) } : null,

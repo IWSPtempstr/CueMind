@@ -2,6 +2,7 @@
   "name": "cuemind",
   "version": "0.1.0",
   "private": true,
+  "main": "desktop/electron/dist/main.js",
   "engines": {
     "node": ">=18.18.0"
   },
@@ -11,7 +12,9 @@
     "start": "next start",
     "lint": "eslint",
     "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron -r tsx/cjs desktop/electron/main.ts\"",
-    "desktop:build": "npm run build && electron-builder --win nsis",
+    "desktop:compile": "tsc -p desktop/electron/tsconfig.json",
+    "desktop:prepare": "node desktop/prepare-standalone.mjs",
+    "desktop:build": "npm run build && npm run desktop:prepare && npm run desktop:compile && electron-builder --win nsis",
     "helper:build": "dotnet publish native/CueMind.Audio/CueMind.Audio.csproj -c Release -r win-x64 --self-contained false"
   },
   "dependencies": {
@@ -36,5 +39,30 @@
     "tsx": "^4.23.12",
     "typescript": "^5",
     "wait-on": "^9.1.0"
+  },
+  "build": {
+    "appId": "ai.cuemind.desktop",
+    "productName": "CueMind Desktop",
+    "files": [
+      ".next/standalone/**",
+      ".next/static/**",
+      "public/**",
+      "desktop/electron/dist/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "native/CueMind.Audio/bin/Release/net8.0-windows/win-x64/publish",
+        "to": "CueMind.Audio"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

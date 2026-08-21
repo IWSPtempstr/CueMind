@@ -15,9 +15,9 @@ import type { ChatMessage } from "@/types/chat";
 import type { Suggestion } from "@/types/suggestions";
 
 const FOLLOW_UP_PROMPTS = [
-  "Expand on this",
-  "Draft what I should say",
-  "What should I ask next?",
+  "展开说明",
+  "帮我组织回答",
+  "我接下来该问什么？",
 ] as const;
 
 interface InfoCardProps {
@@ -65,7 +65,7 @@ function ChatBubble({ message }: ChatBubbleProps): ReactElement {
         >
           <time className="mb-1 block text-[10px] text-blue-200">{message.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
           {message.content}
-          <button type="button" onClick={() => void navigator.clipboard.writeText(message.content)} className="mt-2 block text-[10px] text-blue-200">Copy</button>
+          <button type="button" onClick={() => void navigator.clipboard.writeText(message.content)} className="mt-2 block text-[10px] text-blue-200">复制</button>
         </div>
       </div>
     );
@@ -83,11 +83,11 @@ function ChatBubble({ message }: ChatBubbleProps): ReactElement {
       <div className="flex flex-col gap-1">
         {isDetail ? (
           <span className="text-xs uppercase tracking-widest text-blue-400">
-            Quick Preview
+            快速预览
           </span>
         ) : null}
         <div className={assistantVisual}>
-          <div className="mb-1 flex items-center justify-between gap-4"><time className="text-[10px] text-neutral-500">{message.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><button type="button" onClick={() => void navigator.clipboard.writeText(message.content)} className="text-[10px] text-neutral-500 hover:text-white">Copy</button></div>
+          <div className="mb-1 flex items-center justify-between gap-4"><time className="text-[10px] text-neutral-500">{message.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><button type="button" onClick={() => void navigator.clipboard.writeText(message.content)} className="text-[10px] text-neutral-500 hover:text-white">复制</button></div>
           <div className="prose prose-invert prose-sm max-w-none">
             <ReactMarkdown components={{ a: ({ ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>{assistantContent}</ReactMarkdown>
           </div>
@@ -137,10 +137,10 @@ export default function ChatPanel({
     <section className="flex h-[50vh] min-h-0 w-full shrink-0 flex-col lg:h-auto lg:min-h-0 lg:min-w-0 lg:flex-1 lg:shrink">
       <header className="flex shrink-0 items-center justify-between border-b border-neutral-800 px-5 py-4">
         <h2 className="text-xs font-medium uppercase tracking-wider text-neutral-500 lg:tracking-widest">
-          3. CHAT (DETAILED ANSWERS)
+          3. 对话（详细回答）
         </h2>
         <span className="rounded-full border border-neutral-700 bg-neutral-900/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-          SESSION-ONLY
+          仅当前会话
         </span>
       </header>
       <div className="flex min-h-0 flex-1 flex-col">
@@ -149,12 +149,11 @@ export default function ChatPanel({
             {messages.length === 0 ? (
               <>
                 <InfoCard>
-                  Chat keeps longer answers and follow-ups in one thread. Use it
-                  when a suggestion needs depth, or type a fresh question—everything
-                  here stays in this session until you clear it.
+                  这里用于承载较长回答和追问。建议需要展开时可以交给对话，
+                  也可以直接输入新问题；内容只保存在当前会话中。
                 </InfoCard>
                 <p className="text-center text-sm text-neutral-600">
-                  Click a suggestion or type a question below.
+                  点击建议，或在下方输入问题。
                 </p>
               </>
             ) : null}
@@ -170,7 +169,7 @@ export default function ChatPanel({
             <span>{error}</span>
             {canRetry ? (
               <button type="button" onClick={retryLastFailed} className="rounded border border-red-900 px-2 py-1 text-red-300">
-                Retry
+                重试
               </button>
             ) : null}
           </div>
@@ -197,7 +196,7 @@ export default function ChatPanel({
               id="chat-input"
               name="message"
               type="text"
-              aria-label="Type a message"
+              aria-label="输入消息"
               value={inputValue}
               onChange={(event) => {
                 setInputValue(event.target.value);
@@ -208,16 +207,16 @@ export default function ChatPanel({
                   void submitFromInput();
                 }
               }}
-              placeholder="Ask anything..."
+              placeholder="输入你想追问的内容…"
               className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               type="button"
-              aria-label={isStreaming ? "Stop generating" : "Send message"}
+              aria-label={isStreaming ? "停止生成" : "发送消息"}
               onClick={() => { if (isStreaming) stopGenerating(); else void submitFromInput(); }}
               className={`shrink-0 rounded-md px-5 py-2.5 text-sm font-semibold text-white ${isStreaming ? "bg-red-600 hover:bg-red-500" : "bg-blue-600 hover:bg-blue-500"}`}
             >
-              {isStreaming ? "Stop" : "Send"}
+              {isStreaming ? "停止" : "发送"}
             </button>
           </div>
         </footer>

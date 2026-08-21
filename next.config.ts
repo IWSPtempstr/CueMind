@@ -11,9 +11,9 @@ const securityHeaders = [
       "object-src 'none'",
       "img-src 'self' data: blob:",
       "media-src 'self' blob:",
-      "connect-src 'self'",
+      "connect-src 'self' http://localhost:8400 ws://localhost:8400",
       // Next.js emits small bootstrap scripts; styles are generated locally.
-      "script-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' http://localhost:8400",
       "script-src-attr 'none'",
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self'",
@@ -26,6 +26,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

@@ -119,6 +119,13 @@ The browser’s **MediaRecorder** runs on a configurable cycle on the same `Medi
 
 ## Known Limitations & Future Work
 
+### Desktop MVP direction
+The desktop MVP moves beyond browser microphone capture by using a Windows helper process for default system audio plus microphone capture. The planned stack is Electron + C#/.NET NAudio + local whisper.cpp + local Ollama + web-search-grounded context cards. See `docs/desktop-mvp.md` for the implementation contract and evidence checklist.
+
+### 本地桌面模式
+
+桌面 MVP 的定位是“本地推理 + 联网增强”：音频、转写和 Ollama 推理留在本机，检索时只发送关键词以获取来源。开发环境可运行 `npm run desktop:dev`；Windows 打包前先执行 `npm run helper:build`，再执行 `npm run desktop:build`。当前 Windows helper、whisper.cpp 模型、真实搜索卡片和 NSIS 安装包仍需要在 Windows 10 22H2/Windows 11 x64 上完成验收。
+
 ### One-sided transcription in virtual meetings
 The app captures microphone input only. In an in-person meeting this works well — the mic picks up everyone in the room. In a virtual meeting (Zoom, Google Meet), only the local speaker's voice is captured; the remote participant's audio comes through speakers but isn't reliably transcribed.
 

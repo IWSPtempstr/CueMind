@@ -1,6 +1,6 @@
 "use client";
 
-// Full-screen overlay for editing Groq key, transcript context sizes, and prompt templates stored in localStorage.
+// Full-screen overlay for editing runtime, local model, and prompt settings.
 
 import {
   useCallback,
@@ -141,7 +141,7 @@ export default function SettingsModal({
               id="settings-title"
               className="text-lg font-semibold text-neutral-100"
             >
-              Settings
+              设置
             </h2>
             <button
               type="button"
@@ -161,7 +161,7 @@ export default function SettingsModal({
                 htmlFor="settings-groq-key"
                 className="text-sm font-medium text-neutral-200"
               >
-                Groq API Key
+                Groq API Key（浏览器模式）
               </label>
               <div className="flex gap-2">
                 <input
@@ -177,29 +177,29 @@ export default function SettingsModal({
                   placeholder="Paste your Groq API key"
                 />
                 <button type="button" onClick={() => void testKey()} disabled={isTestingKey} className="rounded-md border border-neutral-600 px-3 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50">
-                  {isTestingKey ? "Testing…" : "Test key"}
+                  {isTestingKey ? "测试中…" : "测试 Key"}
                 </button>
               </div>
-              <label htmlFor="settings-key-storage" className="text-xs font-medium text-neutral-400">Keep key for</label>
+              <label htmlFor="settings-key-storage" className="text-xs font-medium text-neutral-400">保存范围</label>
               <select
                 id="settings-key-storage"
                 value={settings.apiKeyStorage}
                 onChange={(event) => updateSetting("apiKeyStorage", event.target.value as typeof settings.apiKeyStorage)}
                 className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
               >
-                <option value="local">This browser</option>
-                <option value="session">This tab session</option>
-                <option value="memory">Until this page reloads</option>
+                <option value="local">此浏览器</option>
+                <option value="session">此标签页会话</option>
+                <option value="memory">直到页面刷新</option>
               </select>
               <p className="text-xs leading-relaxed text-neutral-500">
-                The browser sends your key only to this app&apos;s API proxy. Choose session or memory mode on a shared machine. You can also leave it blank when the server has GROQ_API_KEY configured.
+                浏览器只会把 Key 发给本应用 API 代理。共享设备建议使用会话或内存模式；如果服务端配置了 GROQ_API_KEY，也可以留空。
               </p>
               {keyStatus ? <p className="text-xs text-blue-300" role="status">{keyStatus}</p> : null}
             </section>
 
             <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
               <h3 className="text-sm font-medium text-neutral-200">
-                Context Window Sizes
+                上下文窗口
               </h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
@@ -207,7 +207,7 @@ export default function SettingsModal({
                     htmlFor="settings-recent-chars"
                     className="text-xs font-medium text-neutral-400"
                   >
-                    Recent transcript (chars)
+                    最近转写（字符数）
                   </label>
                   <input
                     id="settings-recent-chars"
@@ -232,7 +232,7 @@ export default function SettingsModal({
                     htmlFor="settings-earlier-chars"
                     className="text-xs font-medium text-neutral-400"
                   >
-                    Earlier context (chars)
+                    更早上下文（字符数）
                   </label>
                   <input
                     id="settings-earlier-chars"
@@ -257,7 +257,7 @@ export default function SettingsModal({
                     htmlFor="settings-chat-chars"
                     className="text-xs font-medium text-neutral-400"
                   >
-                    Chat transcript (chars)
+                    对话上下文（字符数）
                   </label>
                   <input
                     id="settings-chat-chars"
@@ -281,27 +281,27 @@ export default function SettingsModal({
             </section>
 
             <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
-              <h3 className="text-sm font-medium text-neutral-200">Recording & refresh</h3>
+              <h3 className="text-sm font-medium text-neutral-200">录音与刷新</h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
-                  Audio chunk (seconds)
+                  音频片段（秒）
                   <input type="number" min={15} max={120} value={settings.chunkIntervalSeconds} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) updateSetting("chunkIntervalSeconds", Math.min(120, Math.max(15, value))); }} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
                 </label>
                 <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
-                  Suggestions (seconds)
+                  建议刷新（秒）
                   <input type="number" min={15} max={300} value={settings.suggestionRefreshSeconds} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value)) updateSetting("suggestionRefreshSeconds", Math.min(300, Math.max(15, value))); }} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
                 </label>
                 <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
-                  Transcription language
+                  浏览器转写语言
                   <select value={settings.transcriptionLanguage} onChange={(event) => updateSetting("transcriptionLanguage", event.target.value)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
-                    <option value="auto">Auto-detect</option>
-                    <option value="en">English</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                    <option value="de">German</option>
-                    <option value="hi">Hindi</option>
-                    <option value="ja">Japanese</option>
-                    <option value="pt">Portuguese</option>
+                    <option value="auto">自动识别</option>
+                    <option value="en">英文</option>
+                    <option value="es">西班牙文</option>
+                    <option value="fr">法文</option>
+                    <option value="de">德文</option>
+                    <option value="hi">印地文</option>
+                    <option value="ja">日文</option>
+                    <option value="pt">葡萄牙文</option>
                   </select>
                 </label>
               </div>
@@ -386,11 +386,10 @@ export default function SettingsModal({
             <section className="flex flex-col gap-4">
               <div>
                 <h3 className="text-sm font-medium text-neutral-200">
-                  Prompt Templates
+                Prompt 模板
                 </h3>
                 <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  These are sent to the model on every request. Edit carefully —
-                  they directly affect suggestion and chat quality.
+                  这些内容会随每次请求发送给模型，请谨慎修改。
                 </p>
               </div>
 
@@ -399,7 +398,7 @@ export default function SettingsModal({
                   htmlFor="settings-suggestions-prompt"
                   className="text-xs font-medium text-neutral-400"
                 >
-                  Live Suggestions Prompt
+                  实时建议 Prompt
                 </label>
                 <textarea
                   id="settings-suggestions-prompt"
@@ -417,7 +416,7 @@ export default function SettingsModal({
                   htmlFor="settings-chat-prompt"
                   className="text-xs font-medium text-neutral-400"
                 >
-                  Chat Prompt
+                  对话 Prompt
                 </label>
                 <textarea
                   id="settings-chat-prompt"
@@ -435,7 +434,7 @@ export default function SettingsModal({
                   htmlFor="settings-summarize-prompt"
                   className="text-xs font-medium text-neutral-400"
                 >
-                  Summarization Prompt
+                  总结 Prompt
                 </label>
                 <textarea
                   id="settings-summarize-prompt"
@@ -458,14 +457,14 @@ export default function SettingsModal({
               onClick={resetToDefaults}
               className="rounded-md border border-neutral-600 bg-transparent px-4 py-2.5 text-sm font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             >
-              Reset to Defaults
+              恢复默认
             </button>
             <button
               type="button"
               onClick={handleSave}
               className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
             >
-              Save
+              保存
             </button>
           </div>
         </div>

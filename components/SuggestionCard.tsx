@@ -38,6 +38,10 @@ function typeBadgeClasses(type: Suggestion["type"]): string {
   }
 }
 
+function typeLabel(type: Suggestion["type"]): string {
+  return { question: "问题", talking_point: "观点", answer: "回答", fact_check: "核查", clarify: "澄清" }[type];
+}
+
 export default function SuggestionCard({
   suggestion,
   onSelect,
@@ -68,14 +72,14 @@ export default function SuggestionCard({
       <span
         className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium uppercase ${typeBadgeClasses(suggestion.type)}`}
       >
-        {suggestion.type.replaceAll("_", " ")}
+        {typeLabel(suggestion.type)}
       </span>
       <p className="mt-2 text-sm text-white">{suggestion.preview}</p>
       <div className="mt-3 flex gap-3 border-t border-neutral-800 pt-2 text-xs text-neutral-500">
-        <button type="button" aria-label={isPinned ? "Unpin suggestion" : "Pin suggestion"} onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "pin"); }} className={isPinned ? "text-blue-300" : "hover:text-white"}>{isPinned ? "★ Pinned" : "☆ Pin"}</button>
-        <button type="button" aria-label="Dismiss suggestion" onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "dismiss"); }} className="hover:text-white">Dismiss</button>
-        <button type="button" aria-label="Mark suggestion unhelpful" onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "down"); }} className="hover:text-white">👎</button>
-        <button type="button" aria-label="Copy suggestion details" onClick={(event) => { event.stopPropagation(); void navigator.clipboard.writeText(`${suggestion.preview}\n\n${suggestion.detail}`); }} className="ml-auto hover:text-white">Copy</button>
+        <button type="button" aria-label={isPinned ? "取消置顶建议" : "置顶建议"} onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "pin"); }} className={isPinned ? "text-blue-300" : "hover:text-white"}>{isPinned ? "★ 已置顶" : "☆ 置顶"}</button>
+        <button type="button" aria-label="忽略建议" onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "dismiss"); }} className="hover:text-white">忽略</button>
+        <button type="button" aria-label="标记建议无帮助" onClick={(event) => { event.stopPropagation(); onFeedback(suggestion, "down"); }} className="hover:text-white">👎</button>
+        <button type="button" aria-label="复制建议详情" onClick={(event) => { event.stopPropagation(); void navigator.clipboard.writeText(`${suggestion.preview}\n\n${suggestion.detail}`); }} className="ml-auto hover:text-white">复制</button>
       </div>
     </div>
   );

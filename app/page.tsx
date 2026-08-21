@@ -21,7 +21,7 @@ import type { Suggestion } from "@/types/suggestions";
 
 function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptChunks">): string {
   const firstWords = snapshot.transcriptChunks[0]?.text.trim().slice(0, 44);
-  return firstWords || `Meeting · ${snapshot.createdAt.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+  return firstWords || `会议 · ${snapshot.createdAt.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
 }
 
 export default function Home(): ReactElement {
@@ -144,7 +144,7 @@ export default function Home(): ReactElement {
   return (
     <div className="flex h-dvh min-h-0 w-full flex-col bg-[#0a0a0a] text-neutral-200">
       <header className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 border-b border-neutral-800 bg-neutral-950 px-4 py-1">
-        <span className="truncate text-sm font-medium uppercase tracking-widest text-neutral-400">CueMind Live Suggestions</span>
+        <span className="truncate text-sm font-medium uppercase tracking-widest text-neutral-400">CueMind 实时会议提示</span>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <select
             aria-label="Saved sessions"
@@ -155,7 +155,7 @@ export default function Home(): ReactElement {
             }}
             className="max-w-40 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-400"
           >
-            <option value="">Sessions ({sessions.length})</option>
+            <option value="">会话（{sessions.length}）</option>
             {sessions.map((session) => (
               <option key={session.id} value={session.id}>
                 {session.title}
@@ -163,7 +163,7 @@ export default function Home(): ReactElement {
             ))}
           </select>
           <button type="button" onClick={newSession} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400">
-            New
+            新建
           </button>
           <button type="button" disabled={!hasContent} onClick={() => exportSession(snapshot, "json")} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 disabled:opacity-40">
             JSON
@@ -180,10 +180,10 @@ export default function Home(): ReactElement {
         <div className="flex items-center justify-center gap-3 border-b border-blue-900 bg-blue-950/30 px-4 py-2 text-xs text-blue-200">
           <span>Last meeting is waiting: “{resumeCandidate.title}”</span>
           <button type="button" onClick={() => restoreSession(resumeCandidate)} className="rounded bg-blue-600 px-2 py-1 text-white">
-            Resume
+            恢复
           </button>
           <button type="button" onClick={() => setResumeCandidate(null)} className="text-blue-400">
-            Not now
+            暂不恢复
           </button>
         </div>
       ) : null}

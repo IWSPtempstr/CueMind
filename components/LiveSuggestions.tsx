@@ -35,18 +35,18 @@ export default function LiveSuggestions(props: Props): ReactElement {
   return (
     <section className="flex h-[50vh] min-h-0 w-full shrink-0 flex-col border-r border-neutral-800 lg:h-auto lg:min-w-0 lg:flex-1 lg:shrink">
       <header className="flex shrink-0 items-center justify-between border-b border-neutral-800 px-5 py-4">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-neutral-500">2. LIVE SUGGESTIONS</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-neutral-500">2. 实时建议</h2>
         <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-[10px] font-semibold text-neutral-400">
-          {batches.length} BATCHES
+          {batches.length} 批
         </span>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-6">
         <div className="flex items-center justify-between gap-3">
           <button type="button" onClick={onManualRefresh} disabled={isLoading} className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 disabled:opacity-40">
-            ↺ Reload suggestions
+            ↺ 刷新建议
           </button>
           <span className="text-xs text-neutral-500">
-            {isRecording && seconds !== null ? `auto-refresh in ${seconds}s` : "auto-refresh waits for recording"}
+            {isRecording && seconds !== null ? `${seconds} 秒后自动刷新` : "开始录音后自动刷新"}
           </span>
         </div>
         {error ? <p className="text-xs text-red-500">{error}</p> : null}
@@ -71,8 +71,8 @@ export default function LiveSuggestions(props: Props): ReactElement {
             </div>
           </details>
         ) : null}
-        {isLoading ? <p className="animate-pulse text-center text-sm text-neutral-500">Generating suggestions...</p> : null}
-        {!isLoading && batches.length === 0 ? <p className="text-center text-sm text-neutral-600">Suggestions appear here once recording starts.</p> : null}
+        {isLoading ? <p className="animate-pulse text-center text-sm text-neutral-500">正在生成建议…</p> : null}
+        {!isLoading && batches.length === 0 ? <p className="text-center text-sm text-neutral-600">开始录音后，建议会显示在这里。</p> : null}
         <div className="flex flex-col gap-6">
           {batches.map((batch, batchIndex) => {
             const visible = batch.suggestions
