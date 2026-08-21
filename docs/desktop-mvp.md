@@ -37,9 +37,10 @@ CueMind Desktop is a Windows meeting cognition assistant. It listens to default 
 | 2026-08-21 | WSL2 | `npm run build` | Pass | local terminal |
 | 2026-08-21 | WSL2 | Electron shell TypeScript/lint | Pass | `desktop/electron/*` |
 | 2026-08-21 | WSL2 | `npm run desktop:dev` | Blocked before Electron launch: npm Electron binary download did not complete within bounded probe; Next dev server returned HTTP 200 | local terminal |
+| 2026-08-21 | WSL2 | Local ASR route TypeScript/lint/build | Pass | `app/api/local-transcribe`, `lib/local-asr.ts` |
 | 2026-08-21 | WSL2 | `.NET helper build` | Blocked: `dotnet` not installed in WSL | local terminal |
 | 2026-08-21 | Windows 10/11 x64 | Dual-track capture | Pending |  |
-| 2026-08-21 | Windows 10/11 x64 | Local ASR tiny/base | Pending |  |
+| 2026-08-21 | Windows 10/11 x64 | Local ASR tiny/base WAV smoke | Pending: requires whisper.cpp executable and model on Windows |  |
 | 2026-08-21 | Windows 10/11 x64 | 10-minute replay demo | Pending |  |
 
 ## Resume Bullet Draft

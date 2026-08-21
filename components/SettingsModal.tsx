@@ -307,6 +307,47 @@ export default function SettingsModal({
               </div>
             </section>
 
+            <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
+              <div>
+                <h3 className="text-sm font-medium text-neutral-200">本地 whisper.cpp</h3>
+                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                  桌面模式只读取本机路径，不上传音频；浏览器模式仍使用上面的 Groq 转写配置。
+                </p>
+              </div>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                whisper.cpp 可执行文件路径
+                <input
+                  type="text"
+                  value={settings.localWhisperPath}
+                  onChange={(event) => updateSetting("localWhisperPath", event.target.value)}
+                  placeholder="C:\\Tools\\whisper.cpp\\whisper-cli.exe"
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                whisper 模型路径
+                <input
+                  type="text"
+                  value={settings.localWhisperModelPath}
+                  onChange={(event) => updateSetting("localWhisperModelPath", event.target.value)}
+                  placeholder="C:\\Models\\ggml-base.bin"
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                本地转写语言
+                <select
+                  value={settings.localWhisperLanguage}
+                  onChange={(event) => updateSetting("localWhisperLanguage", event.target.value as typeof settings.localWhisperLanguage)}
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
+                >
+                  <option value="auto">自动识别</option>
+                  <option value="zh">中文</option>
+                  <option value="en">英文</option>
+                </select>
+              </label>
+            </section>
+
             <section className="flex flex-col gap-4">
               <div>
                 <h3 className="text-sm font-medium text-neutral-200">

@@ -6,6 +6,7 @@ import LiveSuggestions from "@/components/LiveSuggestions";
 import MicTranscript from "@/components/MicTranscript";
 import SettingsModal from "@/components/SettingsModal";
 import useChat from "@/hooks/useChat";
+import useDesktopTranscript from "@/hooks/useDesktopTranscript";
 import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
 import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
@@ -22,7 +23,9 @@ function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptC
 }
 
 export default function Home(): ReactElement {
-  const recorder = useMicRecorder();
+  const browserRecorder = useMicRecorder();
+  const desktopRecorder = useDesktopTranscript();
+  const recorder = desktopRecorder.isDesktop ? desktopRecorder : browserRecorder;
   const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: recorder.isRecording && !recorder.isPaused });
   const chat = useChat({ transcriptChunks: recorder.transcriptChunks });
   const [pendingSuggestion, setPendingSuggestion] = useState<Suggestion | null>(null);

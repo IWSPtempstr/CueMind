@@ -45,6 +45,9 @@ export function getDefaultSettings(): Settings {
     chunkIntervalSeconds: CHUNK_INTERVAL_SECONDS,
     suggestionRefreshSeconds: SUGGESTION_REFRESH_SECONDS,
     transcriptionLanguage: "auto",
+    localWhisperPath: "",
+    localWhisperModelPath: "",
+    localWhisperLanguage: "auto",
   };
 }
 
@@ -89,6 +92,9 @@ export function loadCueMindSettings(): Settings {
     chunkIntervalSeconds: clampInt(o.chunkIntervalSeconds, defaults.chunkIntervalSeconds, MIN_CADENCE_SECONDS, MAX_CHUNK_INTERVAL_SECONDS),
     suggestionRefreshSeconds: clampInt(o.suggestionRefreshSeconds, defaults.suggestionRefreshSeconds, MIN_CADENCE_SECONDS, MAX_SUGGESTION_REFRESH_SECONDS),
     transcriptionLanguage: typeof o.transcriptionLanguage === "string" ? o.transcriptionLanguage : "auto",
+    localWhisperPath: typeof o.localWhisperPath === "string" ? o.localWhisperPath : defaults.localWhisperPath,
+    localWhisperModelPath: typeof o.localWhisperModelPath === "string" ? o.localWhisperModelPath : defaults.localWhisperModelPath,
+    localWhisperLanguage: o.localWhisperLanguage === "zh" || o.localWhisperLanguage === "en" ? o.localWhisperLanguage : "auto",
   };
 
   // One-time migration only: fold a legacy or embedded key into the chosen store

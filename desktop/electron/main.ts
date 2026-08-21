@@ -54,6 +54,7 @@ async function startAudioHelper(): Promise<DesktopRuntimeStatus> {
   const stdoutLines = createInterface({ input: child.stdout });
   stdoutLines.on("line", (line) => {
     process.stdout.write(`[CueMind.Audio] ${line}\n`);
+    mainWindow?.webContents.send("desktop:event", line);
   });
 
   const stderrLines = createInterface({ input: child.stderr });

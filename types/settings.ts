@@ -12,4 +12,7 @@ export interface Settings {
   chunkIntervalSeconds: number;
   suggestionRefreshSeconds: number;
   transcriptionLanguage: string;
+  localWhisperPath: string;
+  localWhisperModelPath: string;
+  localWhisperLanguage: "auto" | "zh" | "en";
 }

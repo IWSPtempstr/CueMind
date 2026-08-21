@@ -58,7 +58,7 @@ export default function MicTranscript(props: Props): ReactElement {
         </div>
 
         <div className="flex flex-col">
-          {filtered.map((chunk, index) => <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""}`}><time className="mb-1 block text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>)}
+          {filtered.map((chunk, index) => <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : "麦克风"}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>)}
           {transcriptChunks.length === 0 ? <p className="text-center text-sm text-neutral-600">No transcript yet — start the mic.</p> : null}
           {transcriptChunks.length > 0 && filtered.length === 0 ? <p className="text-center text-sm text-neutral-600">No matching transcript moments.</p> : null}
           <div ref={endRef} aria-hidden />

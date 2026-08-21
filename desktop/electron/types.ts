@@ -8,4 +8,5 @@ export interface DesktopBridge {
   getRuntimeStatus: () => Promise<DesktopRuntimeStatus>;
   startAudioHelper: () => Promise<DesktopRuntimeStatus>;
   stopAudioHelper: () => Promise<DesktopRuntimeStatus>;
+  onRuntimeEvent: (listener: (raw: string) => void) => () => void;
 }
