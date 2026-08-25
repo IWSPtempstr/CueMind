@@ -12,12 +12,13 @@ interface LocalTranscribeBody {
     whisperPath: string;
     modelPath: string;
     language: "auto" | "zh" | "en";
+    timeoutMs?: number;
   };
 }
 
 export async function POST(
   request: Request,
-): Promise<NextResponse<{ text: string; latencyMs: number } | { error: string }>> {
+): Promise<NextResponse<LocalTranscribeResponse | { error: string }>> {
   let body: unknown;
   try {
     body = await request.json();
@@ -39,6 +40,7 @@ export async function POST(
       whisperPath: parsed.settings.whisperPath,
       modelPath: parsed.settings.modelPath,
       language: parsed.settings.language,
+      timeoutMs: parsed.settings.timeoutMs,
     });
     return NextResponse.json(result);
   } catch (caught) {
@@ -58,6 +60,8 @@ function parseRequest(value: unknown): LocalTranscribeBody | null {
   if (!isString(value.settings.modelPath) || !value.settings.modelPath.trim()) return null;
   const language = value.settings.language;
   if (language !== "auto" && language !== "zh" && language !== "en") return null;
+  const timeoutMs = value.settings.timeoutMs;
+  if (timeoutMs !== undefined && (!isFiniteNumber(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 300_000)) return null;
 
   return {
     audioPath: value.audioPath,
@@ -68,9 +72,20 @@ function parseRequest(value: unknown): LocalTranscribeBody | null {
       whisperPath: value.settings.whisperPath,
       modelPath: value.settings.modelPath,
       language,
+      ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
     },
   };
 }
+
+type LocalTranscribeResponse = {
+  text: string;
+  latencyMs: number;
+  audioDurationMs: number | null;
+  realTimeFactor: number | null;
+  segments: Array<{ startMs: number; endMs: number; text: string }>;
+  provider: "local-whisper";
+  modelPath: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

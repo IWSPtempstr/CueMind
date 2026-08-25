@@ -7,7 +7,7 @@ Execute the P0-P3 specification in `docs/plans/2026-08-25-cuemind-detailed-imple
 ## Current Phase
 
 - [x] P0: supplement execution specification and submission rules.
-- [ ] P1: implement the complete local replay-to-card loop.
+- [x] P1: implement the local whisper.cpp ASR contract and serialized desktop transcription path.
 - [ ] P2: establish fixed data, replay, and Agent evaluation.
 - [ ] P3: optimize only reproducible failures from P2.
 
@@ -30,6 +30,7 @@ P0 is documentation-only. The current request does not claim that any runtime ca
 - Data: public meeting/video sources only; first release is evaluation-first, not training-first.
 - Training order: trigger model first, end-to-end Agent later.
 - Model scope: skip `whisper-large-zh-cv11` download and comparison testing in this round.
+- P1 implementation scope delivered in this checkpoint: whisper.cpp JSON/text output parsing, WAV duration/RTF metrics, typed failure messages, timeout configuration, duplicate suppression, serialized desktop transcription queue, and a fake-whisper regression script.
 
 ## Errors Encountered
 
@@ -42,3 +43,4 @@ P0 is documentation-only. The current request does not claim that any runtime ca
 - Local `whisper.cpp` executable, model path, timestamp behavior, and Chinese ASR quality are not yet verified.
 - Local Qwen3-4B structured output, search provider behavior, Agent trace completeness, and real latency are not yet verified.
 - End-to-end file replay, microphone input, Windows audio capture, remote fallback, and knowledge persistence are not yet verified.
+- A real `whisper-cli` executable and model were not present in the WSL workspace, so the real-model smoke test remains blocked by missing external runtime artifacts.

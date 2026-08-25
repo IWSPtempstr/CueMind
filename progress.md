@@ -26,3 +26,12 @@
 - Synchronized `task_plan.md` with the P0-P3 gates and recorded current unknowns.
 - No runtime code was modified and no Git commit was created.
 - The following remain unverified: local `whisper.cpp` execution and model quality, local Qwen3-4B structured output, real search behavior, Agent traces, end-to-end replay, latency, Windows audio capture, and remote fallback.
+
+## 2026-08-25 (P1 local ASR contract)
+
+- Updated `lib/local-asr.ts` to request whisper.cpp JSON/text artifacts, parse timestamped segments, calculate WAV duration and real-time factor, clean temporary output, and classify timeout/model/audio process failures.
+- Updated `app/api/local-transcribe/route.ts` to return the expanded ASR result and validate an optional bounded timeout.
+- Updated `hooks/useDesktopTranscript.ts` to serialize audio-chunk processing, suppress duplicate chunk IDs, and bound the pending queue to three items with explicit backpressure feedback.
+- Added `scripts/test-local-asr.ts`, a fake-whisper regression check covering JSON segment parsing, text assembly, WAV duration, provider identity, and latency output.
+- Verification passed: `npx tsc --noEmit`, `npm run lint`, `TMPDIR=/tmp npx tsx scripts/test-local-asr.ts`, `npm run build`, and `git diff --check`.
+- Real `whisper-cli`/model execution was not verified because no executable or model was found in the available WSL workspace. No `whisper-large-zh-cv11` artifact was downloaded.

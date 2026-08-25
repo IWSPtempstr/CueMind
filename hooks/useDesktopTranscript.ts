@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import { parseDesktopEvent, type AudioChunkReadyEvent } from "@/lib/desktop-events";
 import type { LatencySample } from "@/lib/telemetry";
@@ -29,6 +29,9 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   const [transcriptChunks, setTranscriptState] = useState<TranscriptChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
+  const queueRef = useRef<AudioChunkReadyEvent[]>([]);
+  const processingRef = useRef(false);
+  const seenChunkIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cuemindDesktop));
@@ -59,6 +62,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
             whisperPath: settings.localWhisperPath,
             modelPath: settings.localWhisperModelPath,
             language: settings.localWhisperLanguage,
+            timeoutMs: 60_000,
           },
         }),
       });
@@ -97,6 +101,25 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
     }
   }, []);
 
+  const enqueueChunk = useCallback((event: AudioChunkReadyEvent): void => {
+    if (seenChunkIdsRef.current.has(event.id)) return;
+    seenChunkIdsRef.current.add(event.id);
+    if (queueRef.current.length >= 3) {
+      queueRef.current.shift();
+      setError("本地转写队列已满，已丢弃最旧的待处理音频片段。");
+    }
+    queueRef.current.push(event);
+    if (processingRef.current) return;
+    processingRef.current = true;
+    void (async () => {
+      while (queueRef.current.length > 0) {
+        const next = queueRef.current.shift();
+        if (next) await transcribeChunk(next);
+      }
+      processingRef.current = false;
+    })();
+  }, [transcribeChunk]);
+
   useEffect(() => {
     const bridge = window.cuemindDesktop;
     if (!bridge) return;
@@ -107,10 +130,10 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       if (event.type === "runtime_error") {
         setError(event.message);
       } else if (event.type === "audio_chunk_ready") {
-        void transcribeChunk(event);
+        enqueueChunk(event);
       }
     });
-  }, [transcribeChunk]);
+  }, [enqueueChunk]);
 
   const startRecording = useCallback(async (): Promise<void> => {
     const bridge = window.cuemindDesktop;
@@ -163,8 +186,17 @@ function compareChunks(left: TranscriptChunk, right: TranscriptChunk): number {
   return leftStart - rightStart || left.timestamp.getTime() - right.timestamp.getTime();
 }
 
-function isTranscribePayload(value: unknown): value is { text: string; latencyMs: number } {
-  return isRecord(value) && typeof value.text === "string" && typeof value.latencyMs === "number";
+function isTranscribePayload(value: unknown): value is {
+  text: string;
+  latencyMs: number;
+  audioDurationMs: number | null;
+  realTimeFactor: number | null;
+} {
+  return isRecord(value)
+    && typeof value.text === "string"
+    && typeof value.latencyMs === "number"
+    && (value.audioDurationMs === null || typeof value.audioDurationMs === "number")
+    && (value.realTimeFactor === null || typeof value.realTimeFactor === "number");
 }
 
 function isErrorPayload(value: unknown): value is { error: string } {
