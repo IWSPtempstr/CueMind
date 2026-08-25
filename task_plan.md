@@ -10,9 +10,9 @@ Execute the P0-P3 specification in `docs/plans/2026-08-25-cuemind-detailed-imple
 - [x] P1-code: implement the local whisper.cpp ASR contract and serialized desktop transcription path.
 - [x] P2: establish fixture replay validation and evidence-boundary reporting.
 - [x] P3: close reproducible trace and prompt-injection boundary gaps from P2.
-- [ ] P1-runtime: run the real whisper.cpp small-model smoke test against the supplied video.
+- [x] P1-runtime: run the real whisper.cpp small-model smoke test against the supplied video.
 
-P0 is documentation-only. P1 code is implemented and regression-tested with a fake executable, but the real whisper.cpp smoke gate remains open because the runtime artifacts and network access are unavailable.
+P0 is documentation-only. P1 code and the real whisper.cpp small-model smoke gate are complete. The remaining model/search/desktop items below are outside this ASR runtime gate and remain separately unverified.
 
 ## Phase Gates
 
@@ -41,10 +41,9 @@ P0 is documentation-only. P1 code is implemented and regression-tested with a fa
 
 ## Current Unknowns
 
-- Local `whisper.cpp` executable, model path, timestamp behavior, and Chinese ASR quality are not yet verified.
 - Local Qwen3-4B structured output, search provider behavior, Agent trace completeness, and real latency are not yet verified.
 - End-to-end file replay, microphone input, Windows audio capture, remote fallback, and knowledge persistence are not yet verified.
-- A real `whisper-cli` executable and model were not present in the WSL workspace, so the real-model smoke test remains blocked by missing external runtime artifacts.
 - P2 currently validates fixture event integrity and supplied ASR latency metadata; it does not claim real ASR, local LLM, live search, or card-quality evidence.
 - P3 implementation scope delivered in this checkpoint: context-card trace on normal and failure paths, bounded search retry events, and explicit untrusted-data delimiters for transcript/search evidence.
-- Runtime probe on 2026-08-25: `git ls-remote https://github.com/ggerganov/whisper.cpp.git HEAD` timed out after 20 seconds, so external model/runtime acquisition could not be verified from WSL.
+- The real smoke test covers one 30-second clip on CPU; long-video stability, Windows execution, and broader Chinese terminology quality remain unverified.
+- P1-runtime implementation scope delivered in this checkpoint: source-built `whisper.cpp`, downloaded multilingual Small model, real adapter smoke runner, and reproducible media/model metadata capture.

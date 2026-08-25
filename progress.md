@@ -66,12 +66,23 @@
 
 ## 2026-08-25 (final runtime audit)
 
-- Confirmed the repository has no `whisper-cli`, `whisper-cli.exe`, or local Whisper model artifact in the searched workspace paths.
-- External probe `timeout 20 git ls-remote https://github.com/ggerganov/whisper.cpp.git HEAD` timed out; the real small-model smoke test cannot be run from the current WSL network state.
-- The fake-whisper regression is evidence for the adapter contract only. It must not be reported as Chinese ASR quality, real-time factor, or end-to-end video transcription evidence.
-- The implementation goal remains active at the external-runtime verification boundary; no `update_goal complete` claim is made.
-- Confirmed the supplied video duration with `ffprobe`: `2865.581s` (47m45.581s).
-- Prepared `/tmp/cuemind-runtime/smoke-30s.wav` with `ffmpeg`: PCM s16le, 16 kHz, mono, approximately 30 seconds. The adapter regression still passes against its fake executable; real Whisper inference remains pending.
+- WSL network access recovered for GitHub and the Hugging Face mirror. `whisper.cpp` was built from source at version `1.9.3-dev` with the CPU/OpenMP backend.
+- Downloaded only the multilingual `ggerganov/whisper.cpp` `ggml-small.bin` model through `hf-mirror.com`; no `whisper-large-zh-cv11` artifact was downloaded or tested.
+- Model SHA256: `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`.
+- The supplied video duration is `2865.581s` (47m45.581s). Its first 30 seconds were converted to 16 kHz mono PCM WAV.
+- Ran the project adapter against that WAV: `provider=local-whisper`, `audioDurationMs=30000`, `latencyMs=9758` on the final gate run, `realTimeFactor=0.3253`, `segmentCount=1`, `textLength=209`. An earlier repeat measured 10,265 ms / RTF 0.3422; these are single-run CPU smoke measurements, not a stable percentile benchmark.
+- The output preserved Chinese and technical terms including `Agent Harness`, `Harness`, `Cloud Code`, `GitHub`, and `Learn Cloud Code`; this is a smoke result, not a general accuracy benchmark.
+- `scripts/run-local-asr-smoke.ts` reproduces the adapter-level run and can emit a JSON report outside the repository.
+- The real 30-second ASR runtime gate is closed. Long-video stability, Windows execution, broader terminology quality, local Qwen3-4B, live search, and full desktop end-to-end behavior remain unverified.
+
+### P1-runtime phase-end cleanup audit
+
+| Path | Type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `scripts/run-local-asr-smoke.ts` | Evaluation script | Runs the real project ASR adapter and emits a JSON smoke report | keep | Required to reproduce the runtime gate without committing model/audio binaries. |
+| `/home/work/asr/.runtime/` | External runtime workspace | Stores source, build, model, and raw smoke outputs | review | Deliberately outside the Git repository; retain for local reproduction, do not commit large binaries. |
+| `/tmp/cuemind-runtime/` | Temporary media/report workspace | Stores the 30-second derived WAV and adapter report | review | Useful for the current run; remove after the runtime evidence is archived if disk pressure matters. |
+| `docs/desktop-mvp.md` | Product evidence log | Records WSL Small-model smoke and remaining Windows/long-video gaps | keep | Explicit evidence boundary for desktop delivery. |
 
 ### P3 phase-end cleanup audit
 

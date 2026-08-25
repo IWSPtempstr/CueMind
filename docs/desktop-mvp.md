@@ -38,6 +38,7 @@ CueMind Desktop is a Windows meeting cognition assistant. It listens to default 
 | 2026-08-21 | WSL2 | Electron shell TypeScript/lint | Pass | `desktop/electron/*` |
 | 2026-08-21 | WSL2 | `npm run desktop:dev` | Blocked before Electron launch: npm Electron binary download did not complete within bounded probe; Next dev server returned HTTP 200 | local terminal |
 | 2026-08-21 | WSL2 | Local ASR route TypeScript/lint/build | Pass | `app/api/local-transcribe`, `lib/local-asr.ts` |
+| 2026-08-25 | WSL2 | Real whisper.cpp Small 30-second Chinese WAV smoke through project adapter | Pass: `whisper.cpp 1.9.3-dev` CPU/OpenMP, `ggml-small.bin`, 30,000 ms audio, 10,265 ms adapter latency, RTF 0.3422, timestamped JSON output | `scripts/run-local-asr-smoke.ts`; runtime report kept outside repository |
 | 2026-08-21 | WSL2 | Context-card route validation smoke | Pass: invalid body returns 400; unavailable Ollama returns structured `{ card: null, failure }` | `app/api/context-cards` |
 | 2026-08-21 | WSL2 | Real Ollama + web-source card | Pending: local Ollama endpoint/model and search API key not configured |  |
 | 2026-08-21 | WSL2 | Latency telemetry + replay parser | Pass: TypeScript/lint/build, percentile smoke, 3-event fixture parse | `lib/telemetry.ts`, `lib/replay.ts` |
@@ -65,7 +66,8 @@ Implemented and locally verified:
 Externally unverified:
 
 - Windows WASAPI device capture and helper compilation.
-- Actual whisper.cpp executable/model transcription.
+- Windows whisper.cpp executable/model transcription and long-video stability.
+- The WSL CPU Small-model smoke is verified only on a single 30-second clip and is not a general Chinese accuracy benchmark.
 - Real Ollama generation and web search with two usable sources.
 - NSIS installation, packaged startup, and the 10-minute acceptance run.
 
