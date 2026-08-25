@@ -64,6 +64,13 @@
 - Verification passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, `TMPDIR=/tmp npx tsx scripts/test-local-asr.ts`, `TMPDIR=/tmp npx tsx scripts/validate-replay.ts fixtures/demo-meeting/sample-events.jsonl reports/replay`, and `git diff --check`.
 - This closes the reproducible API contract gap, but does not prove prompt-injection resistance against live providers or real model quality; those remain externally unverified.
 
+## 2026-08-25 (final runtime audit)
+
+- Confirmed the repository has no `whisper-cli`, `whisper-cli.exe`, or local Whisper model artifact in the searched workspace paths.
+- External probe `timeout 20 git ls-remote https://github.com/ggerganov/whisper.cpp.git HEAD` timed out; the real small-model smoke test cannot be run from the current WSL network state.
+- The fake-whisper regression is evidence for the adapter contract only. It must not be reported as Chinese ASR quality, real-time factor, or end-to-end video transcription evidence.
+- The implementation goal remains active at the external-runtime verification boundary; no `update_goal complete` claim is made.
+
 ### P3 phase-end cleanup audit
 
 | Path | Type | Current purpose | Recommendation | Rationale |

@@ -7,18 +7,19 @@ Execute the P0-P3 specification in `docs/plans/2026-08-25-cuemind-detailed-imple
 ## Current Phase
 
 - [x] P0: supplement execution specification and submission rules.
-- [x] P1: implement the local whisper.cpp ASR contract and serialized desktop transcription path.
+- [x] P1-code: implement the local whisper.cpp ASR contract and serialized desktop transcription path.
 - [x] P2: establish fixture replay validation and evidence-boundary reporting.
 - [x] P3: close reproducible trace and prompt-injection boundary gaps from P2.
+- [ ] P1-runtime: run the real whisper.cpp small-model smoke test against the supplied video.
 
-P0 is documentation-only. The current request does not claim that any runtime capability is complete.
+P0 is documentation-only. P1 code is implemented and regression-tested with a fake executable, but the real whisper.cpp smoke gate remains open because the runtime artifacts and network access are unavailable.
 
 ## Phase Gates
 
 | Phase | Scope | Required gate | Commit |
 | --- | --- | --- | --- |
 | P0 | Specs, status, and boundaries | `git diff --check`; `npm run lint`; `npm run build` | `docs: define CueMind execution spec` |
-| P1 | Complete local replay-to-card chain | Lint/build, ASR smoke test, fixed replay, Schema validation | `feat: complete CueMind local replay loop` |
+| P1 | Complete local replay-to-card chain | Lint/build, fake adapter regression, real ASR smoke test, fixed replay, Schema validation | `feat: complete CueMind local replay loop` |
 | P2 | Fixed data and replay evaluation | JSONL validation, replay, repeated evaluation, report completeness | `test: add CueMind replay evaluation` |
 | P3 | Evidence-driven optimization | P2 regression suite, unit/integration/E2E, safety and latency checks | `fix: improve CueMind evaluated failure cases` |
 
@@ -46,3 +47,4 @@ P0 is documentation-only. The current request does not claim that any runtime ca
 - A real `whisper-cli` executable and model were not present in the WSL workspace, so the real-model smoke test remains blocked by missing external runtime artifacts.
 - P2 currently validates fixture event integrity and supplied ASR latency metadata; it does not claim real ASR, local LLM, live search, or card-quality evidence.
 - P3 implementation scope delivered in this checkpoint: context-card trace on normal and failure paths, bounded search retry events, and explicit untrusted-data delimiters for transcript/search evidence.
+- Runtime probe on 2026-08-25: `git ls-remote https://github.com/ggerganov/whisper.cpp.git HEAD` timed out after 20 seconds, so external model/runtime acquisition could not be verified from WSL.
