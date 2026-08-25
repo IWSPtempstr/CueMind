@@ -9,7 +9,7 @@ Execute the P0-P3 specification in `docs/plans/2026-08-25-cuemind-detailed-imple
 - [x] P0: supplement execution specification and submission rules.
 - [x] P1: implement the local whisper.cpp ASR contract and serialized desktop transcription path.
 - [x] P2: establish fixture replay validation and evidence-boundary reporting.
-- [ ] P3: optimize only reproducible failures from P2.
+- [x] P3: close reproducible trace and prompt-injection boundary gaps from P2.
 
 P0 is documentation-only. The current request does not claim that any runtime capability is complete.
 
@@ -45,3 +45,4 @@ P0 is documentation-only. The current request does not claim that any runtime ca
 - End-to-end file replay, microphone input, Windows audio capture, remote fallback, and knowledge persistence are not yet verified.
 - A real `whisper-cli` executable and model were not present in the WSL workspace, so the real-model smoke test remains blocked by missing external runtime artifacts.
 - P2 currently validates fixture event integrity and supplied ASR latency metadata; it does not claim real ASR, local LLM, live search, or card-quality evidence.
+- P3 implementation scope delivered in this checkpoint: context-card trace on normal and failure paths, bounded search retry events, and explicit untrusted-data delimiters for transcript/search evidence.

@@ -55,3 +55,19 @@
 | `scripts/test-local-asr.ts` | Regression script | Exercises the local ASR adapter with a fake whisper executable | keep | It is an official deterministic regression check for the adapter contract. |
 | `dataset/` | User-provided data | Contains the supplied video and related artifacts | review | Not created by this phase; preserve and review separately before dataset freezing. |
 | `findings.md` | Prior project notes | Records earlier architecture and research findings | keep | Pre-existing project documentation; not a temporary debug file. |
+
+## 2026-08-25 (P3 trace and safety boundary)
+
+- Updated `app/api/context-cards/route.ts` to return a typed trace for invalid input, model failure, skip, search failure, and successful card generation.
+- The trace records `traceId`, model provider/name, input chunk IDs, ordered model/tool/generation events, retry count, final state, and total latency without embedding the full transcript.
+- Search evidence and meeting transcript are now explicitly delimited as untrusted data in the card-generation prompt; source title/snippet content is bounded before insertion and cannot redefine system rules.
+- Verification passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, `TMPDIR=/tmp npx tsx scripts/test-local-asr.ts`, `TMPDIR=/tmp npx tsx scripts/validate-replay.ts fixtures/demo-meeting/sample-events.jsonl reports/replay`, and `git diff --check`.
+- This closes the reproducible API contract gap, but does not prove prompt-injection resistance against live providers or real model quality; those remain externally unverified.
+
+### P3 phase-end cleanup audit
+
+| Path | Type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `app/api/context-cards/route.ts` | Production route | Generates sourced cards and emits trace metadata | keep | Required production behavior and contract boundary. |
+| `reports/replay/manifest.json` | Generated report artifact | Stores the stable fixture report manifest | keep | Existing committed evidence artifact; unchanged except regenerated timestamp was restored. |
+| `dataset/` | User-provided data | Supplied video and related artifacts | review | Pre-existing and outside P3; preserve for separate dataset audit. |
