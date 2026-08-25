@@ -1,0 +1,35 @@
+{
+  "status": "pass",
+  "denominator": 3,
+  "checks": {
+    "jsonLinesValid": true,
+    "eventIdsUnique": true,
+    "transcriptTimingValid": true,
+    "transcriptTextNonEmpty": true
+  },
+  "metrics": {
+    "inputPath": "/home/work/asr/CueMind/fixtures/demo-meeting/sample-events.jsonl",
+    "datasetType": "fixture_replay",
+    "eventCount": 3,
+    "transcriptEventCount": 3,
+    "invalidLineCount": 0,
+    "duplicateEventIdCount": 0,
+    "invalidTimingCount": 0,
+    "emptyTranscriptCount": 0,
+    "coveredDurationMs": 19000,
+    "asrLatencyMs": {
+      "count": 3,
+      "min": 900,
+      "max": 1200,
+      "mean": 1067,
+      "p50": 1100,
+      "p95": 1100
+    }
+  },
+  "blockedExternalEvidence": [
+    "real_whisper_cpp",
+    "local_llm",
+    "live_search",
+    "context_card_quality"
+  ]
+}

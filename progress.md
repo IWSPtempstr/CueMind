@@ -35,3 +35,23 @@
 - Added `scripts/test-local-asr.ts`, a fake-whisper regression check covering JSON segment parsing, text assembly, WAV duration, provider identity, and latency output.
 - Verification passed: `npx tsc --noEmit`, `npm run lint`, `TMPDIR=/tmp npx tsx scripts/test-local-asr.ts`, `npm run build`, and `git diff --check`.
 - Real `whisper-cli`/model execution was not verified because no executable or model was found in the available WSL workspace. No `whisper-large-zh-cv11` artifact was downloaded.
+
+## 2026-08-25 (P2 fixture replay evaluation)
+
+- Added `scripts/validate-replay.ts` to validate JSONL desktop events and generate `manifest.json`, `scorecard.json`, and `report.md`.
+- The replay evaluator checks invalid lines, duplicate IDs, transcript timing, empty text, covered duration, and ASR latency count/min/max/mean/P50/P95.
+- Ran `TMPDIR=/tmp npx tsx scripts/validate-replay.ts fixtures/demo-meeting/sample-events.jsonl reports/replay`.
+- Fixture result: 3 events, 3 transcript events, 19,000 ms covered duration, ASR latency count 3, P50 1,100 ms, P95 1,100 ms, all integrity checks passed.
+- The generated report explicitly marks the result as fixture metadata evidence only; real whisper.cpp, local LLM, live search, context-card quality, and end-to-end latency remain blocked/unverified.
+
+### P2 phase-end cleanup audit
+
+| Path | Type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `scripts/validate-replay.ts` | Evaluation script | Validates JSONL fixture integrity and emits reproducible report artifacts | keep | It is the approved P2 replay evaluator, not throwaway code. |
+| `reports/replay/manifest.json` | Generated report artifact | Captures fixture input and evidence boundary | keep | Required for reproducibility and auditability. |
+| `reports/replay/scorecard.json` | Generated report artifact | Stores machine-readable checks and denominators | keep | Required for automated metric consumption. |
+| `reports/replay/report.md` | Generated report artifact | Human-readable fixture evaluation result | keep | Required to distinguish passed fixture checks from blocked external evidence. |
+| `scripts/test-local-asr.ts` | Regression script | Exercises the local ASR adapter with a fake whisper executable | keep | It is an official deterministic regression check for the adapter contract. |
+| `dataset/` | User-provided data | Contains the supplied video and related artifacts | review | Not created by this phase; preserve and review separately before dataset freezing. |
+| `findings.md` | Prior project notes | Records earlier architecture and research findings | keep | Pre-existing project documentation; not a temporary debug file. |

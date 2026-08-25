@@ -1,0 +1,8 @@
+{
+  "dataset": "fixtures/demo-meeting/sample-events.jsonl",
+  "datasetType": "fixture_replay",
+  "inputPath": "/home/work/asr/CueMind/fixtures/demo-meeting/sample-events.jsonl",
+  "generatedAt": "2026-08-25T14:11:49.994Z",
+  "evaluator": "scripts/validate-replay.ts",
+  "evidenceBoundary": "Fixture event integrity and latency metadata only; no ASR, LLM, search, or card-quality claim."
+}
