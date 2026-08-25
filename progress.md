@@ -70,6 +70,8 @@
 - External probe `timeout 20 git ls-remote https://github.com/ggerganov/whisper.cpp.git HEAD` timed out; the real small-model smoke test cannot be run from the current WSL network state.
 - The fake-whisper regression is evidence for the adapter contract only. It must not be reported as Chinese ASR quality, real-time factor, or end-to-end video transcription evidence.
 - The implementation goal remains active at the external-runtime verification boundary; no `update_goal complete` claim is made.
+- Confirmed the supplied video duration with `ffprobe`: `2865.581s` (47m45.581s).
+- Prepared `/tmp/cuemind-runtime/smoke-30s.wav` with `ffmpeg`: PCM s16le, 16 kHz, mono, approximately 30 seconds. The adapter regression still passes against its fake executable; real Whisper inference remains pending.
 
 ### P3 phase-end cleanup audit
 
