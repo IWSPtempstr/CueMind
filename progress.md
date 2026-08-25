@@ -34,7 +34,7 @@
 - Updated `hooks/useDesktopTranscript.ts` to serialize audio-chunk processing, suppress duplicate chunk IDs, and bound the pending queue to three items with explicit backpressure feedback.
 - Added `scripts/test-local-asr.ts`, a fake-whisper regression check covering JSON segment parsing, text assembly, WAV duration, provider identity, and latency output.
 - Verification passed: `npx tsc --noEmit`, `npm run lint`, `TMPDIR=/tmp npx tsx scripts/test-local-asr.ts`, `npm run build`, and `git diff --check`.
-- Real `whisper-cli`/model execution was not verified because no executable or model was found in the available WSL workspace. No `whisper-large-zh-cv11` artifact was downloaded.
+- At the time of the initial P1 checkpoint, real `whisper-cli`/model execution was not verified because no executable or model was found in the available WSL workspace. No `whisper-large-zh-cv11` artifact was downloaded.
 
 ## 2026-08-25 (P2 fixture replay evaluation)
 
