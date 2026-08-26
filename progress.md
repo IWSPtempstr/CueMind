@@ -170,3 +170,21 @@
   failure, empty-config rejection, and API-key non-leak checks.
 - Verification passed: `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`,
   `npm run lint`, `npm run build`, and `git diff --check`.
+
+## 2026-08-26 (P1.4 settings and secret storage migration)
+
+- Made the seven model-provider fields required in `types/settings.ts`.
+- Updated `hooks/useSettings.ts`:
+  - default provider `llama.cpp`, `llamaCppBaseUrl` `http://127.0.0.1:8082`, and the verified
+    Qwen GGUF path as `llamaCppModel`.
+  - generalized the Groq secret-store pattern to three secrets (groq, llamaCpp, remoteApi) with
+    distinct `cuemind_*` local/session keys and in-memory fallbacks.
+  - `llamaCppApiKey` and `remoteApiApiKey` are now stored outside the preferences blob, and both
+    plus the Groq key are stripped from `cuemind_settings` on persist.
+  - one-time migration maps persisted non-default `ollamaBaseUrl`/`ollamaModel` into the
+    llama.cpp fields and drops the legacy fields from persisted preferences.
+  - existing Groq legacy-key migration behavior is unchanged.
+- Extended `scripts/test-model-providers.ts` with default-settings and migration tests using a
+  mock localStorage/sessionStorage.
+- Verification passed: `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`,
+  `npm run lint`, `npm run build`, and `git diff --check`.

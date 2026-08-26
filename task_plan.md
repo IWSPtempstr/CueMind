@@ -77,7 +77,7 @@ P0 is documentation-only. P1 code and the real whisper.cpp small-model smoke gat
 - [x] P1.1: add provider types and typed errors (`lib/model-provider.ts`, `types/settings.ts`, `scripts/test-model-providers.ts`).
 - [x] P1.2: implement OpenAI-compatible JSON client in `lib/model-provider.ts`.
 - [x] P1.3: add `lib/llama-cpp.ts` and `lib/remote-api.ts` wrappers.
-- [ ] P1.4: migrate settings and secret storage.
+- [x] P1.4: migrate settings and secret storage.
 - [ ] P1.5: replace settings UI labels and fields.
 - [ ] P1.6: route provider selection and failure states.
 - [ ] P1.7: remove Ollama runtime semantics.

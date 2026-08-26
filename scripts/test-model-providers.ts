@@ -17,6 +17,7 @@ import {
 } from "@/lib/model-provider";
 import { generateLlamaCppJson } from "@/lib/llama-cpp";
 import { generateRemoteApiJson } from "@/lib/remote-api";
+import { getDefaultSettings, loadCueMindSettings } from "@/hooks/useSettings";
 import type { Settings } from "@/types/settings";
 
 const API_KEY = "test-api-key-must-not-leak";
@@ -421,6 +422,79 @@ async function testWrapperNoApiKeyLeak(): Promise<void> {
   });
 }
 
+// --- P1.4 settings defaults and migration ---
+
+interface MemoryStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  clear(): void;
+}
+
+function makeMemoryStorage(): MemoryStorage {
+  const map = new Map<string, string>();
+  return {
+    getItem: (key) => map.get(key) ?? null,
+    setItem: (key, value) => { map.set(key, String(value)); },
+    removeItem: (key) => { map.delete(key); },
+    clear: () => { map.clear(); },
+  };
+}
+
+function withBrowserGlobals(local: MemoryStorage, session: MemoryStorage, run: () => void): void {
+  const g = globalThis as Record<string, unknown>;
+  const prevWindow = g.window;
+  const prevLocal = g.localStorage;
+  const prevSession = g.sessionStorage;
+  g.window = {};
+  g.localStorage = local;
+  g.sessionStorage = session;
+  try {
+    run();
+  } finally {
+    if (prevWindow === undefined) delete g.window; else g.window = prevWindow;
+    if (prevLocal === undefined) delete g.localStorage; else g.localStorage = prevLocal;
+    if (prevSession === undefined) delete g.sessionStorage; else g.sessionStorage = prevSession;
+  }
+}
+
+function testDefaultSettings(): void {
+  const defaults = getDefaultSettings();
+  assert.equal(defaults.modelProvider, "llama.cpp");
+  assert.equal(defaults.llamaCppBaseUrl, "http://127.0.0.1:8082");
+  assert.equal(defaults.llamaCppModel, "/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf");
+  assert.equal(defaults.llamaCppApiKey, "");
+  assert.equal(defaults.remoteApiBaseUrl, "");
+  assert.equal(defaults.remoteApiModel, "");
+  assert.equal(defaults.remoteApiApiKey, "");
+}
+
+function testSettingsMigration(): void {
+  const local = makeMemoryStorage();
+  const session = makeMemoryStorage();
+  local.setItem("cuemind_settings", JSON.stringify({
+    ollamaBaseUrl: "http://custom-host:11434",
+    ollamaModel: "custom-ollama-model",
+    searchProvider: "bing",
+  }));
+  local.setItem("cuemind_llama_cpp_api_key", "llama-secret");
+
+  withBrowserGlobals(local, session, () => {
+    const settings = loadCueMindSettings();
+    assert.equal(settings.modelProvider, "llama.cpp");
+    assert.equal(settings.llamaCppBaseUrl, "http://custom-host:11434");
+    assert.equal(settings.llamaCppModel, "custom-ollama-model");
+    assert.equal(settings.searchProvider, "bing");
+    assert.equal(settings.llamaCppApiKey, "llama-secret");
+
+    const persisted = JSON.parse(local.getItem("cuemind_settings") ?? "{}") as Record<string, unknown>;
+    assert.equal("llamaCppApiKey" in persisted, false);
+    assert.equal("ollamaBaseUrl" in persisted, false);
+    assert.equal("ollamaModel" in persisted, false);
+    assert.equal(persisted.llamaCppBaseUrl, "http://custom-host:11434");
+  });
+}
+
 async function main(): Promise<void> {
   testProviderNames();
   testErrorCodes();
@@ -441,6 +515,9 @@ async function main(): Promise<void> {
   await testWrapperProviderIdentity();
   await testWrapperRejectsEmptyConfig();
   await testWrapperNoApiKeyLeak();
+
+  testDefaultSettings();
+  testSettingsMigration();
 
   console.log("model provider regression tests passed");
 }
