@@ -252,3 +252,12 @@
   structured-output evidence only — search, card assembly, and end-to-end card latency remain
   unverified.
 - Verification passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check`.
+
+## 2026-08-26 (P2 replay and provider evaluation)
+
+- Extended `scripts/validate-replay.ts` with provider/model/base URL metadata and counters for provider failures, invalid JSON, schema-invalid outputs, and fallback events. Remote base URLs are reduced to origin when metadata is supplied through `MODEL_BASE_URL`.
+- Added `scripts/evaluate-model-providers.ts`. It reads the same fixed first 60-second transcript window for every run, executes each provider independently, records valid JSON/schema validity/keyword consistency/latency denominators, and writes `manifest.json`, `outputs.jsonl`, `errors.jsonl`, `latency.jsonl`, `scorecard.json`, and `report.md`.
+- Real local GPU evaluation completed against `llama-server` `0.3.0-dev (build 1, commit 1729ed5)` and Qwen3-4B Q4_K_M: 3/3 valid JSON, 3/3 schema-valid, keyword repeat consistency `1.0`; the final artifact records the measured latency distribution. These are single fixed-window structured-output measurements, not a stable production benchmark.
+- Remote evaluation status is `blocked_external_dependency`: `REMOTE_API_BASE_URL`, `REMOTE_API_MODEL`, and `REMOTE_API_KEY` were not supplied. No remote calls or fabricated metrics were recorded.
+- Added `docs/evaluation/provider-evaluation.md` documenting commands, artifacts, denominators, and evidence boundaries.
+- P2 cleanup audit: keep `scripts/evaluate-model-providers.ts`, `scripts/validate-replay.ts`, `reports/provider-evaluation/`, and `docs/evaluation/provider-evaluation.md`; review generated reports before replacing them; preserve user-provided `dataset/` and existing deployment artifacts.

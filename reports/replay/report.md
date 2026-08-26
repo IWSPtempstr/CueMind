@@ -6,6 +6,13 @@
 - Transcript events: 3
 - Covered duration: 19000 ms
 - ASR latency: count=3, p50=1100 ms, p95=1100 ms
+- Model provider: unknown
+- Model: unknown
+- Model base URL: unknown
+- Provider failures: 0
+- Invalid JSON: 0
+- Schema-invalid outputs: 0
+- Fallbacks: 0
 
 ## Evidence Boundary
 

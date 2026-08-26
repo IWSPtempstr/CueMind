@@ -13,6 +13,13 @@ interface ReplaySummary {
   emptyTranscriptCount: number;
   coveredDurationMs: number;
   asrLatencyMs: PercentileSummary | null;
+  modelProvider: "llama.cpp" | "remote-api" | null;
+  modelName: string | null;
+  modelBaseUrl: string | null;
+  providerFailureCount: number;
+  invalidJsonCount: number;
+  schemaInvalidCount: number;
+  fallbackCount: number;
 }
 
 interface PercentileSummary {
@@ -29,13 +36,20 @@ async function main(): Promise<void> {
   const outputDir = resolve(process.argv[3] ?? "reports/replay");
   const raw = await readFile(inputPath, "utf8");
   const parsed = parseLines(raw);
-  const summary = summarize(inputPath, parsed.events, parsed.invalidLineCount);
+  const summary = summarize(inputPath, parsed.events, parsed.invalidLineCount, {
+    provider: process.env.MODEL_PROVIDER,
+    model: process.env.MODEL_NAME,
+    baseUrl: process.env.MODEL_BASE_URL,
+  });
   const manifest = {
-    dataset: "fixtures/demo-meeting/sample-events.jsonl",
+    dataset: inputPath,
     datasetType: "fixture_replay",
     inputPath,
     generatedAt: new Date().toISOString(),
     evaluator: "scripts/validate-replay.ts",
+    modelProvider: summary.modelProvider,
+    modelName: summary.modelName,
+    modelBaseUrl: summary.modelBaseUrl,
     evidenceBoundary: "Fixture event integrity and latency metadata only; no ASR, LLM, search, or card-quality claim.",
   };
   const scorecard = {
@@ -50,6 +64,10 @@ async function main(): Promise<void> {
       transcriptTextNonEmpty: summary.emptyTranscriptCount === 0,
     },
     metrics: summary,
+    providerFailureCount: summary.providerFailureCount,
+    invalidJsonCount: summary.invalidJsonCount,
+    schemaInvalidCount: summary.schemaInvalidCount,
+    fallbackCount: summary.fallbackCount,
     blockedExternalEvidence: ["real_whisper_cpp", "local_llm", "live_search", "context_card_quality"],
   };
   const report = renderReport(manifest, scorecard);
@@ -75,7 +93,12 @@ function parseLines(raw: string): { events: DesktopEvent[]; invalidLineCount: nu
   return { events, invalidLineCount };
 }
 
-function summarize(inputPath: string, events: DesktopEvent[], invalidLineCount: number): ReplaySummary {
+function summarize(
+  inputPath: string,
+  events: DesktopEvent[],
+  invalidLineCount: number,
+  metadata: { provider?: string; model?: string; baseUrl?: string },
+): ReplaySummary {
   const ids = new Set<string>();
   let duplicateEventIdCount = 0;
   for (const event of events) {
@@ -89,6 +112,21 @@ function summarize(inputPath: string, events: DesktopEvent[], invalidLineCount: 
   const starts = transcripts.map((event) => event.startMs);
   const ends = transcripts.map((event) => event.endMs);
   const latencies = transcripts.flatMap((event) => typeof event.latencyMs === "number" ? [event.latencyMs] : []);
+  const runtimeErrors = events.filter((event) => event.type === "runtime_error");
+  const modelProvider = metadata.provider === "llama.cpp" || metadata.provider === "remote-api"
+    ? metadata.provider
+    : null;
+  const modelBaseUrl = metadata.baseUrl
+    ? redactBaseUrl(metadata.baseUrl, modelProvider === "remote-api")
+    : null;
+  const providerFailureCount = runtimeErrors.filter((event) =>
+    event.code.startsWith("model_") || event.code.includes("provider"),
+  ).length;
+  const invalidJsonCount = runtimeErrors.filter((event) => event.code === "model_invalid_json").length;
+  const schemaInvalidCount = runtimeErrors.filter((event) => event.code === "model_schema_invalid").length;
+  const fallbackCount = runtimeErrors.filter((event) =>
+    event.code === "provider_fallback" || event.message.toLowerCase().includes("fallback"),
+  ).length;
   return {
     inputPath,
     datasetType: "fixture_replay",
@@ -100,7 +138,23 @@ function summarize(inputPath: string, events: DesktopEvent[], invalidLineCount: 
     emptyTranscriptCount,
     coveredDurationMs: starts.length > 0 ? Math.max(...ends) - Math.min(...starts) : 0,
     asrLatencyMs: latencies.length > 0 ? summarizePercentiles(latencies) : null,
+    modelProvider,
+    modelName: metadata.model?.trim() || null,
+    modelBaseUrl,
+    providerFailureCount,
+    invalidJsonCount,
+    schemaInvalidCount,
+    fallbackCount,
   };
+}
+
+function redactBaseUrl(baseUrl: string, hostOnly: boolean): string {
+  if (!hostOnly) return baseUrl;
+  try {
+    return new URL(baseUrl).origin;
+  } catch {
+    return "redacted-invalid-url";
+  }
 }
 
 function summarizePercentiles(values: number[]): PercentileSummary {
@@ -128,6 +182,13 @@ function renderReport(manifest: Record<string, unknown>, scorecard: Record<strin
     `- Transcript events: ${metrics.transcriptEventCount}`,
     `- Covered duration: ${metrics.coveredDurationMs} ms`,
     `- ASR latency: ${latency ? `count=${latency.count}, p50=${latency.p50} ms, p95=${latency.p95} ms` : "null (no latency metadata)"}`,
+    `- Model provider: ${metrics.modelProvider ?? "unknown"}`,
+    `- Model: ${metrics.modelName ?? "unknown"}`,
+    `- Model base URL: ${metrics.modelBaseUrl ?? "unknown"}`,
+    `- Provider failures: ${metrics.providerFailureCount}`,
+    `- Invalid JSON: ${metrics.invalidJsonCount}`,
+    `- Schema-invalid outputs: ${metrics.schemaInvalidCount}`,
+    `- Fallbacks: ${metrics.fallbackCount}`,
     "",
     "## Evidence Boundary",
     "",

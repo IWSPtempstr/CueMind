@@ -24,8 +24,19 @@
       "mean": 1067,
       "p50": 1100,
       "p95": 1100
-    }
+    },
+    "modelProvider": null,
+    "modelName": null,
+    "modelBaseUrl": null,
+    "providerFailureCount": 0,
+    "invalidJsonCount": 0,
+    "schemaInvalidCount": 0,
+    "fallbackCount": 0
   },
+  "providerFailureCount": 0,
+  "invalidJsonCount": 0,
+  "schemaInvalidCount": 0,
+  "fallbackCount": 0,
   "blockedExternalEvidence": [
     "real_whisper_cpp",
     "local_llm",

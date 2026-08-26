@@ -1,0 +1,64 @@
+{
+  "runId": "provider-evaluation-2026-08-26T07-55-16-395Z",
+  "status": "complete",
+  "datasetType": "fixed_asr_window",
+  "transcriptPath": "/tmp/cuemind-runtime/cuemind-10min-asr.json",
+  "inputWindowMs": [
+    0,
+    62600
+  ],
+  "inputSegments": 31,
+  "inputChars": 413,
+  "requestedRuns": 3,
+  "providers": [
+    {
+      "provider": "llama.cpp",
+      "model": "/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "baseUrl": "http://127.0.0.1:8082",
+      "status": "complete",
+      "requestedRuns": 3,
+      "completedRuns": 3,
+      "validJsonCount": 3,
+      "schemaValidCount": 3,
+      "excludedRunCount": 0,
+      "providerFailureCount": 0,
+      "invalidJsonCount": 0,
+      "schemaInvalidCount": 0,
+      "keywordRepeatConsistency": 1,
+      "latencyMs": {
+        "count": 3,
+        "min": 98,
+        "max": 432,
+        "mean": 211,
+        "p50": 102,
+        "p95": 102
+      },
+      "errorCodes": {}
+    },
+    {
+      "provider": "remote-api",
+      "model": "unknown",
+      "baseUrl": "unknown",
+      "status": "blocked_external_dependency",
+      "requestedRuns": 3,
+      "completedRuns": 0,
+      "validJsonCount": 0,
+      "schemaValidCount": 0,
+      "excludedRunCount": 0,
+      "providerFailureCount": 0,
+      "invalidJsonCount": 0,
+      "schemaInvalidCount": 0,
+      "keywordRepeatConsistency": null,
+      "latencyMs": null,
+      "errorCodes": {}
+    }
+  ],
+  "promptVersion": "context-card-prompt-v1-keyword-only",
+  "runtime": "llama.cpp OpenAI-compatible chat completions",
+  "llamaServerVersion": "version: 0.3.0-dev (build 1, commit 1729ed5) built with GNU 11.4.0 for Linux x86_64",
+  "modelSha256": "2fde00ce69dd4899c70d020845e2638353015bba0fdf161b3eb965f2bca4464e",
+  "hardware": "NVIDIA GeForce RTX 4060 Ti, 8188 MiB",
+  "startedAt": "2026-08-26T07:55:15.763Z",
+  "completedAt": "2026-08-26T07:55:24.952Z",
+  "evidenceBoundary": "Repeated provider structured-output and latency evidence for one fixed transcript window only; no search or card-quality claim."
+}

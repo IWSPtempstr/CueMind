@@ -82,4 +82,14 @@ P0 is documentation-only. P1 code and the real whisper.cpp small-model smoke gat
 - [x] P1.6: route provider selection and failure states.
 - [x] P1.7: remove Ollama runtime semantics.
 - [x] P1.8: run real local provider smoke.
-- [ ] P2: replay and provider evaluation.
+- [x] P2.1: extend replay evidence with provider metadata and failure counters.
+- [x] P2.2: evaluate the local provider three times on one fixed ASR window.
+- [x] P2.3: add the explicit-environment remote provider evaluation path.
+
+### P2 provider evaluation checkpoint (2026-08-26)
+
+- Replay reports now include `modelProvider`, `modelName`, host-safe remote `modelBaseUrl`, provider failure count, invalid JSON count, schema-invalid count, and fallback count.
+- `scripts/evaluate-model-providers.ts` writes reproducible manifest, output/error/latency JSONL, scorecard, and Markdown report artifacts under `reports/provider-evaluation/`.
+- Local GPU run used the first 62.6 seconds of the fixed 10-minute ASR transcript, 31 segments / 413 characters, and three repetitions against llama.cpp `0.3.0-dev` with Qwen3-4B Q4_K_M. All three outputs were valid JSON and schema-valid, keyword repeat consistency was `1.0`; the final artifact records the measured latency distribution. These are single fixed-window measurements, not a stable benchmark.
+- Remote evaluation is `blocked_external_dependency` because `REMOTE_API_BASE_URL`, `REMOTE_API_MODEL`, and `REMOTE_API_KEY` were not supplied. No remote result was fabricated.
+- Evidence boundary: this phase proves only replay/provider structured-output and request-latency behavior for the fixed window; it does not prove live search, card quality, or end-to-end readiness.
