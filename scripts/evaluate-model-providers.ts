@@ -411,6 +411,7 @@ async function readHardware(): Promise<string | null> {
 
 function renderReport(manifest: Record<string, unknown>, scorecard: Record<string, unknown>): string {
   const providers = scorecard.providers as ProviderEvaluation[];
+  const remoteProvider = providers.find((provider) => provider.provider === "remote-api");
   const lines = [
     "# CueMind Model Provider Evaluation",
     "",
@@ -442,7 +443,9 @@ function renderReport(manifest: Record<string, unknown>, scorecard: Record<strin
     "## Evidence Boundary",
     "",
     String(manifest.evidenceBoundary),
-    "Remote evaluation is external-dependency blocked unless `REMOTE_API_BASE_URL`, `REMOTE_API_MODEL`, and `REMOTE_API_KEY` are all explicitly supplied.",
+    remoteProvider?.status === "blocked_external_dependency"
+      ? "Remote evaluation is external-dependency blocked unless `REMOTE_API_BASE_URL`, `REMOTE_API_MODEL`, and `REMOTE_API_KEY` are all explicitly supplied."
+      : "Remote evaluation was executed against an explicitly configured OpenAI-compatible endpoint; endpoint reporting is reduced to the origin and no API key is written to artifacts.",
     "Replay integrity and provider structured-output evaluation do not establish live search quality, source grounding, card correctness, or production readiness.",
     "",
   );

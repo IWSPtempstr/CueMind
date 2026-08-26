@@ -1,5 +1,5 @@
 {
-  "runId": "provider-evaluation-2026-08-26T07-55-16-395Z",
+  "runId": "provider-evaluation-2026-08-26T08-46-23-704Z",
   "status": "complete",
   "datasetType": "fixed_asr_window",
   "transcriptPath": "/tmp/cuemind-runtime/cuemind-10min-asr.json",
@@ -28,28 +28,35 @@
       "latencyMs": {
         "count": 3,
         "min": 98,
-        "max": 432,
-        "mean": 211,
-        "p50": 102,
-        "p95": 102
+        "max": 402,
+        "mean": 199,
+        "p50": 98,
+        "p95": 98
       },
       "errorCodes": {}
     },
     {
       "provider": "remote-api",
-      "model": "unknown",
-      "baseUrl": "unknown",
-      "status": "blocked_external_dependency",
+      "model": "qwen3.8-max",
+      "baseUrl": "https://dashscope.aliyuncs.com",
+      "status": "complete",
       "requestedRuns": 3,
-      "completedRuns": 0,
-      "validJsonCount": 0,
-      "schemaValidCount": 0,
+      "completedRuns": 3,
+      "validJsonCount": 3,
+      "schemaValidCount": 3,
       "excludedRunCount": 0,
       "providerFailureCount": 0,
       "invalidJsonCount": 0,
       "schemaInvalidCount": 0,
-      "keywordRepeatConsistency": null,
-      "latencyMs": null,
+      "keywordRepeatConsistency": 1,
+      "latencyMs": {
+        "count": 3,
+        "min": 8644,
+        "max": 12530,
+        "mean": 10624,
+        "p50": 10697,
+        "p95": 10697
+      },
       "errorCodes": {}
     }
   ],
@@ -58,7 +65,7 @@
   "llamaServerVersion": "version: 0.3.0-dev (build 1, commit 1729ed5) built with GNU 11.4.0 for Linux x86_64",
   "modelSha256": "2fde00ce69dd4899c70d020845e2638353015bba0fdf161b3eb965f2bca4464e",
   "hardware": "NVIDIA GeForce RTX 4060 Ti, 8188 MiB",
-  "startedAt": "2026-08-26T07:55:15.763Z",
-  "completedAt": "2026-08-26T07:55:24.952Z",
+  "startedAt": "2026-08-26T08:45:51.234Z",
+  "completedAt": "2026-08-26T08:46:30.316Z",
   "evidenceBoundary": "Repeated provider structured-output and latency evidence for one fixed transcript window only; no search or card-quality claim."
 }

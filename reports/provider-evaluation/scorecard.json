@@ -3,7 +3,7 @@
   "denominator": {
     "requestedRuns": 3,
     "localCompletedRuns": 3,
-    "remoteCompletedRuns": 0,
+    "remoteCompletedRuns": 3,
     "excludedRuns": 0
   },
   "providers": [
@@ -24,28 +24,35 @@
       "latencyMs": {
         "count": 3,
         "min": 98,
-        "max": 432,
-        "mean": 211,
-        "p50": 102,
-        "p95": 102
+        "max": 402,
+        "mean": 199,
+        "p50": 98,
+        "p95": 98
       },
       "errorCodes": {}
     },
     {
       "provider": "remote-api",
-      "model": "unknown",
-      "baseUrl": "unknown",
-      "status": "blocked_external_dependency",
+      "model": "qwen3.8-max",
+      "baseUrl": "https://dashscope.aliyuncs.com",
+      "status": "complete",
       "requestedRuns": 3,
-      "completedRuns": 0,
-      "validJsonCount": 0,
-      "schemaValidCount": 0,
+      "completedRuns": 3,
+      "validJsonCount": 3,
+      "schemaValidCount": 3,
       "excludedRunCount": 0,
       "providerFailureCount": 0,
       "invalidJsonCount": 0,
       "schemaInvalidCount": 0,
-      "keywordRepeatConsistency": null,
-      "latencyMs": null,
+      "keywordRepeatConsistency": 1,
+      "latencyMs": {
+        "count": 3,
+        "min": 8644,
+        "max": 12530,
+        "mean": 10624,
+        "p50": 10697,
+        "p95": 10697
+      },
       "errorCodes": {}
     }
   ],

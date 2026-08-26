@@ -1,3 +1,6 @@
-{"run":1,"provider":"llama.cpp","model":"/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf","baseUrl":"http://127.0.0.1:8082","latencyMs":432,"status":"pass","excluded":false}
-{"run":2,"provider":"llama.cpp","model":"/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf","baseUrl":"http://127.0.0.1:8082","latencyMs":102,"status":"pass","excluded":false}
+{"run":1,"provider":"llama.cpp","model":"/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf","baseUrl":"http://127.0.0.1:8082","latencyMs":402,"status":"pass","excluded":false}
+{"run":2,"provider":"llama.cpp","model":"/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf","baseUrl":"http://127.0.0.1:8082","latencyMs":98,"status":"pass","excluded":false}
 {"run":3,"provider":"llama.cpp","model":"/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf","baseUrl":"http://127.0.0.1:8082","latencyMs":98,"status":"pass","excluded":false}
+{"run":1,"provider":"remote-api","model":"qwen3.8-max","baseUrl":"https://dashscope.aliyuncs.com","latencyMs":12530,"status":"pass","excluded":false}
+{"run":2,"provider":"remote-api","model":"qwen3.8-max","baseUrl":"https://dashscope.aliyuncs.com","latencyMs":8644,"status":"pass","excluded":false}
+{"run":3,"provider":"remote-api","model":"qwen3.8-max","baseUrl":"https://dashscope.aliyuncs.com","latencyMs":10697,"status":"pass","excluded":false}

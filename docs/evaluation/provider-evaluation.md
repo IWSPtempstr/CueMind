@@ -34,4 +34,4 @@ If any value is missing, the remote result is `blocked_external_dependency`; no 
 
 The evaluator writes `manifest.json`, `outputs.jsonl`, `errors.jsonl`, `latency.jsonl`, `scorecard.json`, and `report.md`. The denominator records requested, completed, and excluded runs. `validJsonCount` means the provider response was parseable JSON; `schemaValidCount` additionally requires a non-empty `keyword` string.
 
-The current report is evidence for one local model's structured-output validity, keyword repeat consistency, and measured request latency only. It is not evidence for live search, source grounding, card quality, ASR quality, or production readiness. The current remote status remains blocked until an explicit compatible endpoint is supplied.
+The report is evidence for structured-output validity, keyword repeat consistency, and measured request latency for the explicitly evaluated providers on one fixed window. It is not evidence for live search, source grounding, card quality, ASR quality, or production readiness. If remote variables are absent in a future run, the remote status will be `blocked_external_dependency`.
