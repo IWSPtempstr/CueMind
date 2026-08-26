@@ -81,5 +81,5 @@ P0 is documentation-only. P1 code and the real whisper.cpp small-model smoke gat
 - [x] P1.5: replace settings UI labels and fields.
 - [x] P1.6: route provider selection and failure states.
 - [x] P1.7: remove Ollama runtime semantics.
-- [ ] P1.8: run real local provider smoke.
+- [x] P1.8: run real local provider smoke.
 - [ ] P2: replay and provider evaluation.

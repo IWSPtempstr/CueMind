@@ -235,3 +235,18 @@
   matches. Historical design/plan/deployment/evaluation docs under `docs/plans/`,
   `docs/deployment/`, and `docs/evaluation/` retain historical Ollama mentions per the plan's
   "historical notes" allowance and the preserve-`docs/deployment/` constraint.
+
+## 2026-08-26 (P1.8 real local provider smoke)
+
+- Created `scripts/run-local-model-smoke.ts`, which reads the first fixed 60-second window of a
+  whisper.cpp raw JSON transcript (`transcription[].offsets.from < 60000`), joins the segment text,
+  and asks the local provider for one keyword via `generateLlamaCppJson`.
+- The report records `provider`, `model`, `baseUrl`, `inputWindowMs`, `inputChars`, `inputSegments`,
+  `latencyMs`, `output`, `error`, and `evidenceBoundary`; it never records an API key, and it exits
+  non-zero on an invalid transcript, non-JSON output, or a missing/empty keyword field.
+- Ran the smoke against a live `llama-server` (`0.3.0-dev`, CPU `-ngl 0`) on port `8082` with the
+  verified Qwen3-4B GGUF. Result: `provider=llama.cpp`, 31 segments / 413 chars from the first ~60 s,
+  keyword `"Cloud Code"`, `latencyMs=1793`, `error=null`. This is a single-run CPU keyword smoke, not
+  a stable percentile benchmark; it is local-model structured-output evidence only — search, card
+  assembly, and end-to-end card latency remain unverified.
+- Verification passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check`.
