@@ -1,0 +1,40 @@
+{
+  "version": "knowledge-documents-v1",
+  "collectionName": "cuemind_knowledge_v1",
+  "embeddingModel": "text-embedding-v4",
+  "vectorDimension": 1024,
+  "documents": [
+    {
+      "id": "doc-rag-001",
+      "text": "RAG combines retrieval with generation so an answer can be grounded in relevant knowledge-base passages.",
+      "title": "RAG architecture notes",
+      "sourceType": "document",
+      "sourceId": "docs/rag-architecture.md",
+      "metadata": { "topic": "RAG", "version": "v1" }
+    },
+    {
+      "id": "meeting-kv-cache-001",
+      "text": "KV Cache stores attention key and value tensors during autoregressive decoding to reduce repeated computation.",
+      "title": "Inference optimization meeting",
+      "sourceType": "meeting",
+      "sourceId": "meeting/2026-08-26-inference.jsonl",
+      "metadata": { "topic": "KV Cache", "version": "v1" }
+    },
+    {
+      "id": "doc-milvus-001",
+      "text": "Milvus is used as the local vector retrieval layer; web search remains a separate fallback for fresh external evidence.",
+      "title": "CueMind retrieval boundary",
+      "sourceType": "document",
+      "sourceId": "docs/milvus-boundary.md",
+      "metadata": { "topic": "Milvus", "version": "v1" }
+    },
+    {
+      "id": "meeting-replay-001",
+      "text": "The replay runner should preserve provider, search, card, and latency trace events without storing an unbounded transcript in each record.",
+      "title": "Evaluation replay design",
+      "sourceType": "meeting",
+      "sourceId": "meeting/2026-08-26-evaluation.jsonl",
+      "metadata": { "topic": "replay", "version": "v1" }
+    }
+  ]
+}

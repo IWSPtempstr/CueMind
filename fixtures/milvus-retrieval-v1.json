@@ -1,0 +1,10 @@
+{
+  "version": "milvus-retrieval-v1",
+  "collectionName": "cuemind_knowledge_v1",
+  "embeddingModel": "text-embedding-v4",
+  "vectorDimension": 1024,
+  "queries": [
+    { "id": "milvus-q-001", "text": "How does RAG ground generated answers in a knowledge base?", "topK": 2, "expectedSourceType": "document", "expectedTextTerm": "RAG" },
+    { "id": "milvus-q-002", "text": "Why does KV Cache reduce repeated computation during decoding?", "topK": 2, "expectedSourceType": "meeting", "expectedTextTerm": "KV Cache" }
+  ]
+}

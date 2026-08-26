@@ -20,18 +20,20 @@ import type { Settings } from "@/types/settings";
 const STORAGE_KEY = "cuemind_settings";
 const LEGACY_GROQ_KEY = "groq_api_key";
 
-type SecretName = "groq" | "llamaCpp" | "remoteApi";
+type SecretName = "groq" | "llamaCpp" | "remoteApi" | "search";
 
 const SECRET_KEYS: Record<SecretName, { local: string; session: string }> = {
   groq: { local: "cuemind_groq_api_key", session: "cuemind_session_groq_api_key" },
   llamaCpp: { local: "cuemind_llama_cpp_api_key", session: "cuemind_session_llama_cpp_api_key" },
   remoteApi: { local: "cuemind_remote_api_api_key", session: "cuemind_session_remote_api_api_key" },
+  search: { local: "cuemind_search_api_key", session: "cuemind_session_search_api_key" },
 };
 
 const memorySecrets: Record<SecretName, string> = {
   groq: "",
   llamaCpp: "",
   remoteApi: "",
+  search: "",
 };
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
@@ -86,6 +88,7 @@ export function getDefaultSettings(): Settings {
     remoteApiApiKey: "",
     searchProvider: "tavily",
     searchApiKey: "",
+    enableAgentReachFallback: true,
     contextCardCooldownSeconds: 20,
   };
 }
@@ -136,16 +139,20 @@ export function loadCueMindSettings(): Settings {
     remoteApiModel: typeof o.remoteApiModel === "string" ? o.remoteApiModel : defaults.remoteApiModel,
     remoteApiApiKey: readSecret("remoteApi", mode),
     searchProvider: o.searchProvider === "bing" || o.searchProvider === "serpapi" ? o.searchProvider : "tavily",
-    searchApiKey: typeof o.searchApiKey === "string" ? o.searchApiKey : defaults.searchApiKey,
+    searchApiKey: readSecret("search", mode) || (typeof o.searchApiKey === "string" ? o.searchApiKey : defaults.searchApiKey),
+    enableAgentReachFallback: o.enableAgentReachFallback !== false,
     contextCardCooldownSeconds: clampInt(o.contextCardCooldownSeconds, defaults.contextCardCooldownSeconds, 5, 300),
   };
 
   // One-time migration only: fold a legacy or embedded Groq key into the chosen
   // store and strip the secret from the preferences blob. Later reads touch
   // nothing unless a legacy field is still present.
-  if (legacyRaw !== null || "groqApiKey" in o) {
+  if (legacyRaw !== null || "groqApiKey" in o || "searchApiKey" in o) {
     if (!readSecret("groq", "local") && legacyKey.trim()) {
       writeSecret("groq", "local", legacyKey);
+    }
+    if (!readSecret("search", "local") && settings.searchApiKey.trim()) {
+      writeSecret("search", "local", settings.searchApiKey);
     }
     localStorage.removeItem(LEGACY_GROQ_KEY);
     persistPreferences(settings);
@@ -158,6 +165,7 @@ function persistPreferences(settings: Settings): void {
   delete preferences.groqApiKey;
   delete preferences.llamaCppApiKey;
   delete preferences.remoteApiApiKey;
+  delete preferences.searchApiKey;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
 }
 
@@ -166,10 +174,12 @@ function persistSettings(settings: Settings): void {
   clearSecret("groq");
   clearSecret("llamaCpp");
   clearSecret("remoteApi");
+  clearSecret("search");
 
   writeSecret("groq", settings.apiKeyStorage, settings.groqApiKey);
   writeSecret("llamaCpp", settings.apiKeyStorage, settings.llamaCppApiKey);
   writeSecret("remoteApi", settings.apiKeyStorage, settings.remoteApiApiKey);
+  writeSecret("search", settings.apiKeyStorage, settings.searchApiKey);
   persistPreferences(settings);
 }
 

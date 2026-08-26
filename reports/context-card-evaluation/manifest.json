@@ -1,0 +1,30 @@
+{
+  "runId": "context-card-evaluation-2026-08-26T09-57-47-559Z",
+  "evaluator": "context-card-evaluator-v1",
+  "fixturePath": "/home/work/asr/CueMind/fixtures/context-card-evaluation-v1.json",
+  "datasetVersion": "context-card-eval-v1",
+  "datasetSource": "synthetic",
+  "caseCount": 8,
+  "searchPaths": [
+    "tavily",
+    "agent-reach",
+    "milvus",
+    "mixed",
+    "failure",
+    "none"
+  ],
+  "promptVersion": "context-card-prompt-v1",
+  "executionMode": "fixture",
+  "provider": null,
+  "judge": {
+    "version": "heuristic-judge-v1",
+    "type": "deterministic_heuristic",
+    "rubric": [
+      "source_support_score: 1.0 when keyword/topic is represented by at least one source title or snippet, otherwise 0.0",
+      "why_now_relevance_score: fraction of expected evidence terms present in whyNow or the current transcript",
+      "keyword relevance: expected keyword or a transcript-supported equivalent must be present"
+    ]
+  },
+  "generatedAt": "2026-08-26T09:57:47.559Z",
+  "evidenceBoundary": "Synthetic fixed-source protocol evidence only. This run does not exercise Tavily, agent-reach, Milvus, a model provider, real card generation, or production latency."
+}

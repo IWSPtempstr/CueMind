@@ -24,5 +24,6 @@ export interface Settings {
   remoteApiApiKey: string;
   searchProvider: "tavily" | "bing" | "serpapi";
   searchApiKey: string;
+  enableAgentReachFallback: boolean;
   contextCardCooldownSeconds: number;
 }

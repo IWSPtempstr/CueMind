@@ -93,3 +93,106 @@ P0 is documentation-only. P1 code and the real whisper.cpp small-model smoke gat
 - Local GPU run used the first 62.6 seconds of the fixed 10-minute ASR transcript, 31 segments / 413 characters, and three repetitions against llama.cpp `0.3.0-dev` with Qwen3-4B Q4_K_M. All three outputs were valid JSON and schema-valid, keyword repeat consistency was `1.0`; the final artifact records the measured latency distribution. These are single fixed-window measurements, not a stable benchmark.
 - Remote evaluation is `blocked_external_dependency` because `REMOTE_API_BASE_URL`, `REMOTE_API_MODEL`, and `REMOTE_API_KEY` were not supplied. No remote result was fabricated.
 - Evidence boundary: this phase proves only replay/provider structured-output and request-latency behavior for the fixed window; it does not prove live search, card quality, or end-to-end readiness.
+
+## Search, RAG, and Evaluation Expansion (2026-08-26 plan)
+
+- [x] Task 1: define and implement Tavily -> agent-reach fallback.
+- [x] Task 2: wire search settings and runtime boundaries.
+- [x] Task 3: add search-layer evaluator.
+- [x] Task 4: add card-level evaluator and judge rubric.
+- [x] Task 5: add Milvus retrieval contract and evaluator.
+- [x] Task 6: add end-to-end replay evaluator and release gate summary.
+
+Current active phase: `S4 complete / release gate partial`
+
+Current active task: `none; human review required for blocked external gates`
+
+## S5 Real Runtime Closure (2026-08-26)
+
+- [x] S5-1: start and verify local llama-server.
+- [x] S5-2: install/configure mcporter + Exa MCP and verify agent-reach (direct Exa call works; doctor remains `warn`, accepted as the final evidence state).
+- [x] S5-3: start and verify Milvus (containers healthy; v2 REST collection-list check returned `code:0`).
+- [x] S5-4: add real embedding/ingestion and rerun Milvus evaluation (real insertion and retrieval complete).
+- [x] S5-5: add trace-bearing ASR replay runner (20 live local-model windows written).
+- [x] S5-6: rerun replay validation and end-to-end summary (validator pass; release summary remains partial).
+
+Current active phase: `S5 runtime closure review`
+Current active task: `none; runtime closure accepted`
+
+S5-4 review summary:
+
+- Scope respected: implementation changes are limited to the S5-4 allowed files; generated
+  artifacts are under `reports/milvus-retrieval-evaluation/`. No production route or secret file
+  was modified.
+- `lib/knowledge-embeddings.ts` requires an explicit OpenAI-compatible embedding base URL, validates
+  response count and vector dimension, and loads the repository-root `.env` without overwriting
+  explicitly exported variables.
+- Ingestion creates the fixed collection/schema and COSINE auto-index when needed, embeds the
+  versioned fixture documents, inserts them, and loads the collection. Evaluation embeds query text
+  with the same configured model before Milvus search; deterministic vectors were removed.
+- Static checks pass: `TMPDIR=/tmp npx tsc --noEmit`, `npm run lint`, and `git diff --check`.
+- Runtime checks now pass with real vectors: `insertedCount=4` and `completedQueries=2`.
+  The collection was recreated to match the live `text-embedding-v4 / 1024` contract, and both
+  ingestion and retrieval ran against the configured remote embedding endpoint.
+
+S5-5/S5-6 review summary:
+
+- `scripts/run-context-card-replay.ts` reads the fixed 10-minute ASR JSONL, bounds each request to
+  a 30-second transcript window, supports `REPLAY_MODE=mock|live`, and writes one trace-bearing
+  JSONL record per window without API keys or unbounded transcript payloads.
+- The live local run completed 20 windows and wrote 10 generated cards. `validate-replay` passed
+  with 20 provider structured-output events, 20 search events, 10 generated cards, and card
+  latency P50/P95 of 2835/4155 ms.
+- `evaluate-end-to-end.ts` now prefers the trace-bearing replay as its denominator. The final
+  summary is `complete`: 20 replay cases, 10 generated cards, 10 skipped windows, while still
+  distinguishing unverified production claims from verified local gates.
+
+### S5 phase-end cleanup audit
+
+| Path | Type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `scripts/run-context-card-replay.ts` | Evaluation runner | Replays bounded ASR windows through the context-card route and records traces | keep | Required S5 live/mock replay harness. |
+| `scripts/ingest-milvus.ts` | Evaluation/operations script | Creates Milvus schema, embeds documents, inserts and loads entities | keep | Required ingestion gate; blocked output is evidence-safe. |
+| `lib/knowledge-embeddings.ts` | Integration adapter | Calls the explicit OpenAI-compatible embedding endpoint | keep | Required real-vector boundary; no placeholder evidence. |
+| `/tmp/cuemind-runtime/` | External runtime workspace | Stores servers, logs, replay outputs and validation reports | review | Retain for audit/reproduction; remove only when disk cleanup is desired. |
+| `/tmp/cuemind-runtime/milvus/` | External Milvus compose workspace | Stores the downloaded compose file and service state | review | Keep while local Milvus is needed; do not commit runtime containers or images. |
+
+Task 1 review summary:
+
+- Scope respected: tracked code changes are limited to `app/api/context-cards/route.ts`,
+  `lib/search.ts`, `lib/agent-reach-search.ts`, and `scripts/test-context-card-route.ts`;
+  `progress.md` and `task_plan.md` are updated by the main agent for bookkeeping.
+- Tavily remains the primary provider. Fallback is attempted only on the Tavily path for
+  missing key, timeout/abort, HTTP failure, or fewer than two usable sources.
+- Trace output now records the effective search provider and whether fallback was used.
+- Bing and SerpAPI missing-key behavior remains unchanged.
+
+Search/RAG current unknowns:
+
+- The real `agent-reach` backend is not currently available on this machine: `agent-reach doctor --json`
+  reports `exa_search.status = "off"` and `mcporter` is absent, so non-mocked fallback currently
+  resolves to an explicit unavailable-path failure.
+- Task 1 proves fallback wiring and deterministic error surfacing, but not live search quality.
+- Search settings toggles, server-side `TAVILY_API_KEY` preference, card-level evaluation, Milvus
+  retrieval, and end-to-end replay evidence remain pending in Tasks 2-6.
+
+Task 2-6 review summary:
+
+- Task 2 added the explicit fallback toggle, isolated browser search-key storage, and server-side
+  `TAVILY_API_KEY` precedence. The route and settings regression scripts pass.
+- Tasks 3-4 added `fixtures/context-card-evaluation-v1.json` and
+  `scripts/evaluate-context-cards.ts`. The fixture run is complete for eight synthetic cases and
+  records keyword, source, card, graceful-failure, judge, and latency metrics with denominators.
+- Task 5 added the Milvus schema/retrieval contract and evaluator. With no `MILVUS_BASE_URL`, the
+  evaluator correctly reports `blocked_external_dependency` for both fixed queries.
+- Task 6 added `scripts/evaluate-end-to-end.ts` and extended replay metrics for provider structured
+  output, search events/fallbacks, card final states, card failures, and card latency. The current
+  release-gate summary is partial because search uses fixed snapshots and Milvus is blocked.
+
+Final evidence boundary:
+
+- Proven: fallback wiring, settings propagation, provider structured-output artifacts, deterministic
+  fixed-source card protocol evaluation, Milvus request/schema contract, and evidence-safe report
+  generation.
+- Not proven: live Tavily quality, real agent-reach search, live search-to-card quality, Milvus
+  ingestion/embedding quality, Windows capture, long-video stability, and production readiness.

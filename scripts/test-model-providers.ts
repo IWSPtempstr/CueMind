@@ -467,6 +467,7 @@ function testDefaultSettings(): void {
   assert.equal(defaults.remoteApiBaseUrl, "");
   assert.equal(defaults.remoteApiModel, "");
   assert.equal(defaults.remoteApiApiKey, "");
+  assert.equal(defaults.enableAgentReachFallback, true);
 }
 
 function testSettingsLoad(): void {
@@ -480,6 +481,7 @@ function testSettingsLoad(): void {
     searchProvider: "bing",
   }));
   local.setItem("cuemind_llama_cpp_api_key", "llama-secret");
+  local.setItem("cuemind_search_api_key", "search-secret");
 
   withBrowserGlobals(local, session, () => {
     const settings = loadCueMindSettings();
@@ -490,6 +492,8 @@ function testSettingsLoad(): void {
     assert.equal(settings.remoteApiModel, "remote-model");
     assert.equal(settings.searchProvider, "bing");
     assert.equal(settings.llamaCppApiKey, "llama-secret");
+    assert.equal(settings.searchApiKey, "search-secret");
+    assert.equal(settings.enableAgentReachFallback, true);
   });
 }
 

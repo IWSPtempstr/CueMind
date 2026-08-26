@@ -261,3 +261,185 @@
 - Remote evaluation completed against an explicitly configured OpenAI-compatible endpoint on August 26, 2026. The final report records provider `remote-api`, model `qwen3.8-max`, endpoint origin `https://dashscope.aliyuncs.com`, 3/3 valid JSON, 3/3 schema-valid outputs, keyword repeat consistency `1.0`, and latency min `8644 ms`, mean `10624 ms`, P50 `10697 ms`, P95 `10697 ms`. No API key was written to artifacts.
 - Added `docs/evaluation/provider-evaluation.md` documenting commands, artifacts, denominators, and evidence boundaries.
 - P2 cleanup audit: keep `scripts/evaluate-model-providers.ts`, `scripts/validate-replay.ts`, `reports/provider-evaluation/`, and `docs/evaluation/provider-evaluation.md`; review generated reports before replacing them; preserve user-provided `dataset/` and existing deployment artifacts.
+
+## 2026-08-26 (Task 1 search fallback)
+
+- Added `lib/agent-reach-search.ts` as the dedicated Tavily fallback adapter. It exposes typed
+  failure codes for unavailable runtime, timeout, invalid output, and no usable sources, and it
+  keeps the shell boundary fixed instead of interpolating transcript text into a shell string.
+- Updated `lib/search.ts` so `searchWeb()` returns `SearchExecution { provider, fallbackUsed, results }`.
+  Tavily stays primary; fallback to `agent-reach` is attempted only for missing/empty Tavily key,
+  timeout/abort, Tavily HTTP failure, or fewer than two usable sources. Bing and SerpAPI behavior
+  remains unchanged.
+- Updated `app/api/context-cards/route.ts` so trace events record the search provider and
+  `fallbackUsed` flag on the search result path.
+- Extended `scripts/test-context-card-route.ts` with deterministic fallback coverage:
+  Tavily missing key -> mocked `agent-reach` success; Tavily missing key -> mocked `agent-reach`
+  unavailable; Bing missing key still returns the original configuration error.
+- Verified Task 1 with `TMPDIR=/tmp npx tsx scripts/test-context-card-route.ts`, `npx tsc --noEmit`,
+  `npm run lint`, `npm run build`, and `git diff --check`.
+- Evidence boundary: this task proves fallback routing, trace attribution, and deterministic failure
+  surfacing. It does not prove live Tavily quality or real `agent-reach` search quality on this
+  machine because `agent-reach` search backend is currently unavailable (`exa_search.status = "off"`
+  and `mcporter` is absent).
+
+## 2026-08-26 (Task 2 search settings and runtime boundary)
+
+- Added `enableAgentReachFallback` to `Settings`, defaulting to enabled, and exposed it in the
+  settings modal as an explicit Tavily fallback toggle.
+- Moved browser search-key persistence into the existing local/session/memory secret-storage
+  mechanism; `searchApiKey` is stripped from the general `cuemind_settings` JSON. Legacy embedded
+  search keys are migrated once into local secret storage.
+- Updated the context-card hook and route to carry the toggle. The route prefers server-side
+  `TAVILY_API_KEY` for Tavily and falls back to the browser key only when the environment value is
+  empty. Bing and SerpAPI continue using the browser-supplied key.
+- Expanded deterministic route/settings regression coverage for disabled fallback, server-side Key
+  precedence, secret loading, and the default toggle value.
+- Verified with `TMPDIR=/tmp npx tsx scripts/test-context-card-route.ts`,
+  `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`, `npm run lint`,
+  `npm run build`, and `git diff --check`.
+- Evidence boundary: this proves configuration propagation and server-side Key selection in the
+  route tests. It does not prove live Tavily or agent-reach availability/quality.
+
+## 2026-08-26 (S5 real runtime closure started)
+
+- Added S5-1 through S5-6 to the implementation plan with explicit runtime commands, file
+  boundaries, health checks, evidence requirements, and blocked-dependency handling.
+- The required order is local llama-server -> mcporter/Exa -> Milvus -> real embedding/ingestion ->
+  trace-bearing replay -> replay validation.
+- No S5 gate is marked complete before its bounded runtime evidence is captured.
+
+## 2026-08-26 (S5-1 local llama-server)
+
+- Started `/home/work/llama.cpp/build/bin/llama-server` with the verified Qwen3-4B GGUF at
+  `http://127.0.0.1:8082` using GPU offload (`-ngl 99`). Runtime PID and logs remain outside the
+  repository under `/tmp/cuemind-runtime/`.
+- Verified `GET /health` returned `{"status":"ok"}`.
+- Verified one real OpenAI-compatible JSON completion returned `{"keyword":"RAG"}` with
+  `finish_reason="stop"`.
+- S5-1 evidence boundary: local model service availability and one structured-output smoke only;
+  this does not prove full context-card quality or replay coverage.
+
+## 2026-08-26 (S5-2 mcporter and Exa MCP)
+
+- Installed `mcporter` globally in the user tool environment and configured the Exa MCP endpoint in
+  `/root/.mcporter/mcporter.json`; no repository files or secrets were changed.
+- `agent-reach doctor --json` reports `exa_search.status = "warn"` because doctor intentionally does
+  not start remote services for a live check. A direct read-only
+  `mcporter call exa.web_search_exa` returned non-empty search results successfully.
+- S5-2 evidence boundary: the Exa MCP backend is operational for direct calls; the doctor `warn`
+  status must remain visible and is not rewritten to `ok`.
+
+## 2026-08-26 (Tasks 3-4 search and card evaluation)
+
+- Added the frozen synthetic dataset `fixtures/context-card-evaluation-v1.json` with eight stable
+  cases covering generation, duplicate/generic skips, insufficient/invalid sources, and schema
+  failure.
+- Added `scripts/evaluate-context-cards.ts` with deterministic fixture mode and optional live model
+  mode. Reports include keyword relevance, duplicate handling, source usability, card schema/success,
+  graceful failure, source support, `whyNow` relevance, latency percentiles, denominator/exclusions,
+  failure codes, prompt version, and judge version.
+- Added `docs/evaluation/search-card-evaluation.md` documenting reproducibility and the boundary
+  between fixed-source protocol evidence and live search evidence.
+- Fixture verification passed: `TMPDIR=/tmp npx tsx scripts/evaluate-context-cards.ts`,
+  `npx tsc --noEmit`, `npm run lint`, and `git diff --check`.
+- Evidence boundary: the default report is synthetic fixed-source protocol evidence; it does not
+  prove Tavily, agent-reach, Milvus, model quality, or production latency.
+
+## 2026-08-26 (Task 5 Milvus retrieval contract)
+
+- Added `types/knowledge.ts` with the fixed collection, embedding model, vector dimension,
+  document shape, retrieval request/response, and insufficient-evidence fallback contract.
+- Added `lib/milvus-retrieval.ts` using the Milvus REST search endpoint, bounded top-k, optional
+  metadata filter, typed errors, and normalized results.
+- Added `scripts/evaluate-milvus-retrieval.ts`, `fixtures/milvus-retrieval-v1.json`, and
+  `docs/evaluation/milvus-retrieval.md`.
+- Verified the unconfigured environment path: two queries reported `blocked_external_dependency`
+  with no fabricated results. TypeScript, lint, and diff checks pass.
+- Evidence boundary: Milvus schema/request behavior is implemented; live retrieval, ingestion
+  completeness, embedding quality, and web fallback quality remain unverified.
+
+## 2026-08-26 (Task 6 end-to-end replay and release summary)
+
+- Extended `scripts/validate-replay.ts` to count provider structured-output events, search events and
+  fallbacks, generated cards, card failures, and card latency from trace-bearing replay records.
+- Added `scripts/evaluate-end-to-end.ts`, which combines provider, context-card, Milvus, and replay
+  artifacts and separates local-only, remote, search, Milvus, and unverified production evidence.
+- Updated `README.md` with the optional Milvus retrieval boundary and evidence-safe behavior.
+- Verified the fixture replay command, end-to-end evaluator, TypeScript, lint, and diff checks.
+- Current release summary is `partial` / `blocked_external_dependency` rather than a production pass:
+  context-card evaluation is fixed-source mode, the checked-in replay fixture contains no card traces,
+  and Milvus is not configured.
+
+### Tasks 3-6 phase-end cleanup audit
+
+| Path | Type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `scripts/evaluate-context-cards.ts` | Evaluation script | Runs fixed-source protocol and optional live model card evaluation | keep | Approved evaluator with reproducible artifacts and explicit evidence boundaries. |
+| `fixtures/context-card-evaluation-v1.json` | Frozen fixture | Stable inputs/source snapshots/expected outcomes | keep | Required denominator and regression source for card evaluation. |
+| `scripts/evaluate-milvus-retrieval.ts` | Evaluation script | Exercises Milvus retrieval or emits blocked status | keep | Required retrieval-layer gate; not throwaway code. |
+| `lib/milvus-retrieval.ts` | Production adapter | Typed Milvus REST retrieval contract | keep | Approved knowledge retrieval boundary. |
+| `scripts/evaluate-end-to-end.ts` | Evaluation script | Combines layer reports into release-gate summary | keep | Required final evidence aggregation. |
+| `reports/context-card-evaluation/` | Generated artifacts | Fixture scorecard, cases, failures, and report | review | Regenerate when fixture or evaluator versions change. |
+| `reports/milvus-retrieval-evaluation/` | Generated artifacts | Explicit blocked Milvus report | keep | Prevents blocked dependency from being mistaken for success. |
+| `reports/end-to-end-evaluation/` | Generated artifacts | Partial release-gate summary | keep | Required to expose missing live/replay/Milvus evidence. |
+| `/tmp/cuemind-runtime/replay-report-task6/` | Temporary report | Verification output for the sample replay | review | Outside repository; retain only if needed for local audit. |
+
+## 2026-08-26 (S5-4 real embedding and Milvus ingestion/evaluation)
+
+- Added `lib/knowledge-embeddings.ts` with an explicit OpenAI-compatible `/embeddings` client,
+  response/dimension validation, timeout/error codes, and repository-root `.env` loading that does
+  not overwrite explicitly exported environment variables.
+- Added `fixtures/knowledge-documents-v1.json` and changed the Milvus query fixture to use real query
+  text rather than deterministic seed vectors.
+- Added `scripts/ingest-milvus.ts`, which validates the fixed contract, creates the
+  `cuemind_knowledge_v1` schema and COSINE auto-index when absent, embeds documents, inserts rows,
+  and loads the collection through Milvus REST.
+- Updated `scripts/evaluate-milvus-retrieval.ts` to generate query embeddings through the same
+  configured endpoint and to report unavailable embedding/Milvus dependencies as
+  `blocked_external_dependency` without fabricated vectors or results.
+- Verification: `TMPDIR=/tmp npx tsc --noEmit`, `npm run lint`, `git diff --check`, and both S5-4
+  scripts execute. The scripts correctly wrote blocked reports because `MILVUS_BASE_URL` and
+  `EMBEDDING_API_BASE_URL` are not configured and `127.0.0.1:19530` is currently unreachable.
+- S5-4 implementation is complete, but the live gate remains blocked. No completed retrieval query
+  or ingestion count is evidence until a reachable Milvus instance and explicit embedding endpoint
+  are configured.
+
+## 2026-08-26 (S5 runtime closure)
+
+- S5-1 verified a persistent local `llama-server` at `127.0.0.1:8082`: `/health` returned `ok`
+  and a real OpenAI-compatible structured completion succeeded. Runtime PID/logs remain under
+  `/tmp/cuemind-runtime/`.
+- S5-2 installed and configured `mcporter` with Exa MCP. A direct read-only Exa call returned
+  non-empty results, and `agent-reach doctor --json` remains `warn`; that final state is accepted
+  because the direct Exa probe is the real connectivity evidence.
+- S5-3 started Milvus Standalone v2.6.22 with Docker. `milvus-standalone`, `milvus-etcd`, and
+  `milvus-minio` are healthy; `POST http://127.0.0.1:19530/v2/vectordb/collections/list`
+  returned HTTP 200 and `{"code":0,"data":[]}`. The image does not expose `/healthz` (HTTP 404),
+  so the v2 REST check is the recorded health evidence. Non-secret Milvus metadata is in the
+  ignored repository-root `.env`.
+- S5-4 implementation is complete: explicit OpenAI-compatible embeddings, fixed 1024-dimension
+  contract, Milvus collection/schema/index creation, document ingestion, and same-model query
+  embedding. The live run inserted 4 documents and the evaluator completed 2/2 queries.
+- S5-5 added `scripts/run-context-card-replay.ts`. The real local run processed 20 bounded 30-second
+  windows from `/tmp/cuemind-runtime/cuemind-10min-replay.jsonl`, wrote one trace-bearing JSONL
+  record per window, and generated 10 cards. Mock mode also passes the same envelope contract.
+- S5-6 reran `validate-replay` on the trace-bearing output: status `pass`, provider structured
+  output events `20`, search events `20`, generated cards `10`, card failures `0`, card latency
+  P50/P95 `2835/4155 ms`. The end-to-end summary now uses the trace-bearing replay denominator:
+  20 cases, 10 `card_generated`, 10 `skipped`, while still separating the unverified production
+  claims from the verified local gates.
+
+- Final verification after S5 changes passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`,
+  `git diff --check`, trace-bearing `validate-replay`, and end-to-end report regeneration. A scan
+  of replay/report artifacts found no API-key patterns.
+
+### S5 phase-end cleanup audit
+
+| Path | Type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `scripts/run-context-card-replay.ts` | Evaluation runner | Runs bounded live/mock context-card replay and emits trace envelopes | keep | Required S5 replay evidence generator. |
+| `scripts/ingest-milvus.ts` | Operations/evaluation script | Creates schema, embeds documents, inserts and loads Milvus data | keep | Required real-ingestion gate; blocked output is intentional. |
+| `lib/knowledge-embeddings.ts` | Integration adapter | Calls the configured embedding endpoint and validates dimensions | keep | Prevents deterministic placeholder vectors from becoming evidence. |
+| `/tmp/cuemind-runtime/` | External runtime workspace | Holds server processes, logs, and generated reports | review | Keep for reproducibility; clean up only when local audit artifacts are no longer needed. |
+| `/tmp/cuemind-runtime/milvus/` | External compose workspace | Holds Milvus compose configuration and runtime state | review | Keep while Milvus is used locally; never commit container state or images. |

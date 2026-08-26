@@ -1,0 +1,167 @@
+{
+  "version": "context-card-eval-v1",
+  "source": "synthetic",
+  "cases": [
+    {
+      "id": "cc-rag-001",
+      "input": {
+        "recentTranscript": "今天我们比较 RAG 和 fine-tuning 在企业知识库中的取舍。",
+        "knownKeywords": [],
+        "transcriptChunkIds": ["t-rag-001"],
+        "currentTime": "2026-08-25T10:00:00+08:00"
+      },
+      "expected": {
+        "decision": "generate_card",
+        "keyword": "RAG",
+        "whyNowEvidence": ["RAG", "fine-tuning"],
+        "sourceRequirements": { "minUsableSources": 2, "mustHaveUrl": true }
+      },
+      "tags": ["technical_term", "acronym", "should_generate"],
+      "sourceSnapshots": [
+        { "title": "Retrieval-Augmented Generation", "url": "https://example.com/rag", "snippet": "RAG retrieves relevant enterprise knowledge before generation." },
+        { "title": "RAG and fine-tuning", "url": "https://example.com/rag-finetune", "snippet": "RAG and fine-tuning solve different knowledge adaptation problems." }
+      ],
+      "fixtureOutput": { "keyword": "RAG", "explanation": "RAG 先检索相关资料，再让模型基于资料生成内容。", "whyNow": "会议正在比较 RAG 与 fine-tuning 的企业知识库取舍。" }
+    },
+    {
+      "id": "cc-kv-cache-001",
+      "input": {
+        "recentTranscript": "我们需要评估 KV Cache 对长上下文推理吞吐和显存占用的影响。",
+        "knownKeywords": [],
+        "transcriptChunkIds": ["t-kv-001"],
+        "currentTime": "2026-08-25T10:01:00+08:00"
+      },
+      "expected": {
+        "decision": "generate_card",
+        "keyword": "KV Cache",
+        "whyNowEvidence": ["KV Cache", "吞吐"],
+        "sourceRequirements": { "minUsableSources": 2, "mustHaveUrl": true }
+      },
+      "tags": ["model", "chinese_english_mix", "should_generate"],
+      "sourceSnapshots": [
+        { "title": "KV cache in transformer inference", "url": "https://example.com/kv-cache", "snippet": "KV cache stores attention keys and values to reduce repeated computation." },
+        { "title": "Memory and throughput trade-offs", "url": "https://example.com/kv-memory", "snippet": "KV cache improves decoding throughput while increasing memory use." }
+      ],
+      "fixtureOutput": { "keyword": "KV Cache", "explanation": "KV Cache 缓存注意力的键和值，减少自回归生成中的重复计算。", "whyNow": "当前讨论聚焦 KV Cache 对吞吐和显存的影响。" }
+    },
+    {
+      "id": "cc-milvus-001",
+      "input": {
+        "recentTranscript": "知识库检索层准备使用 Milvus，重点看向量过滤和 top-k 召回。",
+        "knownKeywords": [],
+        "transcriptChunkIds": ["t-milvus-001"],
+        "currentTime": "2026-08-25T10:02:00+08:00"
+      },
+      "expected": {
+        "decision": "generate_card",
+        "keyword": "Milvus",
+        "whyNowEvidence": ["Milvus", "向量", "top-k"],
+        "sourceRequirements": { "minUsableSources": 2, "mustHaveUrl": true }
+      },
+      "tags": ["database", "retrieval", "should_generate"],
+      "sourceSnapshots": [
+        { "title": "Milvus vector database", "url": "https://example.com/milvus", "snippet": "Milvus is a vector database for similarity search and retrieval." },
+        { "title": "Filtered vector search", "url": "https://example.com/milvus-filter", "snippet": "Vector search can combine top-k retrieval with metadata filters." }
+      ],
+      "fixtureOutput": { "keyword": "Milvus", "explanation": "Milvus 是面向向量相似度检索的数据库，支持 top-k 和元数据过滤。", "whyNow": "会议正在确定 Milvus 知识库检索层的向量过滤方案。" }
+    },
+    {
+      "id": "cc-duplicate-001",
+      "input": {
+        "recentTranscript": "继续讨论 RAG 的缓存策略，但这个关键词刚刚已经生成过卡片。",
+        "knownKeywords": ["RAG"],
+        "transcriptChunkIds": ["t-rag-002"],
+        "currentTime": "2026-08-25T10:03:00+08:00"
+      },
+      "expected": {
+        "decision": "skip",
+        "keyword": "RAG",
+        "whyNowEvidence": ["RAG"],
+        "sourceRequirements": { "minUsableSources": 0, "mustHaveUrl": false }
+      },
+      "tags": ["duplicate_keyword", "should_skip"],
+      "sourceSnapshots": [],
+      "fixtureOutput": { "keyword": "RAG", "explanation": "", "whyNow": "" }
+    },
+    {
+      "id": "cc-insufficient-sources-001",
+      "input": {
+        "recentTranscript": "这个内部缩写 ABCD 只在本次会议中出现，外部资料可能不足。",
+        "knownKeywords": [],
+        "transcriptChunkIds": ["t-abcd-001"],
+        "currentTime": "2026-08-25T10:04:00+08:00"
+      },
+      "expected": {
+        "decision": "search_failed",
+        "keyword": "ABCD",
+        "whyNowEvidence": ["ABCD"],
+        "sourceRequirements": { "minUsableSources": 2, "mustHaveUrl": true }
+      },
+      "tags": ["insufficient_sources", "should_skip"],
+      "sourceSnapshots": [
+        { "title": "ABCD internal note", "url": "https://example.com/abcd", "snippet": "One incomplete reference." }
+      ],
+      "fixtureFailure": { "code": "insufficient_sources", "message": "fewer than two usable sources" }
+    },
+    {
+      "id": "cc-invalid-source-001",
+      "input": {
+        "recentTranscript": "我们讨论一个需要可靠来源支撑的向量数据库概念。",
+        "knownKeywords": [],
+        "transcriptChunkIds": ["t-invalid-001"],
+        "currentTime": "2026-08-25T10:05:00+08:00"
+      },
+      "expected": {
+        "decision": "search_failed",
+        "keyword": "vector database",
+        "whyNowEvidence": ["向量数据库"],
+        "sourceRequirements": { "minUsableSources": 2, "mustHaveUrl": true }
+      },
+      "tags": ["invalid_source", "should_skip"],
+      "sourceSnapshots": [
+        { "title": "Invalid source", "url": "not-a-url", "snippet": "invalid" },
+        { "title": "Missing snippet", "url": "https://example.com/missing", "snippet": "" }
+      ],
+      "fixtureFailure": { "code": "invalid_source", "message": "source snapshot fails usability rules" }
+    },
+    {
+      "id": "cc-generic-001",
+      "input": {
+        "recentTranscript": "这个方案需要继续讨论，大家先看一下整体问题。",
+        "knownKeywords": [],
+        "transcriptChunkIds": ["t-generic-001"],
+        "currentTime": "2026-08-25T10:06:00+08:00"
+      },
+      "expected": {
+        "decision": "skip",
+        "keyword": "方案",
+        "whyNowEvidence": ["方案"],
+        "sourceRequirements": { "minUsableSources": 0, "mustHaveUrl": false }
+      },
+      "tags": ["generic_term", "should_skip"],
+      "sourceSnapshots": [],
+      "fixtureOutput": { "keyword": "方案", "explanation": "", "whyNow": "" }
+    },
+    {
+      "id": "cc-schema-failure-001",
+      "input": {
+        "recentTranscript": "请解释一下 LoRA 在小模型微调中的参数效率。",
+        "knownKeywords": [],
+        "transcriptChunkIds": ["t-lora-001"],
+        "currentTime": "2026-08-25T10:07:00+08:00"
+      },
+      "expected": {
+        "decision": "schema_failed",
+        "keyword": "LoRA",
+        "whyNowEvidence": ["LoRA", "微调"],
+        "sourceRequirements": { "minUsableSources": 2, "mustHaveUrl": true }
+      },
+      "tags": ["invalid_json", "should_skip"],
+      "sourceSnapshots": [
+        { "title": "LoRA: Low-Rank Adaptation", "url": "https://example.com/lora", "snippet": "LoRA reduces trainable parameters for model fine-tuning." },
+        { "title": "Parameter-efficient fine-tuning", "url": "https://example.com/peft", "snippet": "Parameter-efficient methods adapt models with fewer trainable weights." }
+      ],
+      "fixtureFailure": { "code": "schema_invalid", "message": "card response is missing whyNow" }
+    }
+  ]
+}

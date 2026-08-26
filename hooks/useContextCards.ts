@@ -65,6 +65,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
             remoteApiApiKey: settings.remoteApiApiKey,
             searchProvider: settings.searchProvider,
             searchApiKey: settings.searchApiKey,
+            enableAgentReachFallback: settings.enableAgentReachFallback,
           },
         }),
       });

@@ -418,6 +418,18 @@ export default function SettingsModal({
                 搜索 API Key
                 <input type="password" autoComplete="off" value={settings.searchApiKey} onChange={(event) => updateSetting("searchApiKey", event.target.value)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
               </label>
+              <label className="flex items-center gap-2 text-xs text-neutral-400">
+                <input
+                  type="checkbox"
+                  checked={settings.enableAgentReachFallback}
+                  onChange={(event) => updateSetting("enableAgentReachFallback", event.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 text-blue-600"
+                />
+                Tavily 不可用时启用 agent-reach 降级
+              </label>
+              <p className="text-xs leading-relaxed text-neutral-500">
+                服务端配置了 <code>TAVILY_API_KEY</code> 时优先使用服务端 Key；浏览器 Key 仅作为回退。
+              </p>
             </section>
 
             <section className="flex flex-col gap-4">

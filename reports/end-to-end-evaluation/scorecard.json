@@ -1,0 +1,48 @@
+{
+  "status": "partial",
+  "releaseGate": "blocked_external_dependency",
+  "denominator": {
+    "replayCases": 8,
+    "scoredCases": 8,
+    "excludedCases": 0
+  },
+  "providerStructuredOutput": "complete",
+  "searchEvidence": "fixed_snapshot_only",
+  "cardGeneration": "complete",
+  "milvusEvidence": "blocked_external_dependency",
+  "replayEvidence": "pass",
+  "searchPathCounts": {
+    "tavily": 4,
+    "none": 2,
+    "failure": 2
+  },
+  "finalStateCounts": {
+    "generate_card": 3,
+    "skip": 2,
+    "search_failed": 2,
+    "schema_failed": 1
+  },
+  "failureCounts": {
+    "insufficient_sources": 1,
+    "invalid_source": 1,
+    "schema_invalid": 1
+  },
+  "latency": {
+    "search": {
+      "count": 6,
+      "min": 1,
+      "max": 1,
+      "p50": 1,
+      "p95": 1
+    },
+    "generation": {
+      "count": 3,
+      "min": 1,
+      "max": 1,
+      "p50": 1,
+      "p95": 1
+    },
+    "total": null
+  },
+  "evidenceBoundary": "This release-gate summary combines the available evaluator artifacts. It does not convert synthetic fixed-source results, blocked Milvus status, or missing replay events into production readiness."
+}

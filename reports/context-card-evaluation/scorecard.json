@@ -1,0 +1,68 @@
+{
+  "evaluator": "context-card-evaluator-v1",
+  "datasetVersion": "context-card-eval-v1",
+  "status": "complete",
+  "denominator": {
+    "totalCases": 8,
+    "scoredCases": 8,
+    "excludedCases": 0,
+    "generationExpectedCases": 3,
+    "searchExpectedCases": 5
+  },
+  "metrics": {
+    "keyword_relevance_rate": 1,
+    "keyword_duplicate_rate": 1,
+    "search_success_rate": 0.6,
+    "usable_source_rate": 0.6667,
+    "card_schema_valid_rate": 1,
+    "card_success_rate": 1,
+    "graceful_failure_rate": 0.625,
+    "source_support_score": 1,
+    "why_now_relevance_score": 1,
+    "search_p50_ms": 1,
+    "generation_p50_ms": 1,
+    "total_p50_ms": 0,
+    "total_p95_ms": 0
+  },
+  "failureCounts": {
+    "insufficient_sources": 1,
+    "invalid_source": 1,
+    "schema_invalid": 1
+  },
+  "latency": {
+    "search": {
+      "count": 6,
+      "min": 1,
+      "max": 1,
+      "mean": 1,
+      "p50": 1,
+      "p95": 1
+    },
+    "generation": {
+      "count": 3,
+      "min": 1,
+      "max": 1,
+      "mean": 1,
+      "p50": 1,
+      "p95": 1
+    },
+    "total": {
+      "count": 8,
+      "min": 0,
+      "max": 0,
+      "mean": 0,
+      "p50": 0,
+      "p95": 0
+    }
+  },
+  "judge": {
+    "version": "heuristic-judge-v1",
+    "type": "deterministic_heuristic",
+    "rubric": [
+      "source_support_score: 1.0 when keyword/topic is represented by at least one source title or snippet, otherwise 0.0",
+      "why_now_relevance_score: fraction of expected evidence terms present in whyNow or the current transcript",
+      "keyword relevance: expected keyword or a transcript-supported equivalent must be present"
+    ]
+  },
+  "evidenceBoundary": "Synthetic fixed-source protocol evidence only. This run does not exercise Tavily, agent-reach, Milvus, a model provider, real card generation, or production latency."
+}

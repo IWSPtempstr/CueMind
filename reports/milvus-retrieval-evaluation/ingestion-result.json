@@ -1,0 +1,14 @@
+{
+  "status": "complete",
+  "insertedCount": 4,
+  "milvusInsertResponse": {
+    "insertCount": 4,
+    "insertIds": [
+      "doc-rag-001",
+      "meeting-kv-cache-001",
+      "doc-milvus-001",
+      "meeting-replay-001"
+    ]
+  },
+  "evidenceBoundary": "Documents were embedded by the configured OpenAI-compatible endpoint and inserted into Milvus; retrieval quality is measured separately by the evaluator."
+}

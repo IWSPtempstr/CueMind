@@ -1,0 +1,10 @@
+{
+  "evaluator": "milvus-ingestion-v1",
+  "fixturePath": "/home/work/asr/CueMind/fixtures/knowledge-documents-v1.json",
+  "datasetVersion": "knowledge-documents-v1",
+  "collectionName": "cuemind_knowledge_v1",
+  "embeddingModel": "text-embedding-v4",
+  "vectorDimension": 1024,
+  "baseUrl": "http://127.0.0.1:19530",
+  "generatedAt": "2026-08-26T12:20:19.101Z"
+}

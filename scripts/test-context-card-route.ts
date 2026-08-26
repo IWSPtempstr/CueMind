@@ -18,6 +18,13 @@ interface RouteTrace {
   modelName: string;
   modelBaseUrl: string;
   finalState: string;
+  events?: Array<{
+    type: string;
+    tool?: string;
+    provider?: string;
+    fallbackUsed?: boolean;
+    resultCount?: number;
+  }>;
 }
 
 interface RoutePayload {
@@ -94,6 +101,24 @@ function installSearchMock(): void {
 
 function restoreFetch(): void {
   globalThis.fetch = realFetch;
+}
+
+type AgentReachSearchMock = (query: string, timeoutMs: number) => Promise<Array<{
+  title: string;
+  url: string;
+  snippet: string;
+}>>;
+
+declare global {
+  var __cuemindAgentReachSearchMock: AgentReachSearchMock | undefined;
+}
+
+function installAgentReachMock(mock: AgentReachSearchMock): void {
+  globalThis.__cuemindAgentReachSearchMock = mock;
+}
+
+function restoreAgentReachMock(): void {
+  delete globalThis.__cuemindAgentReachSearchMock;
 }
 
 // --- request builders ---
@@ -272,13 +297,135 @@ async function testSearchFailureAfterKeyword(): Promise<void> {
   });
   try {
     const response = await POST(makeRequest(baseBody({
-      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3", searchApiKey: "" }),
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3", searchProvider: "bing", searchApiKey: "" }),
     })));
     const payload = await readPayload(response);
     assert.equal(payload.card, null);
     assert.equal(payload.trace.finalState, "search_failed");
     assert.equal(payload.failure?.reason, "Search API key is not configured");
   } finally {
+    await stopMockServer(server);
+  }
+}
+
+async function testTavilyFallsBackToAgentReachWhenKeyMissing(): Promise<void> {
+  let calls = 0;
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    calls += 1;
+    if (calls === 1) {
+      writeJson(res, 200, chatCompletion({ keyword: "Agent Harness" }));
+    } else {
+      writeJson(res, 200, chatCompletion({
+        keyword: "Agent Harness",
+        explanation: "用于组织模型、工具与执行循环的代理运行框架。",
+        whyNow: "会议正在讨论 Agent Harness 的设计与实现。",
+      }));
+    }
+  });
+  installAgentReachMock(async () => ([
+    { title: "Agent Harness intro", url: "https://example.com/harness", snippet: "Harness organizes tools and execution loops." },
+    { title: "Second harness source", url: "https://example.com/harness-2", snippet: "Additional agent harness context." },
+  ]));
+  try {
+    const response = await POST(makeRequest(baseBody({
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3", searchApiKey: "" }),
+    })));
+    const payload = await readPayload(response);
+    assert.ok(payload.card);
+    assert.equal(payload.trace.finalState, "card_generated");
+    assert.ok(payload.trace.events?.some((event) =>
+      event.type === "tool_result" &&
+      event.tool === "search_web" &&
+      event.provider === "agent-reach" &&
+      event.fallbackUsed === true &&
+      event.resultCount === 2,
+    ));
+  } finally {
+    restoreAgentReachMock();
+    await stopMockServer(server);
+  }
+}
+
+async function testAgentReachUnavailableReplacesMissingKeyFailure(): Promise<void> {
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    writeJson(res, 200, chatCompletion({ keyword: "Agent Harness" }));
+  });
+  installAgentReachMock(async () => {
+    throw new Error("agent reach unavailable in test");
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3", searchApiKey: "" }),
+    })));
+    const payload = await readPayload(response);
+    assert.equal(payload.card, null);
+    assert.equal(payload.trace.finalState, "search_failed");
+    assert.equal(payload.failure?.reason, "agent-reach search unavailable");
+  } finally {
+    restoreAgentReachMock();
+    await stopMockServer(server);
+  }
+}
+
+async function testAgentReachFallbackCanBeDisabled(): Promise<void> {
+  installAgentReachMock(async () => ([
+    { title: "fallback source", url: "https://example.com/fallback", snippet: "fallback" },
+    { title: "fallback source 2", url: "https://example.com/fallback-2", snippet: "fallback" },
+  ]));
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    writeJson(res, 200, chatCompletion({ keyword: "Agent Harness" }));
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      settings: settings({
+        llamaCppBaseUrl: baseUrl,
+        llamaCppModel: "qwen3",
+        searchApiKey: "",
+        enableAgentReachFallback: false,
+      }),
+    })));
+    const payload = await readPayload(response);
+    assert.equal(payload.card, null);
+    assert.equal(payload.trace.finalState, "search_failed");
+    assert.equal(payload.failure?.reason, "Search API key is not configured");
+  } finally {
+    restoreAgentReachMock();
+    await stopMockServer(server);
+  }
+}
+
+async function testServerTavilyKeyTakesPrecedence(): Promise<void> {
+  const previous = process.env.TAVILY_API_KEY;
+  process.env.TAVILY_API_KEY = "server-tavily-key";
+  let receivedBody = "";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: FetchInput, init?: FetchInit) => {
+    const url = fetchUrl(input);
+    if (url.includes("api.tavily.com")) {
+      receivedBody = typeof init?.body === "string" ? init.body : "";
+      return new Response(JSON.stringify({
+        results: [
+          { title: "Server source", url: "https://example.com/server", content: "server" },
+          { title: "Server source 2", url: "https://example.com/server-2", content: "server" },
+        ],
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    writeJson(res, 200, chatCompletion({ keyword: "Agent Harness", explanation: "解释", whyNow: "现在相关" }));
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3", searchApiKey: "browser-key" }),
+    })));
+    const payload = await readPayload(response);
+    assert.ok(payload.card);
+    assert.equal(JSON.parse(receivedBody).api_key, "server-tavily-key");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previous === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = previous;
     await stopMockServer(server);
   }
 }
@@ -292,8 +439,13 @@ async function main(): Promise<void> {
     await testProviderFailureWithoutSilentFallback();
     await testInvalidCardSchema();
     await testSearchFailureAfterKeyword();
+    await testTavilyFallsBackToAgentReachWhenKeyMissing();
+    await testAgentReachUnavailableReplacesMissingKeyFailure();
+    await testAgentReachFallbackCanBeDisabled();
+    await testServerTavilyKeyTakesPrecedence();
   } finally {
     restoreFetch();
+    restoreAgentReachMock();
   }
   console.log("context card route regression tests passed");
 }

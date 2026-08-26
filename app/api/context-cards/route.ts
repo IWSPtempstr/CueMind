@@ -5,7 +5,7 @@ import {
   ModelProviderError,
   type ModelProviderName,
 } from "@/lib/model-provider";
-import { InsufficientSearchSourcesError, searchWeb, type SearchResult } from "@/lib/search";
+import { InsufficientSearchSourcesError, searchWeb, type SearchExecution, type SearchResult } from "@/lib/search";
 import type { ContextCard } from "@/types/suggestions";
 
 export const runtime = "nodejs";
@@ -24,6 +24,7 @@ interface ContextCardRequest {
     remoteApiApiKey: string;
     searchProvider: "tavily" | "bing" | "serpapi";
     searchApiKey: string;
+    enableAgentReachFallback: boolean;
   };
 }
 
@@ -53,6 +54,8 @@ interface TraceEvent {
   query?: string;
   resultCount?: number;
   retryCount?: number;
+  provider?: "tavily" | "bing" | "serpapi" | "agent-reach";
+  fallbackUsed?: boolean;
 }
 
 interface ContextCardTrace {
@@ -127,9 +130,10 @@ export async function POST(
 
   const searchStarted = performance.now();
   let sources: SearchResult[];
+  let searchExecution: SearchExecution | null = null;
   let searchAttempts = 0;
   try {
-    sources = await searchWithRetry(parsed, keyword, (attempt) => {
+    searchExecution = await searchWithRetry(parsed, keyword, (attempt) => {
       searchAttempts = attempt;
       traceEvents.push({
         step: traceEvents.length + 1,
@@ -137,15 +141,20 @@ export async function POST(
         tool: "search_web",
         query: `${keyword} technology explanation`,
         retryCount: attempt,
+        provider: parsed.settings.searchProvider,
       });
     });
+    sources = searchExecution.results;
     const searchMs = Math.round(performance.now() - searchStarted);
     traceEvents.push({
       step: traceEvents.length + 1,
       type: "tool_result",
+      tool: "search_web",
       resultCount: sources.length,
       durationMs: searchMs,
       retryCount: searchAttempts,
+      provider: searchExecution.provider,
+      fallbackUsed: searchExecution.fallbackUsed,
     });
   } catch (caught) {
     traceEvents.push({ step: traceEvents.length + 1, type: "terminal" });
@@ -238,16 +247,19 @@ async function searchWithRetry(
   request: ContextCardRequest,
   keyword: string,
   onAttempt: (attempt: number) => void,
-): Promise<SearchResult[]> {
+): Promise<SearchExecution> {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       onAttempt(attempt + 1);
       return await searchWeb({
         provider: request.settings.searchProvider,
-        apiKey: request.settings.searchApiKey,
+        apiKey: request.settings.searchProvider === "tavily"
+          ? process.env.TAVILY_API_KEY?.trim() || request.settings.searchApiKey
+          : request.settings.searchApiKey,
         query: `${keyword} technology explanation`,
         timeoutMs: 4_000,
+        enableAgentReachFallback: request.settings.enableAgentReachFallback,
       });
     } catch (caught) {
       lastError = caught;
@@ -334,6 +346,7 @@ function parseRequest(value: unknown): ContextCardRequest | null {
       remoteApiApiKey: settings.remoteApiApiKey,
       searchProvider,
       searchApiKey: settings.searchApiKey,
+      enableAgentReachFallback: settings.enableAgentReachFallback !== false,
     },
   };
 }

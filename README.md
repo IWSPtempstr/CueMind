@@ -6,6 +6,11 @@ CueMind is a **meeting copilot**: three columns, one conversation, and a stubbor
 
 The product bet behind CueMind is simple: during a live call, people do not need more noise—they need the *right* suggestion at the *right* moment. This repo delivers live transcription on a configurable cadence, contextual suggestion batches, streaming chat grounded in the same transcript, runtime controls, resumable sessions, and friendly JSON or Markdown exports.
 
+Search and knowledge evaluation is reproducible through the fixed fixtures and scripts under
+`fixtures/` and `scripts/`. Milvus is an optional local retrieval layer; when it is unavailable or
+returns insufficient evidence, the report records that boundary explicitly and the web-search path
+remains separate.
+
 ---
 
 ## Getting Started

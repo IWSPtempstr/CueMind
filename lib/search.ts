@@ -1,7 +1,18 @@
+import {
+  AgentReachSearchError,
+  searchWithAgentReach,
+} from "@/lib/agent-reach-search";
+
 export interface SearchResult {
   title: string;
   url: string;
   snippet: string;
+}
+
+export interface SearchExecution {
+  provider: "tavily" | "bing" | "serpapi" | "agent-reach";
+  fallbackUsed: boolean;
+  results: SearchResult[];
 }
 
 export class InsufficientSearchSourcesError extends Error {
@@ -16,26 +27,61 @@ export async function searchWeb(args: {
   apiKey: string;
   query: string;
   timeoutMs: number;
-}): Promise<SearchResult[]> {
-  if (!args.apiKey.trim()) throw new Error("Search API key is not configured");
+  enableAgentReachFallback?: boolean;
+}): Promise<SearchExecution> {
+  if (args.provider !== "tavily" && !args.apiKey.trim()) {
+    throw new Error("Search API key is not configured");
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), args.timeoutMs);
   try {
+    if (args.provider === "tavily") {
+      return await searchTavilyWithFallback(args, controller.signal);
+    }
     const results = await ({
-      tavily: searchTavily,
       bing: searchBing,
       serpapi: searchSerpApi,
     }[args.provider])(args, controller.signal);
-    const usable = results.filter((result) => isHttpUrl(result.url)).slice(0, 5);
-    if (usable.length < 2) throw new InsufficientSearchSourcesError();
-    return usable;
+    return {
+      provider: args.provider,
+      fallbackUsed: false,
+      results: ensureUsableResults(results),
+    };
   } catch (caught) {
+    if (caught instanceof AgentReachSearchError) throw caught;
     if (caught instanceof DOMException && caught.name === "AbortError") {
       throw new Error(`Search timed out after ${args.timeoutMs}ms`);
     }
     throw caught;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function searchTavilyWithFallback(
+  args: { apiKey: string; query: string; timeoutMs: number; enableAgentReachFallback?: boolean },
+  signal: AbortSignal,
+): Promise<SearchExecution> {
+  try {
+    if (!args.apiKey.trim()) {
+      throw new Error("Search API key is not configured");
+    }
+    const results = await searchTavily(args, signal);
+    return {
+      provider: "tavily",
+      fallbackUsed: false,
+      results: ensureUsableResults(results),
+    };
+  } catch (caught) {
+    if (args.enableAgentReachFallback === false || !shouldFallbackToAgentReach(caught)) throw caught;
+    return {
+      provider: "agent-reach",
+      fallbackUsed: true,
+      results: await searchWithAgentReach({
+        query: args.query,
+        timeoutMs: args.timeoutMs,
+      }),
+    };
   }
 }
 
@@ -89,10 +135,24 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+function ensureUsableResults(results: SearchResult[]): SearchResult[] {
+  const usable = results.filter((result) => isHttpUrl(result.url)).slice(0, 5);
+  if (usable.length < 2) throw new InsufficientSearchSourcesError();
+  return usable;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function shouldFallbackToAgentReach(error: unknown): boolean {
+  if (error instanceof InsufficientSearchSourcesError) return true;
+  if (error instanceof DOMException && error.name === "AbortError") return true;
+  if (!(error instanceof Error)) return false;
+  return error.message === "Search API key is not configured" ||
+    /Tavily returned HTTP \d+/.test(error.message);
 }
