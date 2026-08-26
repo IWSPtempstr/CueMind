@@ -121,3 +121,20 @@
 - `git diff --check`: passed before and after the documentation update.
 - `npm run lint`: passed (exit code 0).
 - `npm run build`: passed (exit code 0; Next.js 15.5.15 production build).
+
+## 2026-08-26 (P1.1 llama.cpp provider types and errors)
+
+- Executed P1.1 from `docs/plans/2026-08-26-cuemind-llama-provider-implementation-plan.md`.
+- Created `lib/model-provider.ts` with `ModelProviderName = "llama.cpp" | "remote-api"`,
+  the five typed `ModelProviderErrorCode` values, `ModelProviderError` with safe serialization,
+  and `serializeModelProviderError` that never includes API keys or raw details.
+- Extended `types/settings.ts` with the seven model-provider fields
+  (`modelProvider`, `llamaCppBaseUrl`, `llamaCppModel`, `llamaCppApiKey`,
+  `remoteApiBaseUrl`, `remoteApiModel`, `remoteApiApiKey`) as optional fields pending P1.4 migration.
+- Added `scripts/test-model-providers.ts` covering provider-name validation, error-code
+  validation, safe error serialization (no API key leak), error construction validation,
+  and the settings contract.
+- Verification passed: `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`,
+  and `git diff --check`.
+- The existing `ollamaBaseUrl`/`ollamaModel` fields remain in `Settings` for now; they are
+  migrated out and removed in P1.4. No runtime route or UI was changed in this task.
