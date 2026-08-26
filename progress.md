@@ -244,9 +244,11 @@
 - The report records `provider`, `model`, `baseUrl`, `inputWindowMs`, `inputChars`, `inputSegments`,
   `latencyMs`, `output`, `error`, and `evidenceBoundary`; it never records an API key, and it exits
   non-zero on an invalid transcript, non-JSON output, or a missing/empty keyword field.
-- Ran the smoke against a live `llama-server` (`0.3.0-dev`, CPU `-ngl 0`) on port `8082` with the
-  verified Qwen3-4B GGUF. Result: `provider=llama.cpp`, 31 segments / 413 chars from the first ~60 s,
-  keyword `"Cloud Code"`, `latencyMs=1793`, `error=null`. This is a single-run CPU keyword smoke, not
-  a stable percentile benchmark; it is local-model structured-output evidence only — search, card
-  assembly, and end-to-end card latency remain unverified.
+- Ran the smoke against a live `llama-server` (`0.3.0-dev`) on port `8082` with the verified
+  Qwen3-4B GGUF. Result: `provider=llama.cpp`, 31 segments / 413 chars from the first ~60 s,
+  keyword `"Cloud Code"`, `error=null`. Keyword latency was 1,793 ms with CPU offload (`-ngl 0`) and
+  510 ms with full GPU offload (`-ngl 99`) on the RTX 4060 Ti 8 GB (~4.5 GB VRAM). These are
+  single-run smoke measurements, not a stable percentile benchmark; they are local-model
+  structured-output evidence only — search, card assembly, and end-to-end card latency remain
+  unverified.
 - Verification passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check`.
