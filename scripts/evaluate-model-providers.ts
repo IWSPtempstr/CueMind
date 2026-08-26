@@ -1,5 +1,8 @@
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { generateLlamaCppJson } from "@/lib/llama-cpp";
 import { generateRemoteApiJson } from "@/lib/remote-api";
@@ -18,6 +21,8 @@ const DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:8082";
 const DEFAULT_LOCAL_MODEL = "/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf";
 const DEFAULT_LLAMA_SERVER = "/home/work/llama.cpp/build/bin/llama-server";
 const TIMEOUT_MS = 120_000;
+
+loadRootEnvFile();
 
 interface TranscriptWindow {
   text: string;
@@ -143,6 +148,37 @@ async function main(): Promise<void> {
   console.log(`Provider evaluation report written to ${outputDir}`);
   console.log(renderReport(manifest, scorecard));
   if (local.evaluation.status !== "complete") process.exitCode = 1;
+}
+
+function loadRootEnvFile(): void {
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  const envPath = resolve(scriptDir, "..", ".env");
+  if (!existsSync(envPath)) return;
+
+  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const parsed = parseEnvLine(line);
+    if (parsed && process.env[parsed[0]] === undefined) {
+      process.env[parsed[0]] = parsed[1];
+    }
+  }
+}
+
+function parseEnvLine(line: string): [string, string] | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) return null;
+
+  const assignment = trimmed.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+  if (!assignment) return null;
+
+  const key = assignment[1];
+  const rawValue = assignment[2].trim();
+  if (rawValue.startsWith("\"") && rawValue.endsWith("\"")) {
+    return [key, rawValue.slice(1, -1).replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\\"/g, "\"").replace(/\\\\/g, "\\")];
+  }
+  if (rawValue.startsWith("'") && rawValue.endsWith("'")) {
+    return [key, rawValue.slice(1, -1)];
+  }
+  return [key, rawValue.replace(/\s+#.*$/, "")];
 }
 
 async function evaluateProvider(args: {

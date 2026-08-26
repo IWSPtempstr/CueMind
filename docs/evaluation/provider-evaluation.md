@@ -8,6 +8,8 @@
 TMPDIR=/tmp npx tsx scripts/evaluate-model-providers.ts
 ```
 
+The evaluator automatically loads `.env` from the repository root. Variables already present in the process environment take precedence over values from `.env`, so one-off overrides can still be supplied as command prefixes.
+
 Defaults use:
 
 - Input: `/tmp/cuemind-runtime/cuemind-10min-asr.json`
