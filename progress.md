@@ -202,3 +202,20 @@
   provider/key to `/api/context-cards` (removed `ollamaBaseUrl`/`ollamaModel` from the payload).
 - Verification passed: `npm run lint`, `npx tsc --noEmit`, and `npm run build`.
 - `rg -n "Ollama|ollama" components/SettingsModal.tsx hooks/useContextCards.ts` returns no matches.
+
+## 2026-08-26 (P1.6 context-card route provider selection)
+
+- Rewrote `app/api/context-cards/route.ts` to select exactly one provider from `modelProvider`.
+- `resolveProvider` maps the selected provider to its base URL, model, and API key; `generateProviderJson`
+  dispatches to `generateLlamaCppJson` or `generateRemoteApiJson` for both keyword and card JSON.
+- The trace now carries `modelProvider`, `modelName`, and `modelBaseUrl` (no API key, no full transcript).
+- Provider errors map to explicit reasons (`<provider> provider unreachable` / `timed out` /
+  `HTTP <status>` / `returned invalid JSON` / `returned an invalid schema`); an invalid card schema now
+  throws `ModelProviderError` with code `model_schema_invalid` instead of a bare string.
+- No silent fallback: a provider failure returns `model_failed` for the selected provider and never calls
+  the other provider.
+- Added `scripts/test-context-card-route.ts` covering invalid request, local provider, remote provider,
+  provider failure without silent fallback, invalid card schema, and search failure after keyword success.
+  Search is intercepted offline via a `fetch` patch returning two deterministic sources.
+- Verification passed: `TMPDIR=/tmp npx tsx scripts/test-context-card-route.ts`, `npm run lint`,
+  `npx tsc --noEmit`, and `npm run build`.
