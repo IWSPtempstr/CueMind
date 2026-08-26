@@ -98,3 +98,143 @@ export function serializeModelProviderError(
 
   return serialized;
 }
+
+// --- OpenAI-compatible JSON chat client ---
+
+export interface JsonChatRequest {
+  provider: ModelProviderName;
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+  system: string;
+  prompt: string;
+  timeoutMs: number;
+}
+
+function normalizeChatCompletionsUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, "");
+  const withV1 = /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
+  return `${withV1}/chat/completions`;
+}
+
+/**
+ * Calls an OpenAI-compatible `/v1/chat/completions` endpoint and returns the
+ * assistant message content parsed as JSON. Throws `ModelProviderError` with a
+ * typed `code` for unreachable, timeout, HTTP/auth, and invalid-JSON failures.
+ */
+export async function generateOpenAiCompatibleJson<T>(
+  request: JsonChatRequest,
+): Promise<T> {
+  const url = normalizeChatCompletionsUrl(request.baseUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), request.timeoutMs);
+
+  try {
+    const response = await postChatCompletions(url, request, controller.signal);
+    if (!response.ok) {
+      throw new ModelProviderError({
+        provider: request.provider,
+        code: "model_http_error",
+        status: response.status,
+      });
+    }
+    return await parseChatCompletionsJson<T>(response, request.provider);
+  } catch (caught) {
+    if (caught instanceof ModelProviderError) {
+      throw caught;
+    }
+    if (isAbortError(caught)) {
+      throw new ModelProviderError({
+        provider: request.provider,
+        code: "model_timeout",
+      });
+    }
+    throw new ModelProviderError({
+      provider: request.provider,
+      code: "model_unreachable",
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function postChatCompletions(
+  url: string,
+  request: JsonChatRequest,
+  signal: AbortSignal,
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (request.apiKey && request.apiKey.length > 0) {
+    headers.Authorization = `Bearer ${request.apiKey}`;
+  }
+
+  return fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: request.model,
+      messages: [
+        { role: "system", content: request.system },
+        { role: "user", content: request.prompt },
+      ],
+      temperature: 0,
+      response_format: { type: "json_object" },
+    }),
+    signal,
+    cache: "no-store",
+  });
+}
+
+async function parseChatCompletionsJson<T>(
+  response: Response,
+  provider: ModelProviderName,
+): Promise<T> {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ModelProviderError({
+      provider,
+      code: "model_invalid_json",
+    });
+  }
+
+  const content = extractChatAssistantContent(payload);
+  if (content === null) {
+    throw new ModelProviderError({
+      provider,
+      code: "model_invalid_json",
+    });
+  }
+
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    throw new ModelProviderError({
+      provider,
+      code: "model_invalid_json",
+    });
+  }
+}
+
+function extractChatAssistantContent(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const root = payload as {
+    choices?: Array<{ message?: { content?: unknown } }>;
+  };
+  const content = root.choices?.[0]?.message?.content;
+  return typeof content === "string" ? content : null;
+}
+
+function isAbortError(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "name" in value &&
+    (value as { name?: unknown }).name === "AbortError"
+  );
+}

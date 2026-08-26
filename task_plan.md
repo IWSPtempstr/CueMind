@@ -75,7 +75,7 @@ P0 is documentation-only. P1 code and the real whisper.cpp small-model smoke gat
 
 - [x] P0.1: freeze llama.cpp/provider migration baseline (commit `b27307a`).
 - [x] P1.1: add provider types and typed errors (`lib/model-provider.ts`, `types/settings.ts`, `scripts/test-model-providers.ts`).
-- [ ] P1.2: implement OpenAI-compatible JSON client in `lib/model-provider.ts`.
+- [x] P1.2: implement OpenAI-compatible JSON client in `lib/model-provider.ts`.
 - [ ] P1.3: add `lib/llama-cpp.ts` and `lib/remote-api.ts` wrappers.
 - [ ] P1.4: migrate settings and secret storage.
 - [ ] P1.5: replace settings UI labels and fields.

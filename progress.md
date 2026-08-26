@@ -138,3 +138,22 @@
   and `git diff --check`.
 - The existing `ollamaBaseUrl`/`ollamaModel` fields remain in `Settings` for now; they are
   migrated out and removed in P1.4. No runtime route or UI was changed in this task.
+
+## 2026-08-26 (P1.2 OpenAI-compatible JSON client)
+
+- Extended `lib/model-provider.ts` with the shared `generateOpenAiCompatibleJson<T>` client
+  and the `JsonChatRequest` contract.
+- The client normalizes a base URL that may or may not end in `/v1`, POSTs to
+  `/v1/chat/completions`, sends `messages` + `temperature: 0` + `response_format` JSON object,
+  sends `Authorization: Bearer` only for a non-empty key, aborts at `timeoutMs`, rejects
+  non-2xx responses, and parses `choices[0].message.content` as JSON.
+- Failures map to typed `ModelProviderError` codes: network failure -> `model_unreachable`,
+  abort -> `model_timeout`, non-2xx (including 401/403) -> `model_http_error` with status,
+  and missing/non-JSON assistant content -> `model_invalid_json`.
+- `JsonChatRequest` carries `provider` so the shared client can attribute typed errors without
+  a plugin registry; provider identity remains the wrappers' responsibility in P1.3.
+- Extended `scripts/test-model-providers.ts` with a local mock HTTP server covering successful
+  JSON, `/v1` suffix normalization, non-2xx, timeout, invalid assistant JSON, missing assistant
+  content, no Authorization header for an empty key, and Bearer header for a non-empty key.
+- Verification passed: `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`,
+  `npm run lint`, `npm run build`, and `git diff --check`.

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
+import type { AddressInfo } from "node:net";
+import {
   ModelProviderError,
+  generateOpenAiCompatibleJson,
   isModelProviderErrorCode,
   isModelProviderName,
   serializeModelProviderError,
@@ -10,6 +18,7 @@ import {
 import type { Settings } from "@/types/settings";
 
 const API_KEY = "test-api-key-must-not-leak";
+const BEARER_KEY = "sk-test-bearer";
 
 function expectThrows(action: () => unknown, message: string): void {
   assert.throws(action, message);
@@ -94,10 +103,252 @@ function testSettingsContract(): void {
   assert.equal(settings.remoteApiModel, "remote-model");
 }
 
-testProviderNames();
-testErrorCodes();
-testSafeErrorSerialization();
-testErrorValidation();
-testSettingsContract();
+// --- P1.2 OpenAI-compatible JSON client (local mock HTTP server) ---
 
-console.log("model provider regression tests passed");
+type MockHandler = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  body: string,
+) => void;
+
+function startMockServer(
+  handler: MockHandler,
+): Promise<{ server: Server; baseUrl: string }> {
+  return new Promise((resolve) => {
+    const server = createServer((req, res) => {
+      res.setHeader("Connection", "close");
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+      });
+      req.on("end", () => handler(req, res, raw));
+    });
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      resolve({ server, baseUrl: `http://127.0.0.1:${address.port}` });
+    });
+  });
+}
+
+function stopMockServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+    server.closeAllConnections();
+  });
+}
+
+async function withMockServer(
+  handler: MockHandler,
+  run: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const { server, baseUrl } = await startMockServer(handler);
+  try {
+    await run(baseUrl);
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+function writeJson(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+function chatCompletionBody(content: unknown): unknown {
+  return { choices: [{ message: { content: JSON.stringify(content) } }] };
+}
+
+async function testSuccessfulJsonResponse(): Promise<void> {
+  let requestUrl = "";
+  let requestBody: Record<string, unknown> = {};
+
+  await withMockServer((req, res, body) => {
+    requestUrl = req.url ?? "";
+    requestBody = JSON.parse(body) as Record<string, unknown>;
+    writeJson(res, 200, chatCompletionBody({ keyword: "KV Cache" }));
+  }, async (baseUrl) => {
+    const result = await generateOpenAiCompatibleJson<{ keyword: string }>({
+      provider: "llama.cpp",
+      baseUrl,
+      model: "qwen3",
+      system: "system text",
+      prompt: "user text",
+      timeoutMs: 1_000,
+    });
+    assert.equal(result.keyword, "KV Cache");
+  });
+
+  assert.equal(requestUrl, "/v1/chat/completions");
+  assert.equal(requestBody.model, "qwen3");
+  assert.equal(requestBody.temperature, 0);
+  const messages = requestBody.messages as Array<{ role: string; content: string }>;
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].role, "system");
+  assert.equal(messages[0].content, "system text");
+  assert.equal(messages[1].role, "user");
+  assert.equal(messages[1].content, "user text");
+  const responseFormat = requestBody.response_format as { type: string };
+  assert.equal(responseFormat.type, "json_object");
+}
+
+async function testBaseUrlNormalizationWithV1Suffix(): Promise<void> {
+  let requestUrl = "";
+  await withMockServer((req, res) => {
+    requestUrl = req.url ?? "";
+    writeJson(res, 200, chatCompletionBody({ ok: true }));
+  }, async (baseUrl) => {
+    await generateOpenAiCompatibleJson({
+      provider: "llama.cpp",
+      baseUrl: `${baseUrl}/v1`,
+      model: "m",
+      system: "s",
+      prompt: "p",
+      timeoutMs: 1_000,
+    });
+  });
+  assert.equal(requestUrl, "/v1/chat/completions");
+}
+
+async function testNon2xxResponse(): Promise<void> {
+  await withMockServer((_req, res) => {
+    writeJson(res, 401, { error: { message: "unauthorized" } });
+  }, async (baseUrl) => {
+    await assert.rejects(
+      generateOpenAiCompatibleJson({
+        provider: "remote-api",
+        baseUrl,
+        model: "m",
+        system: "s",
+        prompt: "p",
+        timeoutMs: 1_000,
+      }),
+      (error: unknown) =>
+        error instanceof ModelProviderError &&
+        error.code === "model_http_error" &&
+        error.status === 401,
+    );
+  });
+}
+
+async function testTimeout(): Promise<void> {
+  await withMockServer((_req, res) => {
+    setTimeout(() => {
+      if (!res.destroyed && !res.writableEnded) {
+        writeJson(res, 200, chatCompletionBody({ ok: true }));
+      }
+    }, 150);
+  }, async (baseUrl) => {
+    await assert.rejects(
+      generateOpenAiCompatibleJson({
+        provider: "llama.cpp",
+        baseUrl,
+        model: "m",
+        system: "s",
+        prompt: "p",
+        timeoutMs: 50,
+      }),
+      (error: unknown) =>
+        error instanceof ModelProviderError && error.code === "model_timeout",
+    );
+  });
+}
+
+async function testInvalidAssistantJson(): Promise<void> {
+  await withMockServer((_req, res) => {
+    writeJson(res, 200, { choices: [{ message: { content: "this is not json" } }] });
+  }, async (baseUrl) => {
+    await assert.rejects(
+      generateOpenAiCompatibleJson({
+        provider: "llama.cpp",
+        baseUrl,
+        model: "m",
+        system: "s",
+        prompt: "p",
+        timeoutMs: 1_000,
+      }),
+      (error: unknown) =>
+        error instanceof ModelProviderError && error.code === "model_invalid_json",
+    );
+  });
+}
+
+async function testMissingAssistantContent(): Promise<void> {
+  await withMockServer((_req, res) => {
+    writeJson(res, 200, { choices: [] });
+  }, async (baseUrl) => {
+    await assert.rejects(
+      generateOpenAiCompatibleJson({
+        provider: "llama.cpp",
+        baseUrl,
+        model: "m",
+        system: "s",
+        prompt: "p",
+        timeoutMs: 1_000,
+      }),
+      (error: unknown) =>
+        error instanceof ModelProviderError && error.code === "model_invalid_json",
+    );
+  });
+}
+
+async function testNoAuthHeaderForEmptyKey(): Promise<void> {
+  let authHeader: string | undefined;
+  await withMockServer((req, res) => {
+    authHeader = req.headers.authorization;
+    writeJson(res, 200, chatCompletionBody({ ok: true }));
+  }, async (baseUrl) => {
+    await generateOpenAiCompatibleJson({
+      provider: "llama.cpp",
+      baseUrl,
+      model: "m",
+      system: "s",
+      prompt: "p",
+      timeoutMs: 1_000,
+      apiKey: "",
+    });
+  });
+  assert.equal(authHeader, undefined);
+}
+
+async function testBearerHeaderForNonEmptyKey(): Promise<void> {
+  let authHeader: string | undefined;
+  await withMockServer((req, res) => {
+    authHeader = req.headers.authorization;
+    writeJson(res, 200, chatCompletionBody({ ok: true }));
+  }, async (baseUrl) => {
+    await generateOpenAiCompatibleJson({
+      provider: "remote-api",
+      baseUrl,
+      model: "m",
+      system: "s",
+      prompt: "p",
+      timeoutMs: 1_000,
+      apiKey: BEARER_KEY,
+    });
+  });
+  assert.equal(authHeader, `Bearer ${BEARER_KEY}`);
+}
+
+async function main(): Promise<void> {
+  testProviderNames();
+  testErrorCodes();
+  testSafeErrorSerialization();
+  testErrorValidation();
+  testSettingsContract();
+
+  await testSuccessfulJsonResponse();
+  await testBaseUrlNormalizationWithV1Suffix();
+  await testNon2xxResponse();
+  await testTimeout();
+  await testInvalidAssistantJson();
+  await testMissingAssistantContent();
+  await testNoAuthHeaderForEmptyKey();
+  await testBearerHeaderForNonEmptyKey();
+
+  console.log("model provider regression tests passed");
+}
+
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
