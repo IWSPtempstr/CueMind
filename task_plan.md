@@ -7,6 +7,7 @@ Execute the P0-P3 specification in `docs/plans/2026-08-25-cuemind-detailed-imple
 ## Current Phase
 
 - [x] P0: supplement execution specification and submission rules.
+- [x] P0.1: freeze llama.cpp/provider migration baseline without changing production code.
 - [x] P1-code: implement the local whisper.cpp ASR contract and serialized desktop transcription path.
 - [x] P2: establish fixture replay validation and evidence-boundary reporting.
 - [x] P3: close reproducible trace and prompt-injection boundary gaps from P2.
@@ -47,3 +48,25 @@ P0 is documentation-only. P1 code and the real whisper.cpp small-model smoke gat
 - P3 implementation scope delivered in this checkpoint: context-card trace on normal and failure paths, bounded search retry events, and explicit untrusted-data delimiters for transcript/search evidence.
 - The real smoke test covers one 30-second clip on CPU; long-video stability, Windows execution, and broader Chinese terminology quality remain unverified.
 - P1-runtime implementation scope delivered in this checkpoint: source-built `whisper.cpp`, downloaded multilingual Small model, real adapter smoke runner, and reproducible media/model metadata capture.
+
+## P0.1 Baseline Snapshot (2026-08-26)
+
+- Repository: `/home/work/asr/CueMind`.
+- Branch: `codex/local-realtime-meeting-copilot`.
+- `HEAD`: `edf4912974c3ffbc4caebf8a9e13e9694d89d703` (`docs: clarify ASR runtime audit history`).
+- Starting worktree state: no tracked-file modifications; pre-existing untracked paths were preserved:
+  `dataset/`, `docs/deployment/`, `docs/plans/2026-08-26-cuemind-llama-provider-design.md`,
+  `docs/plans/2026-08-26-cuemind-llama-provider-implementation-plan.md`, and `findings.md`.
+- Verified runtime artifacts:
+  - `whisper.cpp 1.9.3-dev`; model `/home/work/asr/.runtime/models/ggml-small.bin`.
+  - Qwen GGUF `/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf`;
+    SHA256 `2fde00ce69dd4899c70d020845e2638353015bba0fdf161b3eb965f2bca4464e`.
+  - `/home/work/llama.cpp/build/bin/llama-server`;
+    `0.3.0-dev (build 1, commit 1729ed5)`. The configured smoke-test port is `8080`;
+    no llama-server process was running during this baseline capture.
+- Existing 10-minute ASR replay: `321` transcript events; replay event validation passed.
+  This is recorded from the existing project run evidence and was not re-run in this documentation-only task.
+- Not verified in this baseline: live search provider behavior, remote OpenAI-compatible API behavior,
+  local Qwen structured-output inference, and full desktop end-to-end card generation.
+- P0.1 change boundary: only `task_plan.md` and `progress.md` may be modified.
+- Git commit: intentionally not created; phase checkpoint remains pending user-requested commit policy.

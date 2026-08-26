@@ -91,3 +91,33 @@
 | `app/api/context-cards/route.ts` | Production route | Generates sourced cards and emits trace metadata | keep | Required production behavior and contract boundary. |
 | `reports/replay/manifest.json` | Generated report artifact | Stores the stable fixture report manifest | keep | Existing committed evidence artifact; unchanged except regenerated timestamp was restored. |
 | `dataset/` | User-provided data | Supplied video and related artifacts | review | Pre-existing and outside P3; preserve for separate dataset audit. |
+
+## 2026-08-26 (P0.1 llama.cpp/provider migration baseline)
+
+- Executed P0.1 from `docs/plans/2026-08-26-cuemind-llama-provider-implementation-plan.md`.
+- Git baseline: branch `codex/local-realtime-meeting-copilot`, `HEAD` `edf4912974c3ffbc4caebf8a9e13e9694d89d703`
+  (`docs: clarify ASR runtime audit history`). The tracked worktree was clean before this task.
+- Pre-existing untracked paths were preserved: `dataset/`, `docs/deployment/`,
+  `docs/plans/2026-08-26-cuemind-llama-provider-design.md`,
+  `docs/plans/2026-08-26-cuemind-llama-provider-implementation-plan.md`, and `findings.md`.
+- Verified ASR runtime artifact: `whisper.cpp 1.9.3-dev` with
+  `/home/work/asr/.runtime/models/ggml-small.bin`.
+- Verified Qwen runtime artifact:
+  `/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf`,
+  SHA256 `2fde00ce69dd4899c70d020845e2638353015bba0fdf161b3eb965f2bca4464e`.
+- Verified llama.cpp server artifact:
+  `/home/work/llama.cpp/build/bin/llama-server`,
+  `0.3.0-dev (build 1, commit 1729ed5)`. The configured smoke-test port is `8080`;
+  no server process was active during this baseline capture.
+- Existing 10-minute ASR replay evidence contains `321` transcript events and replay validation passed.
+  This task records the prior result; it does not re-run the replay.
+- Evidence boundary: live search and remote API are explicitly unverified. Local Qwen structured output,
+  real provider latency, and full desktop end-to-end card generation are also unverified.
+- Scope respected: only `task_plan.md` and `progress.md` were changed; no production code was changed;
+  no Git commit was created.
+
+### P0.1 verification record
+
+- `git diff --check`: passed before and after the documentation update.
+- `npm run lint`: passed (exit code 0).
+- `npm run build`: passed (exit code 0; Next.js 15.5.15 production build).
