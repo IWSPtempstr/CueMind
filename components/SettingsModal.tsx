@@ -352,17 +352,54 @@ export default function SettingsModal({
               <div>
                 <h3 className="text-sm font-medium text-neutral-200">实时认知卡片</h3>
                 <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  Ollama 在本机提取关键词和生成中文解释；搜索只发送关键词，不发送整段音频。
+                  本地 llama.cpp 或显式配置的远端 OpenAI-compatible API 提取关键词并生成中文解释；搜索只发送关键词，不发送整段音频。
                 </p>
               </div>
               <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
-                Ollama 地址
-                <input type="url" value={settings.ollamaBaseUrl} onChange={(event) => updateSetting("ollamaBaseUrl", event.target.value)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                模型 Provider
+                <select
+                  value={settings.modelProvider}
+                  onChange={(event) => updateSetting("modelProvider", event.target.value as typeof settings.modelProvider)}
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
+                >
+                  <option value="llama.cpp">llama.cpp（本地）</option>
+                  <option value="remote-api">远端 API</option>
+                </select>
               </label>
-              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
-                Ollama 模型
-                <input type="text" value={settings.ollamaModel} onChange={(event) => updateSetting("ollamaModel", event.target.value)} placeholder="qwen2.5:3b" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
-              </label>
+              {settings.modelProvider === "llama.cpp" ? (
+                <>
+                  <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                    llama-server 地址
+                    <input type="url" value={settings.llamaCppBaseUrl} onChange={(event) => updateSetting("llamaCppBaseUrl", event.target.value)} placeholder="http://127.0.0.1:8082" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                  </label>
+                  <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                    本地模型路径
+                    <input type="text" value={settings.llamaCppModel} onChange={(event) => updateSetting("llamaCppModel", event.target.value)} placeholder="/home/work/models/cuemind/Qwen3-4B-Instruct-Q4_K_M.gguf" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                  </label>
+                  <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                    本地 API Key（可选）
+                    <input type="password" autoComplete="off" value={settings.llamaCppApiKey} onChange={(event) => updateSetting("llamaCppApiKey", event.target.value)} placeholder="留空表示无鉴权" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs leading-relaxed text-neutral-500">
+                    远端请求只发送最小化上下文（关键词与来源摘要），不上传整段音频或完整转写。
+                  </p>
+                  <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                    远端 Base URL
+                    <input type="url" value={settings.remoteApiBaseUrl} onChange={(event) => updateSetting("remoteApiBaseUrl", event.target.value)} placeholder="https://api.example.com/v1" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                  </label>
+                  <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                    远端模型
+                    <input type="text" value={settings.remoteApiModel} onChange={(event) => updateSetting("remoteApiModel", event.target.value)} placeholder="model-name" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                  </label>
+                  <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                    远端 API Key
+                    <input type="password" autoComplete="off" value={settings.remoteApiApiKey} onChange={(event) => updateSetting("remoteApiApiKey", event.target.value)} placeholder="Paste API key" className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200" />
+                  </label>
+                </>
+              )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
                   搜索 provider

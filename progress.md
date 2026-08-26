@@ -188,3 +188,17 @@
   mock localStorage/sessionStorage.
 - Verification passed: `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`,
   `npm run lint`, `npm run build`, and `git diff --check`.
+
+## 2026-08-26 (P1.5 settings UI provider selection)
+
+- Replaced the "实时认知卡片" Ollama fields in `components/SettingsModal.tsx` with a
+  `模型 Provider` selector (`llama.cpp` / `远端 API`).
+- Local fields (`llama-server 地址`, `本地模型路径`, `本地 API Key`) render only for `llama.cpp`;
+  remote fields (`远端 Base URL`, `远端模型`, `远端 API Key`) render only for `remote-api`.
+- Added an explicit note that remote requests send only minimum context (keyword and source
+  summary), never full audio or the complete transcript.
+- No visible "Ollama" label remains in the settings UI.
+- Updated `hooks/useContextCards.ts` to send all seven model-provider fields plus the search
+  provider/key to `/api/context-cards` (removed `ollamaBaseUrl`/`ollamaModel` from the payload).
+- Verification passed: `npm run lint`, `npx tsc --noEmit`, and `npm run build`.
+- `rg -n "Ollama|ollama" components/SettingsModal.tsx hooks/useContextCards.ts` returns no matches.
