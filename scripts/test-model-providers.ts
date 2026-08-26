@@ -469,12 +469,14 @@ function testDefaultSettings(): void {
   assert.equal(defaults.remoteApiApiKey, "");
 }
 
-function testSettingsMigration(): void {
+function testSettingsLoad(): void {
   const local = makeMemoryStorage();
   const session = makeMemoryStorage();
   local.setItem("cuemind_settings", JSON.stringify({
-    ollamaBaseUrl: "http://custom-host:11434",
-    ollamaModel: "custom-ollama-model",
+    llamaCppBaseUrl: "http://custom-llama:8082",
+    llamaCppModel: "custom-model.gguf",
+    remoteApiBaseUrl: "https://remote.example/v1",
+    remoteApiModel: "remote-model",
     searchProvider: "bing",
   }));
   local.setItem("cuemind_llama_cpp_api_key", "llama-secret");
@@ -482,16 +484,12 @@ function testSettingsMigration(): void {
   withBrowserGlobals(local, session, () => {
     const settings = loadCueMindSettings();
     assert.equal(settings.modelProvider, "llama.cpp");
-    assert.equal(settings.llamaCppBaseUrl, "http://custom-host:11434");
-    assert.equal(settings.llamaCppModel, "custom-ollama-model");
+    assert.equal(settings.llamaCppBaseUrl, "http://custom-llama:8082");
+    assert.equal(settings.llamaCppModel, "custom-model.gguf");
+    assert.equal(settings.remoteApiBaseUrl, "https://remote.example/v1");
+    assert.equal(settings.remoteApiModel, "remote-model");
     assert.equal(settings.searchProvider, "bing");
     assert.equal(settings.llamaCppApiKey, "llama-secret");
-
-    const persisted = JSON.parse(local.getItem("cuemind_settings") ?? "{}") as Record<string, unknown>;
-    assert.equal("llamaCppApiKey" in persisted, false);
-    assert.equal("ollamaBaseUrl" in persisted, false);
-    assert.equal("ollamaModel" in persisted, false);
-    assert.equal(persisted.llamaCppBaseUrl, "http://custom-host:11434");
   });
 }
 
@@ -517,7 +515,7 @@ async function main(): Promise<void> {
   await testWrapperNoApiKeyLeak();
 
   testDefaultSettings();
-  testSettingsMigration();
+  testSettingsLoad();
 
   console.log("model provider regression tests passed");
 }

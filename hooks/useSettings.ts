@@ -20,11 +20,6 @@ import type { Settings } from "@/types/settings";
 const STORAGE_KEY = "cuemind_settings";
 const LEGACY_GROQ_KEY = "groq_api_key";
 
-// The shipped Ollama defaults are only used to decide whether a persisted legacy
-// value is a real user customization worth migrating, or the default we skip.
-const LEGACY_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-const LEGACY_OLLAMA_MODEL = "qwen2.5:3b";
-
 type SecretName = "groq" | "llamaCpp" | "remoteApi";
 
 const SECRET_KEYS: Record<SecretName, { local: string; session: string }> = {
@@ -66,17 +61,6 @@ function clearSecret(name: SecretName): void {
   memorySecrets[name] = "";
 }
 
-function migrateLegacyString(
-  legacy: unknown,
-  current: unknown,
-  legacyDefault: string,
-  fallback: string,
-): string {
-  if (typeof legacy === "string" && legacy.trim() && legacy !== legacyDefault) return legacy;
-  if (typeof current === "string" && current.trim()) return current;
-  return fallback;
-}
-
 export function getDefaultSettings(): Settings {
   return {
     groqApiKey: "",
@@ -100,8 +84,6 @@ export function getDefaultSettings(): Settings {
     remoteApiBaseUrl: "",
     remoteApiModel: "",
     remoteApiApiKey: "",
-    ollamaBaseUrl: LEGACY_OLLAMA_BASE_URL,
-    ollamaModel: LEGACY_OLLAMA_MODEL,
     searchProvider: "tavily",
     searchApiKey: "",
     contextCardCooldownSeconds: 20,
@@ -147,30 +129,25 @@ export function loadCueMindSettings(): Settings {
     localWhisperModelPath: typeof o.localWhisperModelPath === "string" ? o.localWhisperModelPath : defaults.localWhisperModelPath,
     localWhisperLanguage: o.localWhisperLanguage === "zh" || o.localWhisperLanguage === "en" ? o.localWhisperLanguage : "auto",
     modelProvider: o.modelProvider === "remote-api" ? "remote-api" : "llama.cpp",
-    llamaCppBaseUrl: migrateLegacyString(o.ollamaBaseUrl, o.llamaCppBaseUrl, LEGACY_OLLAMA_BASE_URL, defaults.llamaCppBaseUrl),
-    llamaCppModel: migrateLegacyString(o.ollamaModel, o.llamaCppModel, LEGACY_OLLAMA_MODEL, defaults.llamaCppModel),
+    llamaCppBaseUrl: typeof o.llamaCppBaseUrl === "string" ? o.llamaCppBaseUrl : defaults.llamaCppBaseUrl,
+    llamaCppModel: typeof o.llamaCppModel === "string" ? o.llamaCppModel : defaults.llamaCppModel,
     llamaCppApiKey: readSecret("llamaCpp", mode),
     remoteApiBaseUrl: typeof o.remoteApiBaseUrl === "string" ? o.remoteApiBaseUrl : defaults.remoteApiBaseUrl,
     remoteApiModel: typeof o.remoteApiModel === "string" ? o.remoteApiModel : defaults.remoteApiModel,
     remoteApiApiKey: readSecret("remoteApi", mode),
-    ollamaBaseUrl: typeof o.ollamaBaseUrl === "string" ? o.ollamaBaseUrl : defaults.ollamaBaseUrl,
-    ollamaModel: typeof o.ollamaModel === "string" ? o.ollamaModel : defaults.ollamaModel,
     searchProvider: o.searchProvider === "bing" || o.searchProvider === "serpapi" ? o.searchProvider : "tavily",
     searchApiKey: typeof o.searchApiKey === "string" ? o.searchApiKey : defaults.searchApiKey,
     contextCardCooldownSeconds: clampInt(o.contextCardCooldownSeconds, defaults.contextCardCooldownSeconds, 5, 300),
   };
 
   // One-time migration only: fold a legacy or embedded Groq key into the chosen
-  // store and strip the secret from the preferences blob. The ollama fields are
-  // folded into the llama.cpp fields above and dropped from the persisted blob.
-  // Later reads touch nothing unless a legacy field is still present.
+  // store and strip the secret from the preferences blob. Later reads touch
+  // nothing unless a legacy field is still present.
   if (legacyRaw !== null || "groqApiKey" in o) {
     if (!readSecret("groq", "local") && legacyKey.trim()) {
       writeSecret("groq", "local", legacyKey);
     }
     localStorage.removeItem(LEGACY_GROQ_KEY);
-    persistPreferences(settings);
-  } else if ("ollamaBaseUrl" in o || "ollamaModel" in o) {
     persistPreferences(settings);
   }
   return settings;
@@ -181,8 +158,6 @@ function persistPreferences(settings: Settings): void {
   delete preferences.groqApiKey;
   delete preferences.llamaCppApiKey;
   delete preferences.remoteApiApiKey;
-  delete preferences.ollamaBaseUrl;
-  delete preferences.ollamaModel;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
 }
 

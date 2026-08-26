@@ -219,3 +219,19 @@
   Search is intercepted offline via a `fetch` patch returning two deterministic sources.
 - Verification passed: `TMPDIR=/tmp npx tsx scripts/test-context-card-route.ts`, `npm run lint`,
   `npx tsc --noEmit`, and `npm run build`.
+
+## 2026-08-26 (P1.7 remove Ollama runtime semantics)
+
+- Deleted `lib/ollama.ts` (the legacy `/api/generate` adapter).
+- Removed the vestigial `ollamaBaseUrl`/`ollamaModel` fields from `types/settings.ts` and the one-time
+  Ollama migration from `hooks/useSettings.ts`; the `llama.cpp`/`remote-api` fields now read directly
+  from persisted preferences. This extends the P1.7 file boundary to `types/settings.ts` and
+  `hooks/useSettings.ts` because the no-Ollama gate covers the `hooks` and `types` directories.
+- Replaced the Ollama migration regression test in `scripts/test-model-providers.ts` with
+  `testSettingsLoad`, which verifies direct loading of the provider fields and separate secret storage.
+- Updated `README.md` and `docs/desktop-mvp.md` to describe local `llama.cpp` with an explicitly
+  configured OpenAI-compatible remote API as an alternative.
+- `rg -n "Ollama|ollama" app components hooks lib types README.md docs/desktop-mvp.md` returns no
+  matches. Historical design/plan/deployment/evaluation docs under `docs/plans/`,
+  `docs/deployment/`, and `docs/evaluation/` retain historical Ollama mentions per the plan's
+  "historical notes" allowance and the preserve-`docs/deployment/` constraint.

@@ -22,8 +22,6 @@ export interface Settings {
   remoteApiBaseUrl: string;
   remoteApiModel: string;
   remoteApiApiKey: string;
-  ollamaBaseUrl: string;
-  ollamaModel: string;
   searchProvider: "tavily" | "bing" | "serpapi";
   searchApiKey: string;
   contextCardCooldownSeconds: number;
