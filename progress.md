@@ -157,3 +157,16 @@
   content, no Authorization header for an empty key, and Bearer header for a non-empty key.
 - Verification passed: `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`,
   `npm run lint`, `npm run build`, and `git diff --check`.
+
+## 2026-08-26 (P1.3 provider wrappers)
+
+- Created `lib/llama-cpp.ts` (`generateLlamaCppJson`) and `lib/remote-api.ts`
+  (`generateRemoteApiJson`), both thin wrappers over the shared client.
+- Each wrapper only supplies provider identity and rejects an empty base URL or model with
+  a typed `model_unreachable` error before any network request.
+- No plugin registry or strategy pattern was introduced; local and remote differ only in
+  provider identity and configuration.
+- Extended `scripts/test-model-providers.ts` with wrapper success, provider-identity on
+  failure, empty-config rejection, and API-key non-leak checks.
+- Verification passed: `TMPDIR=/tmp npx tsx scripts/test-model-providers.ts`, `npx tsc --noEmit`,
+  `npm run lint`, `npm run build`, and `git diff --check`.

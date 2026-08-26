@@ -15,6 +15,8 @@ import {
   type ModelProviderErrorCode,
   type ModelProviderName,
 } from "@/lib/model-provider";
+import { generateLlamaCppJson } from "@/lib/llama-cpp";
+import { generateRemoteApiJson } from "@/lib/remote-api";
 import type { Settings } from "@/types/settings";
 
 const API_KEY = "test-api-key-must-not-leak";
@@ -329,6 +331,96 @@ async function testBearerHeaderForNonEmptyKey(): Promise<void> {
   assert.equal(authHeader, `Bearer ${BEARER_KEY}`);
 }
 
+// --- P1.3 provider wrappers ---
+
+async function testLlamaCppWrapperSuccess(): Promise<void> {
+  await withMockServer((_req, res) => {
+    writeJson(res, 200, chatCompletionBody({ keyword: "KV Cache" }));
+  }, async (baseUrl) => {
+    const result = await generateLlamaCppJson<{ keyword: string }>({
+      baseUrl,
+      model: "qwen3",
+      system: "s",
+      prompt: "p",
+      timeoutMs: 1_000,
+    });
+    assert.equal(result.keyword, "KV Cache");
+  });
+}
+
+async function testWrapperProviderIdentity(): Promise<void> {
+  await withMockServer((_req, res) => {
+    writeJson(res, 500, { error: { message: "server error" } });
+  }, async (baseUrl) => {
+    const args = { baseUrl, model: "m", system: "s", prompt: "p", timeoutMs: 1_000 };
+    await assert.rejects(
+      generateLlamaCppJson(args),
+      (error: unknown) =>
+        error instanceof ModelProviderError &&
+        error.provider === "llama.cpp" &&
+        error.code === "model_http_error" &&
+        error.status === 500,
+    );
+    await assert.rejects(
+      generateRemoteApiJson(args),
+      (error: unknown) =>
+        error instanceof ModelProviderError &&
+        error.provider === "remote-api" &&
+        error.code === "model_http_error" &&
+        error.status === 500,
+    );
+  });
+}
+
+async function testWrapperRejectsEmptyConfig(): Promise<void> {
+  await assert.rejects(
+    generateLlamaCppJson({ baseUrl: "", model: "m", system: "s", prompt: "p", timeoutMs: 1_000 }),
+    (error: unknown) =>
+      error instanceof ModelProviderError &&
+      error.provider === "llama.cpp" &&
+      error.code === "model_unreachable",
+  );
+  await assert.rejects(
+    generateLlamaCppJson({ baseUrl: "http://127.0.0.1:1", model: " ", system: "s", prompt: "p", timeoutMs: 1_000 }),
+    (error: unknown) =>
+      error instanceof ModelProviderError &&
+      error.provider === "llama.cpp" &&
+      error.code === "model_unreachable",
+  );
+  await assert.rejects(
+    generateRemoteApiJson({ baseUrl: "", model: "m", system: "s", prompt: "p", timeoutMs: 1_000 }),
+    (error: unknown) =>
+      error instanceof ModelProviderError &&
+      error.provider === "remote-api" &&
+      error.code === "model_unreachable",
+  );
+}
+
+async function testWrapperNoApiKeyLeak(): Promise<void> {
+  await withMockServer((_req, res) => {
+    writeJson(res, 200, { choices: [{ message: { content: "not-json" } }] });
+  }, async (baseUrl) => {
+    await assert.rejects(
+      generateRemoteApiJson({
+        baseUrl,
+        model: "m",
+        system: "s",
+        prompt: "p",
+        timeoutMs: 1_000,
+        apiKey: API_KEY,
+      }),
+      (error: unknown) => {
+        if (!(error instanceof ModelProviderError)) return false;
+        return (
+          error.code === "model_invalid_json" &&
+          error.message.includes(API_KEY) === false &&
+          JSON.stringify(error).includes(API_KEY) === false
+        );
+      },
+    );
+  });
+}
+
 async function main(): Promise<void> {
   testProviderNames();
   testErrorCodes();
@@ -344,6 +436,11 @@ async function main(): Promise<void> {
   await testMissingAssistantContent();
   await testNoAuthHeaderForEmptyKey();
   await testBearerHeaderForNonEmptyKey();
+
+  await testLlamaCppWrapperSuccess();
+  await testWrapperProviderIdentity();
+  await testWrapperRejectsEmptyConfig();
+  await testWrapperNoApiKeyLeak();
 
   console.log("model provider regression tests passed");
 }
