@@ -2,15 +2,27 @@ import {
   AgentReachSearchError,
   searchWithAgentReach,
 } from "@/lib/agent-reach-search";
+import { searchArxiv } from "@/lib/arxiv-search";
+import { searchGithub } from "@/lib/github-search";
+import { searchHackerNews } from "@/lib/hn-search";
+import { searchStackOverflow } from "@/lib/so-search";
+
+export type SearchResultSourceType =
+  | "arxiv"
+  | "hackernews"
+  | "github"
+  | "stackoverflow"
+  | "web";
 
 export interface SearchResult {
   title: string;
   url: string;
   snippet: string;
+  sourceType?: SearchResultSourceType;
 }
 
 export interface SearchExecution {
-  provider: "tavily" | "bing" | "serpapi" | "agent-reach";
+  provider: "tavily" | "bing" | "serpapi" | "agent-reach" | "vertical";
   fallbackUsed: boolean;
   results: SearchResult[];
 }
@@ -56,6 +68,118 @@ export async function searchWeb(args: {
   } finally {
     clearTimeout(timer);
   }
+}
+
+const VERTICAL_SEARCH_TIMEOUT_MS = 2_500;
+const DEFAULT_KEYWORD_TIMEOUT_MS = 4_000;
+const VERTICAL_MAX_RESULTS = 5;
+const VERTICAL_MIN_USABLE_RESULTS = 2;
+
+export interface SearchKeywordOutcome extends SearchExecution {
+  verticalHit: boolean;
+}
+
+// Two-level retrieval: four keyless vertical sources in parallel first (raw
+// keyword, 2.5s budget each); with >=2 usable results it short-circuits as
+// provider "vertical", otherwise it falls back to the existing Tavily ->
+// agent-reach chain with the current suffixed query.
+export async function searchKeywordSources(args: {
+  keyword: string;
+  tavilyApiKey?: string;
+  enableAgentReachFallback?: boolean;
+  timeoutMs?: number;
+}): Promise<SearchKeywordOutcome> {
+  const fallbackTimeoutMs = args.timeoutMs ?? DEFAULT_KEYWORD_TIMEOUT_MS;
+  const settled = await Promise.allSettled<SearchResult[]>([
+    withTimeout(
+      (signal) => searchArxiv(args.keyword, VERTICAL_SEARCH_TIMEOUT_MS, signal),
+      VERTICAL_SEARCH_TIMEOUT_MS,
+    ),
+    withTimeout(
+      (signal) => searchHackerNews(args.keyword, VERTICAL_SEARCH_TIMEOUT_MS, signal),
+      VERTICAL_SEARCH_TIMEOUT_MS,
+    ),
+    withTimeout(
+      (signal) => searchGithub(args.keyword, VERTICAL_SEARCH_TIMEOUT_MS, signal),
+      VERTICAL_SEARCH_TIMEOUT_MS,
+    ),
+    withTimeout(
+      (signal) => searchStackOverflow(args.keyword, VERTICAL_SEARCH_TIMEOUT_MS, signal),
+      VERTICAL_SEARCH_TIMEOUT_MS,
+    ),
+  ]);
+  const merged = settled.flatMap((outcome) => (outcome.status === "fulfilled" ? outcome.value : []));
+  const usable = collectUsableResults(merged);
+  if (usable.length >= VERTICAL_MIN_USABLE_RESULTS) {
+    return { provider: "vertical", fallbackUsed: false, results: usable, verticalHit: true };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), fallbackTimeoutMs);
+  try {
+    const execution = await searchTavilyWithFallback(
+      {
+        apiKey: args.tavilyApiKey ?? "",
+        query: `${args.keyword} technology explanation`,
+        timeoutMs: fallbackTimeoutMs,
+        enableAgentReachFallback: args.enableAgentReachFallback,
+      },
+      controller.signal,
+    );
+    return { ...execution, verticalHit: false };
+  } catch (caught) {
+    if (caught instanceof AgentReachSearchError) throw caught;
+    if (caught instanceof DOMException && caught.name === "AbortError") {
+      throw new Error(`Search timed out after ${fallbackTimeoutMs}ms`);
+    }
+    throw caught;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Bounded run: aborts the passed signal on deadline and rejects with a timeout
+// error, so a hung vertical source can never stall the parallel stage.
+async function withTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await run(controller.signal);
+  } catch (caught) {
+    if (timedOut) throw new Error(`Vertical source timed out after ${timeoutMs}ms`);
+    throw caught;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Dedupe/validate/cap without throwing, so the vertical stage can fall back to
+// Tavily on shortage instead of failing the whole pipeline.
+export function collectUsableResults(results: SearchResult[]): SearchResult[] {
+  const seenUrls = new Set<string>();
+  const usable: SearchResult[] = [];
+  for (const result of results) {
+    if (usable.length === VERTICAL_MAX_RESULTS) break;
+    if (!result || typeof result !== "object") continue;
+    const title = typeof result.title === "string" ? result.title.trim() : "";
+    const snippet = typeof result.snippet === "string" ? result.snippet.trim() : "";
+    const url = normalizeHttpUrl(result.url);
+    if (!title || !snippet || !url || seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    usable.push(
+      result.sourceType === undefined
+        ? { title, url, snippet }
+        : { title, url, snippet, sourceType: result.sourceType },
+    );
+  }
+  return usable;
 }
 
 async function searchTavilyWithFallback(
@@ -127,18 +251,7 @@ async function searchSerpApi(args: { apiKey: string; query: string }, signal: Ab
 }
 
 function ensureUsableResults(results: SearchResult[]): SearchResult[] {
-  const seenUrls = new Set<string>();
-  const usable: SearchResult[] = [];
-  for (const result of results) {
-    if (!result || typeof result !== "object") continue;
-    const title = typeof result.title === "string" ? result.title.trim() : "";
-    const snippet = typeof result.snippet === "string" ? result.snippet.trim() : "";
-    const url = normalizeHttpUrl(result.url);
-    if (!title || !snippet || !url || seenUrls.has(url)) continue;
-    seenUrls.add(url);
-    usable.push({ title, url, snippet });
-    if (usable.length === 5) break;
-  }
+  const usable = collectUsableResults(results);
   if (usable.length < 2) throw new InsufficientSearchSourcesError();
   return usable;
 }

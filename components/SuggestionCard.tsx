@@ -42,6 +42,21 @@ function typeLabel(type: Suggestion["type"]): string {
   return { question: "问题", talking_point: "观点", answer: "回答", fact_check: "核查", clarify: "澄清" }[type];
 }
 
+function sourceBadge(sourceType: ContextCard["sources"][number]["sourceType"]): string {
+  switch (sourceType) {
+    case "arxiv":
+      return "📄 论文";
+    case "hackernews":
+      return "💬 HN";
+    case "github":
+      return "📦 仓库";
+    case "stackoverflow":
+      return "❓ 问答";
+    default:
+      return "🌐 网页";
+  }
+}
+
 export default function SuggestionCard({
   suggestion,
   onSelect,
@@ -106,9 +121,12 @@ export function ContextCardView({ card }: ContextCardProps): ReactElement {
             href={source.url}
             target="_blank"
             rel="noreferrer"
-            className="truncate text-xs text-blue-300 underline decoration-blue-900 underline-offset-2 hover:text-blue-200"
+            className="flex items-center gap-1.5 truncate text-xs text-blue-300 underline decoration-blue-900 underline-offset-2 hover:text-blue-200"
           >
-            {source.title}
+            <span className="shrink-0 rounded border border-blue-800 px-1 py-0.5 text-[10px] text-blue-300">
+              {sourceBadge(source.sourceType)}
+            </span>
+            <span className="truncate">{source.title}</span>
           </a>
         ))}
       </div>

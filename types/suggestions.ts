@@ -24,6 +24,7 @@ export interface ContextCardSource {
   title: string;
   url: string;
   snippet: string;
+  sourceType?: "arxiv" | "hackernews" | "github" | "stackoverflow" | "web";
 }
 
 export interface ContextCardDemoTrace {

@@ -108,6 +108,17 @@ function installSearchMock(): void {
         ],
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
+    // Vertical-first pipeline: keep the four keyless sources empty so these
+    // tests exercise the Tavily / agent-reach fallback chain deterministically.
+    if (url.includes("export.arxiv.org")) {
+      return new Response('<feed xmlns="http://www.w3.org/2005/Atom"></feed>', { status: 200 });
+    }
+    if (url.includes("hn.algolia.com")) {
+      return new Response(JSON.stringify({ hits: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.includes("api.github.com") || url.includes("api.stackexchange.com")) {
+      return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
     return realFetch(input, init);
   }) as typeof fetch;
 }
@@ -317,7 +328,7 @@ async function testSearchFailureAfterKeyword(): Promise<void> {
   });
   try {
     const response = await POST(makeRequest(baseBody({
-      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3", searchProvider: "bing", searchApiKey: "" }),
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3", searchProvider: "bing", searchApiKey: "", enableAgentReachFallback: false }),
     })));
     const payload = await readPayload(response);
     assert.equal(payload.card, null);
