@@ -224,6 +224,7 @@ export default function Home(): ReactElement {
             <MediaUploadPanel
               isProcessing={uploader.isProcessing}
               progress={uploader.progress}
+              transcribeProgress={uploader.transcribeProgress}
               processingFileName={uploader.processingFileName}
               uploadedFiles={uploader.uploadedFiles}
               error={uploader.error}

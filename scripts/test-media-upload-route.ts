@@ -6,15 +6,32 @@
 
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   assertUploadSize,
   handleUploadMedia,
   MAX_UPLOAD_BYTES,
+  STREAM_WINDOW_MS,
+  processUploadStreaming,
 } from "@/lib/upload-media";
-import type { UploadMediaErrorPayload, UploadMediaSuccessPayload } from "@/lib/upload-media";
+import type {
+  StreamDoneEvent,
+  UploadMediaErrorPayload,
+  UploadMediaSuccessPayload,
+  UploadStreamEvent,
+  WindowResultEvent,
+} from "@/lib/upload-media";
 import { MediaConvertError } from "@/lib/local-asr";
 import type { LocalAsrSegment } from "@/lib/local-asr";
+import {
+  buildWavHeader,
+  parseWavPcm16kMono,
+  sliceWavToWindowBuffers,
+  sliceWavToWindowFiles,
+  WAV_BYTES_PER_MS,
+} from "@/lib/wav-slice";
 
 // Minimal fake conversion stage used by non-happy-path cases.
 const STUB_PROCESS_AUDIO = async (
@@ -183,6 +200,263 @@ async function testConverterErrorMapping(): Promise<void> {
   assert.match(genericPayload.error ?? "", /timed out/);
 }
 
+// ---------------------------------------------------------------------------
+// Streaming pipeline + wav-slice helpers
+// ---------------------------------------------------------------------------
+
+function buildWavBuffer(durationMs: number, sampleRate = 16_000): Buffer {
+  const dataBytes = Math.floor(durationMs * (sampleRate * 2) / 1000);
+  const buffer = Buffer.alloc(44 + dataBytes);
+  buffer.write("RIFF", 0, "ascii");
+  buffer.writeUInt32LE(36 + dataBytes, 4);
+  buffer.write("WAVE", 8, "ascii");
+  buffer.write("fmt ", 12, "ascii");
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36, "ascii");
+  buffer.writeUInt32LE(dataBytes, 40);
+  return buffer;
+}
+
+function createWavFile(durationMs: number, name: string): File {
+  const fileConstructor = globalThis.File;
+  if (typeof fileConstructor !== "function") {
+    throw new Error("Runtime lacks a File constructor (Node >= 20 required)");
+  }
+  const wav = buildWavBuffer(durationMs);
+  return new fileConstructor([new Uint8Array(wav)], name, { type: "video/mp4" });
+}
+
+function buildStreamingForm(file: File): FormData {
+  const form = new FormData();
+  form.append("media", file);
+  form.append("whisperPath", "/opt/fake-whisper");
+  form.append("whisperModelPath", "/models/fake-small.bin");
+  form.append("uploadId", "stream-upload-1");
+  form.append("stream", "1");
+  return form;
+}
+
+/** processAudio 注入：把指定时长的合法 16kHz WAV 写到 outputWavPath。 */
+function fakeProcessAudioWritingWav(
+  durationMs: number,
+): NonNullable<Parameters<typeof processUploadStreaming>[1]>["processAudio"] {
+  return async (_inputPath, outputWavPath) => {
+    await writeFile(outputWavPath, buildWavBuffer(durationMs));
+    return { wavPath: outputWavPath, originalDurationMs: durationMs };
+  };
+}
+
+async function collectStreamEvents(form: FormData, overrides?: Parameters<typeof processUploadStreaming>[1]): Promise<UploadStreamEvent[]> {
+  const events: UploadStreamEvent[] = [];
+  for await (const event of processUploadStreaming(form, overrides)) {
+    events.push(event);
+  }
+  return events;
+}
+
+function filterWindows(events: UploadStreamEvent[]): WindowResultEvent[] {
+  return events.filter((event): event is WindowResultEvent => event.type === "window");
+}
+
+function filterDone(events: UploadStreamEvent[]): StreamDoneEvent[] {
+  return events.filter((event): event is StreamDoneEvent => event.type === "done");
+}
+
+async function testStreamingWindowsAndDone(): Promise<void> {
+  // 150s → ceil(150/60) = 3 窗（60/60/30，奇数尾窗）。
+  const totalDurationMs = 150_000;
+  const uploadId = "stream-upload-1";
+  const transcribeCalls: string[] = [];
+
+  const form = buildStreamingForm(createWavFile(totalDurationMs, "lecture.mp4"));
+  const events = await collectStreamEvents(form, {
+    processAudio: fakeProcessAudioWritingWav(totalDurationMs),
+    transcribe: async (wavPath) => {
+      transcribeCalls.push(wavPath);
+      const windowIndex = transcribeCalls.length - 1;
+      return {
+        segments: [
+          { startMs: 500, endMs: 1500, text: `窗${windowIndex}文本` },
+          // 应被跳过的噪音段：外语占位符与纯标点空白。
+          { startMs: 2000, endMs: 2100, text: "(speaking in foreign language)" },
+          { startMs: 2200, endMs: 2300, text: "，。！？ " },
+        ] satisfies LocalAsrSegment[],
+      };
+    },
+  });
+
+  const windowEvents = filterWindows(events);
+  const doneEvents = filterDone(events);
+
+  assert.equal(doneEvents.length, 1, "exactly one done event is required");
+  assert.equal(windowEvents.length, Math.ceil(totalDurationMs / STREAM_WINDOW_MS), "window count must match duration division");
+  assert.equal(events[events.length - 1].type, "done", "done must be the final event");
+  assert.deepEqual(transcribeCalls.length, windowEvents.length, "transcribe must run once per window, sequentially");
+
+  // 每窗事件断言：windowIndex/totalWindows/offset 时间戳/audioChunkId w 标记/空段过滤。
+  windowEvents.forEach((event, index) => {
+    assert.equal(event.uploadId, uploadId);
+    assert.equal(event.windowIndex, index, "window indexes must be sequential from 0");
+    assert.equal(event.totalWindows, windowEvents.length);
+    assert.equal(event.chunks.length, 1, "noise segments must be filtered per window");
+    const chunk = event.chunks[0];
+    assert.deepEqual(chunk, {
+      startMs: index * STREAM_WINDOW_MS + 500,
+      endMs: index * STREAM_WINDOW_MS + 1500,
+      text: `窗${index}文本`,
+      audioChunkId: `${uploadId}-w${index}-0`,
+      source: "upload",
+    });
+    assert.match(chunk.audioChunkId, new RegExp(`-w${index}-`), "audioChunkId must carry the w<window> marker");
+  });
+
+  const done = doneEvents[0];
+  assert.equal(done.uploadId, uploadId);
+  assert.equal(done.fileName, "lecture.mp4");
+  assert.equal(done.originalDurationMs, totalDurationMs);
+  assert.equal(done.segmentCount, windowEvents.reduce((sum, event) => sum + event.chunks.length, 0), "segmentCount must accumulate every yielded chunk");
+
+  assert.equal(countUploadTempDirs(), 0, "no cuemind-upload-* temp dir may survive a streaming request");
+}
+
+async function testStreamingSingleWindowPassthrough(): Promise<void> {
+  const form = buildStreamingForm(createWavFile(30_000, "short-clip.mp4"));
+  const events = await collectStreamEvents(form, {
+    processAudio: fakeProcessAudioWritingWav(30_000),
+    transcribe: async () => ({ segments: [{ startMs: 0, endMs: 4000, text: "唯一窗口" }] }),
+  });
+
+  const windowEvents = filterWindows(events);
+  assert.equal(windowEvents.length, 1, "duration ≤ one window must yield exactly one window event");
+  assert.equal(windowEvents[0].totalWindows, 1);
+  assert.equal(windowEvents[0].chunks[0].startMs, 0, "single passthrough window must not be offset");
+  const doneEvents = filterDone(events);
+  assert.equal(doneEvents.length, 1, "done event required");
+  assert.equal(doneEvents[0].segmentCount, 1);
+  assert.equal(countUploadTempDirs(), 0);
+}
+
+async function testStreamingErrorPropagation(): Promise<void> {
+  const ffmpegFailureForm = buildStreamingForm(createTestFile(64, "broken.mp4", "video/mp4"));
+  await assert.rejects(
+    collectStreamEvents(ffmpegFailureForm, {
+      processAudio: async () => {
+        throw new MediaConvertError("ffmpeg_not_found", 'ffmpeg executable was not found ("ffmpeg").');
+      },
+      transcribe: STUB_TRANSCRIBE,
+    }),
+    (caught: unknown) =>
+      caught instanceof MediaConvertError
+      && caught.code === "ffmpeg_not_found",
+    "generator must propagate converter errors to the route wrapper",
+  );
+
+  // 非法 WAV 结构：切片阶段必须抛 ffmpeg_failed 类错误。
+  const invalidWavForm = buildStreamingForm(createTestFile(64, "garbage.mp4", "video/mp4"));
+  await assert.rejects(
+    collectStreamEvents(invalidWavForm, {
+      processAudio: async (_inputPath, outputWavPath) => {
+        const fs = await import("node:fs/promises");
+        await fs.writeFile(outputWavPath, Buffer.from("definitely-not-a-wav-file"));
+        return { wavPath: outputWavPath, originalDurationMs: null };
+      },
+      transcribe: STUB_TRANSCRIBE,
+    }),
+    (caught: unknown) =>
+      caught instanceof MediaConvertError
+      && caught.code === "ffmpeg_failed"
+      && /invalid WAV/i.test(caught.message),
+    "structurally invalid WAV must fail slicing with ffmpeg_failed",
+  );
+  assert.equal(countUploadTempDirs(), 0, "temp dirs must still be cleaned after streaming failures");
+}
+
+async function testSliceBuffersMultiWindow(): Promise<void> {
+  const bytesPerWindow = STREAM_WINDOW_MS * WAV_BYTES_PER_MS;
+
+  // 奇数尾部窗：61s → [60s 全窗, 1s 尾窗]。
+  const oddTail = sliceWavToWindowBuffers(buildWavBuffer(61_000), STREAM_WINDOW_MS);
+  assert.equal(oddTail.length, 2);
+  assert.equal(oddTail[0].length, 44 + bytesPerWindow);
+  // 尾窗 data 字节数精确推导：61000ms×32B/ms − 1920000 = 32000。
+  const expectedTailDataBytes = 61_000 * WAV_BYTES_PER_MS - bytesPerWindow;
+  assert.equal(oddTail[1].length, 44 + expectedTailDataBytes);
+
+  // 边界窗：120s 恰好整除 → 2 个满窗，无零长窗。
+  const exactBoundary = sliceWavToWindowBuffers(buildWavBuffer(2 * STREAM_WINDOW_MS), STREAM_WINDOW_MS);
+  assert.equal(exactBoundary.length, 2);
+  for (const window of exactBoundary) {
+    assert.equal(window.length, 44 + bytesPerWindow);
+    const parsed = parseWavPcm16kMono(window);
+    assert.equal(parsed.durationMs, STREAM_WINDOW_MS);
+  }
+
+  // 内容完整性：首窗 payload 必须等于原数据前 60s 的字节。
+  const source = buildWavBuffer(90_000);
+  const sliced = sliceWavToWindowBuffers(source, STREAM_WINDOW_MS);
+  const parsedSource = parseWavPcm16kMono(source);
+  assert.equal(sliced.length, 2);
+  assert.deepEqual(sliced[0].subarray(44), source.subarray(parsedSource.dataOffset, parsedSource.dataOffset + bytesPerWindow));
+  assert.deepEqual(sliced[1].subarray(44), source.subarray(parsedSource.dataOffset + bytesPerWindow, parsedSource.dataOffset + parsedSource.dataLength));
+
+  // 单窗直通：30s ≤ 60s → 原样返回同一引用，不重写头。
+  const short = buildWavBuffer(30_000);
+  const passthrough = sliceWavToWindowBuffers(short, STREAM_WINDOW_MS);
+  assert.equal(passthrough.length, 1);
+  assert.equal(passthrough[0], short, "sub-window content must pass through untouched");
+}
+
+async function testSliceFilesRoundTrip(): Promise<void> {
+  const workDir = await mkdtemp(join(tmpdir(), "cuemind-wav-slice-test-"));
+  try {
+    // 多窗：写出独立合法 WAV 文件。
+    const bigWavPath = join(workDir, "big.wav");
+    await writeFile(bigWavPath, buildWavBuffer(90_000));
+    const windows = await sliceWavToWindowFiles(bigWavPath, STREAM_WINDOW_MS, workDir);
+    assert.equal(windows.length, 2);
+    assert.notEqual(windows[0], bigWavPath, "multi-window runs must write separate files");
+    for (const windowPath of windows) {
+      const parsed = parseWavPcm16kMono(await readFile(windowPath));
+      assert.ok(parsed.durationMs <= STREAM_WINDOW_MS && parsed.durationMs > 0);
+    }
+    const tailParsed = parseWavPcm16kMono(await readFile(windows[1]));
+    assert.equal(tailParsed.durationMs, 30_000, "odd tail window keeps its real duration");
+
+    // 直通：单窗内容返回原路径且不产生新文件。
+    const smallWavPath = join(workDir, "small.wav");
+    await writeFile(smallWavPath, buildWavBuffer(45_000));
+    const passthrough = await sliceWavToWindowFiles(smallWavPath, STREAM_WINDOW_MS, workDir);
+    assert.deepEqual(passthrough, [smallWavPath]);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
+async function testSliceRejectsInvalidStructure(): Promise<void> {
+  assert.throws(
+    () => parseWavPcm16kMono(Buffer.from("RIFFxxxxWAVEjunk")),
+    (caught: unknown) => caught instanceof MediaConvertError && caught.code === "ffmpeg_failed",
+    "missing fmt/data chunks must fail as ffmpeg_failed",
+  );
+  // 采样率不符（8kHz）必须拒绝 —— 本管道只接受 16kHz mono s16。
+  assert.throws(
+    () => parseWavPcm16kMono(buildWavBuffer(1000, 8000)),
+    (caught: unknown) => caught instanceof MediaConvertError && caught.code === "ffmpeg_failed",
+    "non-16kHz input must be rejected",
+  );
+
+  // 语法完整性哨兵：确认 header 构建器与解析器自洽。
+  const roundTrip = parseWavPcm16kMono(Buffer.concat([buildWavHeader(2000), Buffer.alloc(2000)]));
+  assert.equal(roundTrip.durationMs, 62); // 2000 / 32 ≈ 62ms
+}
+
+
 async function runCase(name: string, action: () => Promise<void>): Promise<void> {
   try {
     await action();
@@ -201,6 +475,12 @@ async function main(): Promise<void> {
   await runCase("non-whitelisted extension yields 415 unsupported_format", () => testUnsupportedFormatRejected());
   await runCase("missing required fields yields 400", () => testMissingFieldsRejected());
   await runCase("converter/whisper errors map to correct statuses", () => testConverterErrorMapping());
+  await runCase("streaming pipeline yields per-window events then done", () => testStreamingWindowsAndDone());
+  await runCase("streaming passthrough for sub-window media", () => testStreamingSingleWindowPassthrough());
+  await runCase("streaming errors propagate as thrown failures", () => testStreamingErrorPropagation());
+  await runCase("wav buffer slicing splits boundary/odd-tail windows and passes through shorts", () => testSliceBuffersMultiWindow());
+  await runCase("wav file slicing writes valid standalone window files", () => testSliceFilesRoundTrip());
+  await runCase("wav parser rejects invalid structures", () => testSliceRejectsInvalidStructure());
   console.log("media upload route regression tests passed");
 }
 

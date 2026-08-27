@@ -14,6 +14,7 @@ import {
   transcribeWithWhisperCpp,
 } from "@/lib/local-asr";
 import type { ConvertMediaOptions, LocalAsrSegment } from "@/lib/local-asr";
+import { sliceWavToWindowFiles } from "@/lib/wav-slice";
 
 /** Hard upload cap: 2048MB, enforced both by header pre-check and post-parse File.size. */
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
@@ -269,4 +270,154 @@ function fail(message: string): ParseOutcome {
     ok: false,
     response: NextResponse.json({ error: message }, { status: 400 }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Streaming pipeline (opt-in via FormData field stream=1 in the route).
+// Converts the media once, slices the resulting WAV into fixed windows and
+// yields one event per transcribed window so the client can render progress
+// incrementally. The legacy handleUploadMedia above stays untouched for
+// old clients / existing regression tests.
+// ---------------------------------------------------------------------------
+
+/** Transcription window length for the streaming pipeline. */
+export const STREAM_WINDOW_MS = 60_000;
+
+export interface WindowResultEvent {
+  type: "window";
+  uploadId: string;
+  /** Zero-based window index. */
+  windowIndex: number;
+  /** Predicted total number of windows, null when unknowable up front. */
+  totalWindows: number | null;
+  chunks: UploadedMediaChunk[];
+}
+
+export interface StreamDoneEvent {
+  type: "done";
+  uploadId: string;
+  fileName: string;
+  originalDurationMs: number | null;
+  segmentCount: number;
+}
+
+export interface StreamErrorEvent {
+  type: "error";
+  message: string;
+  code?: string;
+}
+
+export type UploadStreamEvent = WindowResultEvent | StreamDoneEvent;
+
+export interface UploadStreamOptions extends UploadMediaOverrides {
+  /**
+   * Aborting stops scheduling further transcription windows; the generator's
+   * finally block then removes the temp directory with every window file.
+   */
+  signal?: AbortSignal;
+}
+
+/** Error carrying an optional machine-readable code, rethrown through the route into a StreamErrorEvent. */
+export class UploadStreamFailure extends Error {
+  readonly code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "UploadStreamFailure";
+    this.code = code;
+  }
+}
+
+/** whisper.cpp sometimes emits this placeholder segment instead of real text; treat it as silence. */
+const FOREIGN_LANGUAGE_PLACEHOLDER = "(speaking in foreign language)";
+
+function isSkippableSegmentText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed === FOREIGN_LANGUAGE_PLACEHOLDER) return true;
+  // Punctuation/whitespace-only segments carry no content — drop them.
+  return !/\p{L}|\p{N}/u.test(trimmed);
+}
+
+async function failureFromResponse(
+  response: NextResponse<UploadMediaErrorPayload>,
+): Promise<UploadStreamFailure> {
+  const payload = await response.json() as UploadMediaErrorPayload;
+  return new UploadStreamFailure(payload.error ?? "Upload rejected", payload.code);
+}
+
+/**
+ * Streaming counterpart of handleUploadMedia: same validation chain (field
+ * parsing, size guard), same dependency seams (processAudio / transcribe), but
+ * yields one WindowResultEvent per finished whisper window followed by one
+ * StreamDoneEvent. Validation or processing failures are thrown; the route is
+ * expected to translate thrown errors into a terminal StreamErrorEvent.
+ */
+export async function* processUploadStreaming(
+  formData: FormData,
+  overrides?: UploadStreamOptions,
+): AsyncGenerator<UploadStreamEvent> {
+  const parsed = parseUploadFields(formData);
+  if (!parsed.ok) throw await failureFromResponse(parsed.response);
+
+  const fields = parsed.fields;
+
+  // Second size check with the actual parsed byte count (mirrors the JSON path).
+  const oversizeByFileSize = assertUploadSize(fields.file.size);
+  if (oversizeByFileSize) throw await failureFromResponse(oversizeByFileSize);
+
+  const processAudio = overrides?.processAudio ?? defaultProcessAudio;
+  const transcribe = overrides?.transcribe ?? defaultTranscribe(fields);
+
+  const tempDir = await mkdtemp(join(tmpdir(), TEMP_DIR_PREFIX));
+  try {
+    const extension = getFileExtension(fields.file.name);
+    const inputPath = join(tempDir, `${randomUUID()}${extension ? `.${extension}` : ""}`);
+    await writeFile(inputPath, Buffer.from(await fields.file.arrayBuffer()));
+
+    const wavOutputPath = join(tempDir, "media-16k.wav");
+    const converted = await processAudio(inputPath, wavOutputPath, {
+      ffmpegPath: fields.ffmpegPath,
+    });
+    const wavPath = converted.wavPath || wavOutputPath;
+
+    // ≤ single window → passthrough without slicing (one standalone event either way).
+    const windowFiles = await sliceWavToWindowFiles(wavPath, STREAM_WINDOW_MS, tempDir);
+
+    let segmentCount = 0;
+    for (const [windowIndex, windowFile] of windowFiles.entries()) {
+      if (overrides?.signal?.aborted) return;
+      const transcription = await transcribe(windowFile);
+      if (overrides?.signal?.aborted) return;
+
+      const offsetMs = windowIndex * STREAM_WINDOW_MS;
+      const chunks = (transcription.segments ?? [])
+        .map((segment, index): UploadedMediaChunk => ({
+          startMs: offsetMs + segment.startMs,
+          endMs: offsetMs + segment.endMs,
+          text: segment.text.trim(),
+          audioChunkId: `${fields.uploadId}-w${windowIndex}-${index}`,
+          source: "upload" as const,
+        }))
+        .filter((chunk) => !isSkippableSegmentText(chunk.text));
+
+      segmentCount += chunks.length;
+      yield {
+        type: "window",
+        uploadId: fields.uploadId,
+        windowIndex,
+        totalWindows: windowFiles.length,
+        chunks,
+      };
+    }
+
+    yield {
+      type: "done",
+      uploadId: fields.uploadId,
+      fileName: fields.file.name,
+      originalDurationMs: converted.originalDurationMs ?? null,
+      segmentCount,
+    };
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }

@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState, type ReactElement } from "react";
-import type { UploadedFileRecord } from "@/hooks/useMediaUploader";
+import { isUploadedRecordCompleted } from "@/hooks/useMediaUploader";
+import type { TranscribeProgressSnapshot, UploadedFileRecord } from "@/hooks/useMediaUploader";
 
 interface Props {
   isProcessing: boolean;
   progress: number | null;
+  transcribeProgress?: TranscribeProgressSnapshot | null;
   processingFileName: string | null;
   uploadedFiles: UploadedFileRecord[];
   error: string | null;
@@ -14,7 +16,13 @@ interface Props {
   onClearError: () => void;
 }
 
-export default function MediaUploadPanel({ isProcessing, progress, processingFileName, uploadedFiles, error, onSelectFiles, onClearError }: Props): ReactElement {
+function formatTranscribeProgress(snapshot: TranscribeProgressSnapshot): string {
+  return snapshot.total !== null
+    ? `正在本地转写 第${snapshot.received}/${snapshot.total}窗…`
+    : `正在本地转写 第${snapshot.received}窗…`;
+}
+
+export default function MediaUploadPanel({ isProcessing, progress, transcribeProgress, processingFileName, uploadedFiles, error, onSelectFiles, onClearError }: Props): ReactElement {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -63,6 +71,11 @@ export default function MediaUploadPanel({ isProcessing, progress, processingFil
             <p className="text-xs text-blue-300">上传 {processingFileName ?? ""}… {progress}%</p>
             <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-800"><div className="h-full bg-blue-500 transition-[width]" style={{ width: `${progress}%` }} /></div>
           </div>
+        ) : transcribeProgress ? (
+          <div className="flex flex-col gap-1">
+            <p className="text-xs text-blue-300">{formatTranscribeProgress(transcribeProgress)}</p>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-800"><div className="h-full w-full animate-pulse rounded-full bg-blue-500/50" /></div>
+          </div>
         ) : (
           <div className="flex flex-col gap-1">
             <p className="text-xs text-blue-300">正在本地转写 {processingFileName ?? ""}，请耐心等待…</p>
@@ -77,11 +90,15 @@ export default function MediaUploadPanel({ isProcessing, progress, processingFil
         </p>
       ) : null}
       <div className="flex flex-col">
-        <p className="mb-1 text-[10px] uppercase tracking-wider text-neutral-600">已完成 · {uploadedFiles.length}</p>
+        <p className="mb-1 text-[10px] uppercase tracking-wider text-neutral-600">已完成 · {uploadedFiles.filter(isUploadedRecordCompleted).length}</p>
         {uploadedFiles.map((file, index) => (
           <div key={file.uploadId} className={`flex items-center justify-between gap-2 py-2 text-xs ${index ? "border-t border-neutral-800" : ""}`}>
             <span className="min-w-0 truncate text-neutral-300">{file.fileName}</span>
-            <span className="shrink-0 text-[10px] text-neutral-500">{file.segmentCount} 条 · {file.completedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+            {isUploadedRecordCompleted(file) ? (
+              <span className="shrink-0 text-[10px] text-neutral-500">{file.segmentCount} 条 · {file.completedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+            ) : (
+              <span className="shrink-0 animate-pulse text-[10px] text-blue-400">已收 {file.receivedSegments ?? 0} 条 · 转写中…</span>
+            )}
           </div>
         ))}
         {uploadedFiles.length === 0 ? <p className="py-2 text-xs text-neutral-600">还没有处理完成的文件。</p> : null}
