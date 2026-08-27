@@ -1,3 +1,5 @@
+> ⚠️ 弃用说明（2026-08-27）：Milvus 检索路径已从项目门禁与实时链路中整体移除，本报告仅作历史证据保留。
+
 # CueMind Milvus Retrieval Evaluation Report
 
 - Dataset: `milvus-retrieval-v1`

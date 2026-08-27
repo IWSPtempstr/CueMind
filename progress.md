@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-08-27 Milvus 移除决策
+
+- 删除文件清单：`types/knowledge.ts`、`lib/milvus-retrieval.ts`、`lib/knowledge-embeddings.ts`、`scripts/ingest-milvus.ts`、`scripts/evaluate-milvus-retrieval.ts`、`fixtures/knowledge-documents-v1.json`、`fixtures/milvus-retrieval-v1.json`。
+- 端到端评估门禁（`scripts/evaluate-end-to-end.ts`）不再包含 Milvus：移除 `DEFAULT_MILVUS_REPORT`、`milvusReportDir`、`milvusScorecard`、阻塞项 `Milvus_realtime_retrieval`、release gate 中的 `milvusIsComplete`，以及 scorecard/manifest 的 `milvusEvidence` 字段与 Markdown 报告中的 `- Milvus evidence:` 行。`scripts/test-end-to-end-evaluator.ts` 同步移除 `MILVUS_REPORT_DIR` 注入；`scripts/evaluate-context-cards.ts` 的 searchPath 枚举与 evidenceBoundary 描述中不再包含 Milvus。
+- 理由：实时路由从未 import milvus 模块，该路径属死代码；历史评估证据保留即可。
+- `.env` 中 `MILVUS_*` / `EMBEDDING_API_*` 变量由用户自行清理。
+- 历史报告 `reports/milvus-retrieval-evaluation/report.md` 顶部加弃用标记后保留。
+
 ## 2026-08-27 Priority Repairs
 
 - Priority 1 completed: normalized legacy context-card evaluator decisions (`generate_card`, `skip`, `schema_failed`) into the current terminal-state vocabulary before aggregation. Added `scripts/test-end-to-end-evaluator.ts`; RED reproduced `cardCount=0` for a legacy generated card, and GREEN verified `card_shown=3` for the formal fixed-snapshot report without changing live-evidence boundaries.

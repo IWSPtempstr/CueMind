@@ -67,7 +67,7 @@ CueMind Desktop is a Windows meeting cognition assistant. It listens to default 
 - Electron/NSIS packaging and packaged startup.
 - Live search behavior and live-search provider availability.
 - Knowledge persistence across meetings.
-- Milvus realtime operation and production ingestion/embedding behavior.
+- Knowledge/vector retrieval (formerly Milvus): removed entirely by decision on 2026-08-27; no longer an unverified gap. The deprecated historical report remains under `reports/milvus-retrieval-evaluation/`.
 - Training, Judge evaluation, feedback learning, and learned suppression.
 - Production SLA, scale, reliability, and accuracy claims.
 

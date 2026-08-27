@@ -47,7 +47,7 @@ interface CaseResult {
   tags: string[];
   expectedDecision: ExpectedDecision;
   actualDecision: ExpectedDecision;
-  searchPath: "tavily" | "agent-reach" | "milvus" | "mixed" | "failure" | "none";
+  searchPath: "tavily" | "agent-reach" | "mixed" | "failure" | "none";
   keyword: string | null;
   keywordRelevant: boolean | null;
   sourceCount: number;
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     datasetVersion: fixture.version,
     datasetSource: fixture.source,
     caseCount: fixture.cases.length,
-    searchPaths: ["tavily", "agent-reach", "milvus", "mixed", "failure", "none"],
+    searchPaths: ["tavily", "agent-reach", "mixed", "failure", "none"],
     promptVersion: "context-card-prompt-v1",
     executionMode: mode,
     provider: mode === "live" ? provider : null,
@@ -380,7 +380,7 @@ function summarize(fixture: FixtureFile, results: CaseResult[]): Scorecard {
         "keyword relevance: expected keyword or a transcript-supported equivalent must be present",
       ],
     },
-    evidenceBoundary: "Synthetic fixed-source protocol evidence only. This run does not exercise Tavily, agent-reach, Milvus, a model provider, real card generation, or production latency.",
+    evidenceBoundary: "Synthetic fixed-source protocol evidence only. This run does not exercise Tavily, agent-reach, a model provider, real card generation, or production latency.",
   };
 }
 

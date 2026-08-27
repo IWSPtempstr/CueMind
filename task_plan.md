@@ -5,7 +5,7 @@
 - [x] Priority 1: normalize legacy evaluator terminal states so fixed-snapshot `generate_card` cases count as `card_shown`.
 - [x] Priority 2: split live runtime blocking dependency labels.
 - [x] Priority 3: harden search source validation, Tavily transient-error fallback, and agent-reach typed failures.
-- [ ] Priority 4: clarify Milvus contract verification versus retrieval quality.
+- [x] Priority 4: clarify Milvus contract verification versus retrieval quality.（已完成：Milvus 路径整体移除，不再出现在实时链路与评估门禁中。）
 - [x] Schema/provider step 1: add typed raw-response failure classification without changing card schema or route behavior.
 
 ## 2026-08-27 Minimal Demo Plan
@@ -24,7 +24,7 @@
   - [x] Task 8: final verification and phase-end cleanup audit.
 
 Plan artifact: `docs/plans/2026-08-27-cuemind-demo-implementation-plan.md`
-Current status: Tasks 1-8 complete; Priority 3 search-tool repair complete; Priority 4 pending. Human review is required for the blocked live gates.
+Current status: Tasks 1-8 complete; Priority 3 search-tool repair complete; Priority 4 complete (Milvus 路径已整体移除). Human review is required for the blocked live gates.
 
 Provider contract repair status: step 1 complete; real provider response capture remains unverified.
 

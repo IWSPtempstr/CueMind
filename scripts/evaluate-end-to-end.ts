@@ -3,7 +3,6 @@ import { dirname, resolve } from "node:path";
 
 const DEFAULT_CONTEXT_REPORT = "reports/context-card-evaluation";
 const DEFAULT_PROVIDER_REPORT = "reports/provider-evaluation";
-const DEFAULT_MILVUS_REPORT = "reports/milvus-retrieval-evaluation";
 const DEFAULT_REPLAY_REPORT = "reports/replay";
 const DEFAULT_OUTPUT = "reports/end-to-end-evaluation";
 type JsonObject = Record<string, unknown>;
@@ -23,7 +22,6 @@ async function main(): Promise<void> {
   const outputDir = resolve(process.env.E2E_OUTPUT_DIR ?? DEFAULT_OUTPUT);
   const contextReportDir = resolve(process.env.CONTEXT_CARD_REPORT_DIR ?? DEFAULT_CONTEXT_REPORT);
   const providerReportDir = resolve(process.env.PROVIDER_REPORT_DIR ?? DEFAULT_PROVIDER_REPORT);
-  const milvusReportDir = resolve(process.env.MILVUS_REPORT_DIR ?? DEFAULT_MILVUS_REPORT);
   const replayReportDir = resolve(process.env.REPLAY_REPORT_DIR ?? DEFAULT_REPLAY_REPORT);
   const demoManifest = await readJsonIfPresent(resolve("fixtures/demo-meeting/demo-manifest.json"));
   const contextManifest = await readJsonIfPresent(`${contextReportDir}/manifest.json`);
@@ -32,7 +30,6 @@ async function main(): Promise<void> {
   const replayCases = await readTraceReplayCases();
   const cases = replayCases.length > 0 ? replayCases : contextCases.map(normalizeLegacyCaseResult);
   const providerScorecard = await readJsonIfPresent(`${providerReportDir}/scorecard.json`);
-  const milvusScorecard = await readJsonIfPresent(`${milvusReportDir}/scorecard.json`);
   const replayScorecard = await readJsonIfPresent(`${replayReportDir}/scorecard.json`);
   const providerEntries = providerScorecard && Array.isArray(providerScorecard.providers)
     ? providerScorecard.providers.filter(isRecord)
@@ -46,17 +43,15 @@ async function main(): Promise<void> {
   const modelRuntimeEvidence = liveCases.some((item) => item.actualDecision !== "model_failed");
   const liveSearchEvidence = liveCases.some((item) => item.searchPath !== undefined && item.searchPath !== "none" && item.searchPath !== "failure");
   const liveCardEvidence = liveCases.some((item) => item.actualDecision === "card_shown");
-  const milvusIsComplete = milvusScorecard?.status === "complete";
   const replayIsAvailable = replayScorecard !== null;
   const cardTarget = { min: 3, max: 5, status: cardCount >= 3 && cardCount <= 5 ? "met" : cardCount < 3 ? "under_target" : "target_only" };
   const blockedExternalDependencies = [
     !liveExecutionPresent || !liveSearchEvidence ? "live_search_unavailable" : null,
     !liveExecutionPresent || !liveCardEvidence ? "live_context_card_runtime_unverified" : null,
     liveExecutionPresent && !modelRuntimeEvidence ? "local_model_runtime_unavailable" : null,
-    !milvusIsComplete ? "Milvus_realtime_retrieval" : null,
     !replayIsAvailable ? "replay_scorecard" : null,
   ].filter((value): value is string => value !== null);
-  const releaseReady = liveExecutionPresent && modelRuntimeEvidence && liveSearchEvidence && liveCardEvidence && cardTarget.status === "met" && milvusIsComplete && replayIsAvailable;
+  const releaseReady = liveExecutionPresent && modelRuntimeEvidence && liveSearchEvidence && liveCardEvidence && cardTarget.status === "met" && replayIsAvailable;
   const scorecard = {
     status: cases.length === 0 ? "blocked_external_dependency" : releaseReady ? "complete" : "partial",
     releaseGate: releaseReady ? "pass" : "blocked_external_dependency",
@@ -79,7 +74,6 @@ async function main(): Promise<void> {
     providerStructuredOutput: providerScorecard ? providerScorecard.status : "missing",
     searchEvidence: liveSearchEvidence ? "live_search_path_exercised" : liveExecutionPresent ? "live_search_unavailable" : "fixed_snapshot_only",
     cardGeneration: contextScorecard?.status ?? "missing",
-    milvusEvidence: milvusScorecard?.status ?? "missing",
     replayEvidence: replayScorecard?.status ?? "missing",
     searchPathCounts: countBy(cases, (item) => item.searchPath ?? "unknown"),
     finalStateCounts: countBy(cases, (item) => item.actualDecision ?? "unknown"),
@@ -89,21 +83,19 @@ async function main(): Promise<void> {
       generation: percentiles(cases.flatMap((item) => numberValue(item.latencyMs?.generation))),
       total: percentiles(cases.flatMap((item) => numberValue(item.latencyMs?.total))),
     },
-    evidenceBoundary: "This release-gate summary combines the available evaluator artifacts. It does not convert synthetic fixed-source results, blocked Milvus status, or missing replay events into production readiness.",
+    evidenceBoundary: "This release-gate summary combines the available evaluator artifacts. It does not convert synthetic fixed-source results or missing replay events into production readiness.",
   };
   const manifest = {
     evaluator: "end-to-end-evaluator-v1",
     generatedAt: new Date().toISOString(),
-    inputs: { contextReportDir, providerReportDir, milvusReportDir, replayReportDir },
+    inputs: { contextReportDir, providerReportDir, replayReportDir },
     localOnlyEvidence: providerEntries.find((item) => item.provider === "llama.cpp") ?? "missing",
     remoteProviderEvidence: providerEntries.find((item) => item.provider === "remote-api") ?? "missing",
     searchEvidence: { status: scorecard.searchEvidence, contextReport: contextReportDir },
-    milvusEvidence: milvusScorecard ?? "missing",
     unverifiedProductionClaims: [
       "Windows dual-track audio capture",
       "long-video ASR stability",
       "live search quality and agent-reach availability",
-      "Milvus ingestion completeness and embedding quality",
       "production card quality and release readiness",
     ],
     evidenceBoundary: scorecard.evidenceBoundary,
@@ -232,7 +224,6 @@ function renderReport(manifest: JsonObject, scorecard: JsonObject): string {
     `- Local-only provider evidence: ${formatValue(manifest.localOnlyEvidence)}`,
     `- Remote provider evidence: ${formatValue(manifest.remoteProviderEvidence)}`,
     `- Search evidence: ${String(scorecard.searchEvidence)}`,
-    `- Milvus evidence: ${formatValue(manifest.milvusEvidence)}`,
     `- Replay evidence: ${String(scorecard.replayEvidence)}`,
     "",
     "## Search Paths",
