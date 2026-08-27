@@ -438,6 +438,32 @@ async function testSliceFilesRoundTrip(): Promise<void> {
   }
 }
 
+async function testSliceFilesMatchBufferSlicing(): Promise<void> {
+  const workDir = await mkdtemp(join(tmpdir(), "cuemind-wav-slice-compare-"));
+  try {
+    // 150s → 3 窗（60/60/30），且 4.8MB 源跨过 4MiB 流式拷贝块边界：
+    // 流式 sliceWavToWindowFiles 输出必须与整读 sliceWavToWindowBuffers 字节一致。
+    const source = buildWavBuffer(150_000);
+    const expected = sliceWavToWindowBuffers(source, STREAM_WINDOW_MS);
+    assert.equal(expected.length, 3);
+
+    const sourcePath = join(workDir, "source.wav");
+    await writeFile(sourcePath, source);
+    const files = await sliceWavToWindowFiles(sourcePath, STREAM_WINDOW_MS, workDir);
+
+    assert.equal(files.length, expected.length, "window count must match between streaming and buffer slicing");
+    for (const [index, windowPath] of files.entries()) {
+      assert.deepEqual(
+        await readFile(windowPath),
+        expected[index],
+        `streamed window ${index} must be byte-identical to buffer slicing`,
+      );
+    }
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 async function testSliceRejectsInvalidStructure(): Promise<void> {
   assert.throws(
     () => parseWavPcm16kMono(Buffer.from("RIFFxxxxWAVEjunk")),
@@ -480,6 +506,7 @@ async function main(): Promise<void> {
   await runCase("streaming errors propagate as thrown failures", () => testStreamingErrorPropagation());
   await runCase("wav buffer slicing splits boundary/odd-tail windows and passes through shorts", () => testSliceBuffersMultiWindow());
   await runCase("wav file slicing writes valid standalone window files", () => testSliceFilesRoundTrip());
+  await runCase("streamed file slicing is byte-identical to buffer slicing", () => testSliceFilesMatchBufferSlicing());
   await runCase("wav parser rejects invalid structures", () => testSliceRejectsInvalidStructure());
   console.log("media upload route regression tests passed");
 }

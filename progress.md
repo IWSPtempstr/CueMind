@@ -570,3 +570,11 @@
 | `scripts/test-model-providers.ts` | Official regression script | Exercises deterministic HTTP/parser failure boundaries | keep | Required TDD regression coverage, not throwaway test code. |
 | `lib/llama-cpp.ts` | Provider wrapper | Preserves local provider identity and shared client behavior | keep | Existing production boundary; no temporary code added. |
 | `lib/remote-api.ts` | Provider wrapper | Preserves remote provider identity and shared client behavior | keep | Existing production boundary; no temporary code added. |
+
+## 2026-08-27 dev/build 共写 .next 事故记录
+
+- 事故一：dev server（:3000）与 `npm run build` 并行运行期间，页面/接口 curl 全部返回 500。
+- 事故二：`.next` 产物文件 ENOENT——dev 与 build 交替写入同一 `.next` 目录，chunk 文件被覆盖或删除。
+- 事故三：build 之后运行时 chunk 缺失，产物被仍在运行的 dev 进程改写导致编译产物不完整。
+- 处置结论：固定「停-建-启」流程——build 前 `pkill` 停掉 :3000 dev server，build 完成后再重启 `npm run dev`。该规范已写入 CLAUDE.md 与 README.md 的「构建规范」一节。
+- 三次事故均与业务代码无关，属环境层面的 `.next` 目录共写冲突。

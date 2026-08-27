@@ -51,6 +51,12 @@ echo "mock-ffmpeg: invalid audio stream (cannot decode frame)" >&2
 exit 1
 `;
 
+// 无音轨输入（如静音视频）时 ffmpeg 的典型 stderr。
+const NO_AUDIO_FFMPEG_SH = `#!/bin/sh
+echo "Output file #0 does not contain any stream" >&2
+exit 1
+`;
+
 async function writeExecutable(path: string, content: string): Promise<void> {
   await writeFile(path, content, "utf8");
   await chmod(path, 0o755);
@@ -142,6 +148,21 @@ async function testFfmpegFailed(root: string): Promise<void> {
   assert.match(error.message, /cannot decode frame/, "ffmpeg_failed message should carry a stderr summary");
 }
 
+async function testNoAudioTrackFriendlyMessage(root: string): Promise<void> {
+  const { dir, input, output } = await prepareCaseDir(root, "no-audio-");
+  const ffmpegMock = join(dir, "ffmpeg-mock.sh");
+  await writeExecutable(ffmpegMock, NO_AUDIO_FFMPEG_SH);
+
+  const error = await expectMediaConvertError(
+    "ffmpeg_failed",
+    () => convertMediaToWav(input, output, { ffmpegPath: ffmpegMock }),
+    "no-audio-track stderr must map to the friendly no-audio-track message",
+  );
+  assert.match(error.message, /没有可用的音频轨道/, "message must carry the friendly Chinese copy");
+  assert.match(error.message, /无法进行语音转写/, "message must explain the consequence");
+  assert.match(error.message, /does not contain any stream/, "message must keep the truncated raw stderr summary");
+}
+
 async function testFfmpegNotFound(root: string): Promise<void> {
   const { input, output } = await prepareCaseDir(root, "enoent-");
 
@@ -173,6 +194,7 @@ async function main(): Promise<void> {
     await runCase("successful conversion through mock ffmpeg", () => testSuccessfulConversion(root));
     await runCase("slow ffmpeg reports ffmpeg_timed_out", () => testTimedOutConversion(root));
     await runCase("failing ffmpeg reports ffmpeg_failed", () => testFfmpegFailed(root));
+    await runCase("no-audio-track stderr reports the friendly Chinese message", () => testNoAudioTrackFriendlyMessage(root));
     await runCase("missing ffmpeg binary reports ffmpeg_not_found", () => testFfmpegNotFound(root));
     console.log("media -> WAV conversion regression tests passed");
   } finally {

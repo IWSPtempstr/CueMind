@@ -240,6 +240,7 @@ async function defaultProcessAudio(
 
 function defaultTranscribe(
   fields: ParsedUploadFields,
+  signal?: AbortSignal,
 ): (wavPath: string) => Promise<{ segments: LocalAsrSegment[] }> {
   return (wavPath) =>
     transcribeWithWhisperCpp({
@@ -248,6 +249,9 @@ function defaultTranscribe(
       modelPath: fields.whisperModelPath,
       language: fields.language,
       timeoutMs: WHISPER_TIMEOUT_MS,
+      // Client disconnects kill the running whisper subprocess (runProcess
+      // listens on this signal); the route's SSE wrapper then closes silently.
+      signal,
     });
 }
 
@@ -366,7 +370,7 @@ export async function* processUploadStreaming(
   if (oversizeByFileSize) throw await failureFromResponse(oversizeByFileSize);
 
   const processAudio = overrides?.processAudio ?? defaultProcessAudio;
-  const transcribe = overrides?.transcribe ?? defaultTranscribe(fields);
+  const transcribe = overrides?.transcribe ?? defaultTranscribe(fields, overrides?.signal);
 
   const tempDir = await mkdtemp(join(tmpdir(), TEMP_DIR_PREFIX));
   try {

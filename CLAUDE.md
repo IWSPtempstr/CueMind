@@ -43,3 +43,7 @@ There is **no test suite** in this project. The verification loop is: `npx tsc -
 ## Known constraint
 
 Audio capture is **microphone-only**. Browser sandboxing prevents capturing the remote participant's voice in virtual meetings (WebRTC audio is not reachable via tab capture). This is a platform limitation, not a bug — see the README's "Known Limitations & Future Work". A native desktop shell (Electron loopback audio) is the documented path to two-way capture.
+
+## 构建规范
+
+运行 npm run build 前必须停止 :3000 dev server——turbopack dev 与 next build 共写 .next 目录会导致产物损坏（ENOENT/500）。流程：pkill 停 dev → build → 重启 npm run dev。

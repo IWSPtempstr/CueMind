@@ -152,3 +152,9 @@ Whisper Large V3 does not perform diarization—it transcribes only. Adding diar
 The layout is desktop-first by design — a meeting copilot lives on the same screen as your video call, not on a phone. On large screens (1024px+) you get the full three-column experience. Below that, the columns stack vertically, each taking full width and 50vh of height with independent scroll, so the app remains usable on smaller displays without the layout collapsing.
 
 On the accessibility side: the mic button carries `aria-label` and `aria-pressed` so screen readers announce recording state. Suggestion cards are fully keyboard navigable with Enter/Space activation. The chat message list has `aria-live="polite"` so new messages are announced. The settings modal traps focus when open and auto-focuses the API key field. All icon-only buttons have explicit `aria-label` attributes.
+
+---
+
+## 构建规范
+
+运行 npm run build 前必须停止 :3000 dev server——turbopack dev 与 next build 共写 .next 目录会导致产物损坏（ENOENT/500）。流程：pkill 停 dev → build → 重启 npm run dev。

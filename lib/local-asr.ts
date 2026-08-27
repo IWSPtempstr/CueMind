@@ -9,6 +9,8 @@ export interface LocalAsrRequest {
   audioPath: string;
   language: "auto" | "zh" | "en";
   timeoutMs?: number;
+  /** Aborting kills the whisper subprocess; the promise rejects with "Local ASR aborted". */
+  signal?: AbortSignal;
 }
 
 export interface LocalAsrSegment {
@@ -37,7 +39,7 @@ export async function transcribeWithWhisperCpp(
     const args = ["-m", request.modelPath, "-f", request.audioPath, "-oj", "-otxt", "-of", outputBase, "-nt"];
     if (request.language !== "auto") args.push("-l", request.language);
 
-    const processOutput = await runProcess(request.whisperPath, args, request.timeoutMs ?? 60_000);
+    const processOutput = await runProcess(request.whisperPath, args, request.timeoutMs ?? 60_000, request.signal);
     const segments = await readJsonSegments(`${outputBase}.json`);
     const text = segments.length > 0
       ? segments.map((segment) => segment.text).join(" ").trim()
@@ -62,6 +64,7 @@ function runProcess(
   command: string,
   args: string[],
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -71,9 +74,23 @@ function runProcess(
     let stdout = "";
     let stderr = "";
     let settled = false;
+    const detachAbort = (): void => {
+      signal?.removeEventListener("abort", onAbort);
+    };
+    // Abort kills the subprocess immediately; the settled guard keeps this
+    // one-shot against the timeout/close/error races.
+    const onAbort = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      detachAbort();
+      child.kill();
+      reject(new Error("Local ASR aborted"));
+    };
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
+      detachAbort();
       child.kill();
       reject(new Error(`Local ASR timed out after ${timeoutMs} milliseconds`));
     }, timeoutMs);
@@ -85,12 +102,14 @@ function runProcess(
       stderr += chunk.toString("utf8");
     });
     child.on("error", (error) => {
+      detachAbort();
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       reject(new Error(`Could not start local ASR: ${error.message}`));
     });
     child.on("close", (code) => {
+      detachAbort();
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -100,6 +119,14 @@ function runProcess(
       }
       reject(new Error(classifyProcessError(stderr, code)));
     });
+
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener("abort", onAbort);
+    }
   });
 }
 
@@ -279,6 +306,14 @@ export async function convertMediaToWav(
     );
   }
   if (outcome.exitCode !== 0) {
+    // ffmpeg prints one of these patterns when the input media carries no
+    // audio track at all (e.g. a silent video); give it a friendly message.
+    if (/does not contain any stream|matches no streams|Stream map/i.test(outcome.stderr)) {
+      throw new MediaConvertError(
+        "ffmpeg_failed",
+        `该文件没有可用的音频轨道，无法进行语音转写（ffmpeg: ${summarizeFfmpegStderrBody(outcome.stderr)}）`,
+      );
+    }
     throw new MediaConvertError(
       "ffmpeg_failed",
       `ffmpeg exited with code ${outcome.exitCode ?? "unknown"}${summarizeFfmpegStderr(outcome.stderr)}`,
@@ -355,11 +390,17 @@ function formatSeconds(ms: number): string {
   return (ms / 1000).toString();
 }
 
-function summarizeFfmpegStderr(stderr: string): string {
+/** Truncated raw stderr summary without surrounding punctuation. */
+function summarizeFfmpegStderrBody(stderr: string): string {
   const detail = stderr.trim();
   if (!detail) return "";
-  const summary = detail.length > FFMPEG_STDERR_SUMMARY_LIMIT
+  return detail.length > FFMPEG_STDERR_SUMMARY_LIMIT
     ? `${detail.slice(0, FFMPEG_STDERR_SUMMARY_LIMIT)}...`
     : detail;
+}
+
+function summarizeFfmpegStderr(stderr: string): string {
+  const summary = summarizeFfmpegStderrBody(stderr);
+  if (!summary) return "";
   return ` (${summary})`;
 }

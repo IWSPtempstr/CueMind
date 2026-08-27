@@ -255,6 +255,8 @@ export default function useMediaUploader({
               doneEvent = event;
             } else {
               errorMessage = event.message.trim() || errorMessage;
+              // 错误帧到达即上屏，不等流结束——用户能第一时间看到失败原因。
+              if (errorMessage) setError(errorMessage);
             }
           }
         };
@@ -346,9 +348,13 @@ export default function useMediaUploader({
         return;
       }
 
-      // 取消/失败则静默清理 pending 条目（取消不置 error，与既有行为一致）。
+      // 清理 pending 条目：取消保持静默（不置 error，与既有行为一致），
+      // 失败则把失败原因上屏（rejected outcome 携带服务端/网络错误消息）。
       cancelledIdsRef.current.delete(uploadId);
       setUploadedFiles((previous) => previous.filter((record) => record.uploadId !== uploadId));
+      if (outcome.kind === "rejected") {
+        setError(outcome.message);
+      }
     },
     [requestStreamingUpload],
   );
