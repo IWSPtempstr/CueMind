@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   const contextScorecard = await readJsonIfPresent(`${contextReportDir}/scorecard.json`);
   const contextCases = await readJsonl<CaseResult>(`${contextReportDir}/cases.jsonl`);
   const replayCases = await readTraceReplayCases();
-  const cases = replayCases.length > 0 ? replayCases : contextCases;
+  const cases = replayCases.length > 0 ? replayCases : contextCases.map(normalizeLegacyCaseResult);
   const providerScorecard = await readJsonIfPresent(`${providerReportDir}/scorecard.json`);
   const milvusScorecard = await readJsonIfPresent(`${milvusReportDir}/scorecard.json`);
   const replayScorecard = await readJsonIfPresent(`${replayReportDir}/scorecard.json`);
@@ -41,18 +41,25 @@ async function main(): Promise<void> {
   for (const item of cases) if (item.failureCode) failures[item.failureCode] = (failures[item.failureCode] ?? 0) + 1;
   const cardCount = cases.filter((item) => item.actualDecision === "card_shown").length;
   const sourceValidityCount = cases.filter((item) => item.actualDecision === "card_shown" && validSources(item.cardSources)).length;
-  const contextIsLive = replayCases.some((item) => item.replayMode === "live") || contextManifest?.executionMode === "live";
+  const liveCases = replayCases.filter((item) => item.replayMode === "live");
+  const liveExecutionPresent = liveCases.length > 0 || contextManifest?.executionMode === "live";
+  const modelRuntimeEvidence = liveCases.some((item) => item.actualDecision !== "model_failed");
+  const liveSearchEvidence = liveCases.some((item) => item.searchPath !== undefined && item.searchPath !== "none" && item.searchPath !== "failure");
+  const liveCardEvidence = liveCases.some((item) => item.actualDecision === "card_shown");
   const milvusIsComplete = milvusScorecard?.status === "complete";
   const replayIsAvailable = replayScorecard !== null;
   const cardTarget = { min: 3, max: 5, status: cardCount >= 3 && cardCount <= 5 ? "met" : cardCount < 3 ? "under_target" : "target_only" };
   const blockedExternalDependencies = [
-    !contextIsLive ? "live_search_or_context_card_runtime" : null,
+    !liveExecutionPresent || !liveSearchEvidence ? "live_search_unavailable" : null,
+    !liveExecutionPresent || !liveCardEvidence ? "live_context_card_runtime_unverified" : null,
+    liveExecutionPresent && !modelRuntimeEvidence ? "local_model_runtime_unavailable" : null,
     !milvusIsComplete ? "Milvus_realtime_retrieval" : null,
     !replayIsAvailable ? "replay_scorecard" : null,
   ].filter((value): value is string => value !== null);
+  const releaseReady = liveExecutionPresent && modelRuntimeEvidence && liveSearchEvidence && liveCardEvidence && cardTarget.status === "met" && milvusIsComplete && replayIsAvailable;
   const scorecard = {
-    status: cases.length === 0 ? "blocked_external_dependency" : contextIsLive && milvusIsComplete && replayIsAvailable ? "complete" : "partial",
-    releaseGate: contextIsLive && milvusIsComplete && replayIsAvailable ? "pass" : "blocked_external_dependency",
+    status: cases.length === 0 ? "blocked_external_dependency" : releaseReady ? "complete" : "partial",
+    releaseGate: releaseReady ? "pass" : "blocked_external_dependency",
     manifestVersion: typeof demoManifest?.version === "string" ? demoManifest.version : "missing",
     candidateDenominator: {
       total: cases.length,
@@ -70,7 +77,7 @@ async function main(): Promise<void> {
       excludedCases: cases.filter((item) => item.cardSuccess === false && !item.gracefulFailure).length,
     },
     providerStructuredOutput: providerScorecard ? providerScorecard.status : "missing",
-    searchEvidence: contextIsLive ? "fixed_snapshot_search_path_exercised" : "fixed_snapshot_only",
+    searchEvidence: liveSearchEvidence ? "live_search_path_exercised" : liveExecutionPresent ? "live_search_unavailable" : "fixed_snapshot_only",
     cardGeneration: contextScorecard?.status ?? "missing",
     milvusEvidence: milvusScorecard?.status ?? "missing",
     replayEvidence: replayScorecard?.status ?? "missing",
@@ -119,6 +126,13 @@ function countBy<T>(values: T[], key: (value: T) => string): Record<string, numb
     counts[name] = (counts[name] ?? 0) + 1;
   }
   return counts;
+}
+
+function normalizeLegacyCaseResult(item: CaseResult): CaseResult {
+  if (item.actualDecision === "generate_card") return { ...item, actualDecision: "card_shown" };
+  if (item.actualDecision === "skip") return { ...item, actualDecision: "model_skip" };
+  if (item.actualDecision === "schema_failed") return { ...item, actualDecision: "invalid_schema" };
+  return item;
 }
 
 function numberValue(value: unknown): number[] {

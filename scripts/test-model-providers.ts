@@ -228,7 +228,9 @@ async function testNon2xxResponse(): Promise<void> {
       (error: unknown) =>
         error instanceof ModelProviderError &&
         error.code === "model_http_error" &&
-        error.status === 401,
+        error.status === 401 &&
+        error.failureCode === "http_error" &&
+        error.stage === "response",
     );
   });
 }
@@ -251,9 +253,76 @@ async function testTimeout(): Promise<void> {
         timeoutMs: 50,
       }),
       (error: unknown) =>
-        error instanceof ModelProviderError && error.code === "model_timeout",
+        error instanceof ModelProviderError &&
+        error.code === "model_timeout" &&
+        error.failureCode === "timeout" &&
+        error.stage === "request",
     );
   });
+}
+
+async function testEmptyResponseClassification(): Promise<void> {
+  await withMockServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end();
+  }, async (baseUrl) => {
+    await assert.rejects(
+      generateOpenAiCompatibleJson({
+        provider: "llama.cpp",
+        baseUrl,
+        model: "m",
+        system: "s",
+        prompt: "p",
+        timeoutMs: 1_000,
+      }),
+      (error: unknown) =>
+        error instanceof ModelProviderError &&
+        error.code === "model_invalid_json" &&
+        error.failureCode === "empty_response" &&
+        error.stage === "response",
+    );
+  });
+}
+
+async function testInvalidResponseJsonClassification(): Promise<void> {
+  await withMockServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end("not-json");
+  }, async (baseUrl) => {
+    await assert.rejects(
+      generateOpenAiCompatibleJson({
+        provider: "remote-api",
+        baseUrl,
+        model: "m",
+        system: "s",
+        prompt: "p",
+        timeoutMs: 1_000,
+      }),
+      (error: unknown) =>
+        error instanceof ModelProviderError &&
+        error.code === "model_invalid_json" &&
+        error.failureCode === "invalid_json" &&
+        error.stage === "response",
+    );
+  });
+}
+
+async function testNetworkErrorClassification(): Promise<void> {
+  await assert.rejects(
+    generateOpenAiCompatibleJson({
+      provider: "llama.cpp",
+      baseUrl: "http://127.0.0.1:1",
+      model: "m",
+      system: "s",
+      prompt: "p",
+      timeoutMs: 1_000,
+    }),
+    (error: unknown) =>
+      error instanceof ModelProviderError &&
+      error.code === "model_unreachable" &&
+      error.failureCode === "network_error" &&
+      error.stage === "request",
+  );
 }
 
 async function testInvalidAssistantJson(): Promise<void> {
@@ -270,7 +339,10 @@ async function testInvalidAssistantJson(): Promise<void> {
         timeoutMs: 1_000,
       }),
       (error: unknown) =>
-        error instanceof ModelProviderError && error.code === "model_invalid_json",
+        error instanceof ModelProviderError &&
+        error.code === "model_invalid_json" &&
+        error.failureCode === "invalid_json" &&
+        error.stage === "response",
     );
   });
 }
@@ -289,7 +361,10 @@ async function testMissingAssistantContent(): Promise<void> {
         timeoutMs: 1_000,
       }),
       (error: unknown) =>
-        error instanceof ModelProviderError && error.code === "model_invalid_json",
+        error instanceof ModelProviderError &&
+        error.code === "model_invalid_json" &&
+        error.failureCode === "invalid_json" &&
+        error.stage === "response",
     );
   });
 }
@@ -508,6 +583,9 @@ async function main(): Promise<void> {
   await testBaseUrlNormalizationWithV1Suffix();
   await testNon2xxResponse();
   await testTimeout();
+  await testEmptyResponseClassification();
+  await testInvalidResponseJsonClassification();
+  await testNetworkErrorClassification();
   await testInvalidAssistantJson();
   await testMissingAssistantContent();
   await testNoAuthHeaderForEmptyKey();

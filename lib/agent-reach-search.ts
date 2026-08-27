@@ -18,7 +18,7 @@ export class AgentReachSearchError extends Error {
   }
 }
 
-type SearchMock = (query: string, timeoutMs: number) => Promise<SearchResult[]>;
+type SearchMock = (query: string, timeoutMs: number) => Promise<unknown>;
 
 declare global {
   var __cuemindAgentReachSearchMock: SearchMock | undefined;
@@ -39,7 +39,14 @@ export async function searchWithAgentReach(args: {
   const mock = globalThis.__cuemindAgentReachSearchMock;
   if (mock) {
     try {
-      return ensureUsableResults(await mock(args.query, args.timeoutMs));
+      const mockedResults = await mock(args.query, args.timeoutMs);
+      if (!Array.isArray(mockedResults)) {
+        throw new AgentReachSearchError(
+          "agent_reach_invalid_output",
+          "agent-reach search returned invalid output",
+        );
+      }
+      return ensureUsableResults(mockedResults as SearchResult[]);
     } catch (error) {
       if (error instanceof AgentReachSearchError) throw error;
       throw new AgentReachSearchError(
@@ -72,6 +79,7 @@ export async function searchWithAgentReach(args: {
     );
     return ensureUsableResults(normalizeAgentReachResults(result.stdout));
   } catch (error) {
+    if (error instanceof AgentReachSearchError) throw error;
     if (isTimeoutError(error)) {
       throw new AgentReachSearchError(
         "agent_reach_timeout",
@@ -128,7 +136,18 @@ function normalizeAgentReachResults(stdout: string): SearchResult[] {
 }
 
 function ensureUsableResults(results: SearchResult[]): SearchResult[] {
-  const usable = results.filter((result) => isHttpUrl(result.url)).slice(0, 5);
+  const seenUrls = new Set<string>();
+  const usable: SearchResult[] = [];
+  for (const result of results) {
+    if (!result || typeof result !== "object") continue;
+    const title = typeof result.title === "string" ? result.title.trim() : "";
+    const snippet = typeof result.snippet === "string" ? result.snippet.trim() : "";
+    const url = normalizeHttpUrl(result.url);
+    if (!title || !snippet || !url || seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    usable.push({ title, url, snippet });
+    if (usable.length === 5) break;
+  }
   if (usable.length < 2) {
     throw new AgentReachSearchError(
       "agent_reach_no_usable_sources",
@@ -154,12 +173,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isHttpUrl(value: string): boolean {
+function normalizeHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
   try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    const url = new URL(value.trim());
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    url.hash = "";
+    return url.toString();
   } catch {
-    return false;
+    return null;
   }
 }
 

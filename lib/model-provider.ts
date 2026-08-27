@@ -13,10 +13,28 @@ export const MODEL_PROVIDER_ERROR_CODES = [
 export type ModelProviderErrorCode =
   (typeof MODEL_PROVIDER_ERROR_CODES)[number];
 
+export const MODEL_PROVIDER_FAILURE_CODES = [
+  "http_error",
+  "timeout",
+  "network_error",
+  "invalid_json",
+  "empty_response",
+] as const;
+
+export type ModelProviderFailureCode =
+  (typeof MODEL_PROVIDER_FAILURE_CODES)[number];
+
+export const MODEL_PROVIDER_ERROR_STAGES = ["request", "response"] as const;
+
+export type ModelProviderErrorStage =
+  (typeof MODEL_PROVIDER_ERROR_STAGES)[number];
+
 export interface SerializedModelProviderError {
   name: "ModelProviderError";
   provider: ModelProviderName;
   code: ModelProviderErrorCode;
+  failureCode?: ModelProviderFailureCode;
+  stage?: ModelProviderErrorStage;
   status?: number;
   message: string;
 }
@@ -24,6 +42,8 @@ export interface SerializedModelProviderError {
 export interface ModelProviderErrorOptions {
   provider: ModelProviderName;
   code: ModelProviderErrorCode;
+  failureCode?: ModelProviderFailureCode;
+  stage?: ModelProviderErrorStage;
   status?: number;
   detail?: unknown;
 }
@@ -48,9 +68,20 @@ export function isModelProviderErrorCode(
   );
 }
 
+export function isModelProviderFailureCode(
+  value: unknown,
+): value is ModelProviderFailureCode {
+  return (
+    typeof value === "string" &&
+    (MODEL_PROVIDER_FAILURE_CODES as readonly string[]).includes(value)
+  );
+}
+
 export class ModelProviderError extends Error {
   readonly provider: ModelProviderName;
   readonly code: ModelProviderErrorCode;
+  readonly failureCode?: ModelProviderFailureCode;
+  readonly stage?: ModelProviderErrorStage;
   readonly status?: number;
 
   constructor(options: ModelProviderErrorOptions) {
@@ -59,6 +90,18 @@ export class ModelProviderError extends Error {
     }
     if (!isModelProviderErrorCode(options.code)) {
       throw new TypeError("Invalid model provider error code.");
+    }
+    if (
+      options.failureCode !== undefined &&
+      !isModelProviderFailureCode(options.failureCode)
+    ) {
+      throw new TypeError("Invalid model provider failure code.");
+    }
+    if (
+      options.stage !== undefined &&
+      !MODEL_PROVIDER_ERROR_STAGES.includes(options.stage)
+    ) {
+      throw new TypeError("Invalid model provider error stage.");
     }
     if (
       options.status !== undefined &&
@@ -73,6 +116,8 @@ export class ModelProviderError extends Error {
     this.name = "ModelProviderError";
     this.provider = options.provider;
     this.code = options.code;
+    this.failureCode = options.failureCode;
+    this.stage = options.stage;
     this.status = options.status;
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -91,6 +136,13 @@ export function serializeModelProviderError(
     code: error.code,
     message: SAFE_ERROR_MESSAGE,
   };
+
+  if (error.failureCode !== undefined) {
+    serialized.failureCode = error.failureCode;
+  }
+  if (error.stage !== undefined) {
+    serialized.stage = error.stage;
+  }
 
   if (error.status !== undefined) {
     serialized.status = error.status;
@@ -135,6 +187,8 @@ export async function generateOpenAiCompatibleJson<T>(
       throw new ModelProviderError({
         provider: request.provider,
         code: "model_http_error",
+        failureCode: "http_error",
+        stage: "response",
         status: response.status,
       });
     }
@@ -147,11 +201,15 @@ export async function generateOpenAiCompatibleJson<T>(
       throw new ModelProviderError({
         provider: request.provider,
         code: "model_timeout",
+        failureCode: "timeout",
+        stage: "request",
       });
     }
     throw new ModelProviderError({
       provider: request.provider,
       code: "model_unreachable",
+      failureCode: "network_error",
+      stage: "request",
     });
   } finally {
     clearTimeout(timer);
@@ -191,21 +249,46 @@ async function parseChatCompletionsJson<T>(
   response: Response,
   provider: ModelProviderName,
 ): Promise<T> {
-  let payload: unknown;
+  let rawBody: string;
   try {
-    payload = await response.json();
+    rawBody = await response.text();
   } catch {
     throw new ModelProviderError({
       provider,
       code: "model_invalid_json",
+      failureCode: "invalid_json",
+      stage: "response",
+    });
+  }
+
+  if (rawBody.trim().length === 0) {
+    throw new ModelProviderError({
+      provider,
+      code: "model_invalid_json",
+      failureCode: "empty_response",
+      stage: "response",
+    });
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rawBody) as unknown;
+  } catch {
+    throw new ModelProviderError({
+      provider,
+      code: "model_invalid_json",
+      failureCode: "invalid_json",
+      stage: "response",
     });
   }
 
   const content = extractChatAssistantContent(payload);
-  if (content === null) {
+  if (content === null || content.trim().length === 0) {
     throw new ModelProviderError({
       provider,
       code: "model_invalid_json",
+      failureCode: content === null ? "invalid_json" : "empty_response",
+      stage: "response",
     });
   }
 
@@ -215,6 +298,8 @@ async function parseChatCompletionsJson<T>(
     throw new ModelProviderError({
       provider,
       code: "model_invalid_json",
+      failureCode: "invalid_json",
+      stage: "response",
     });
   }
 }

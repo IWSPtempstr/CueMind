@@ -7,6 +7,14 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import { POST } from "@/app/api/context-cards/route";
+import {
+  AgentReachSearchError,
+  searchWithAgentReach,
+} from "@/lib/agent-reach-search";
+import {
+  InsufficientSearchSourcesError,
+  searchWeb,
+} from "@/lib/search";
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -108,11 +116,7 @@ function restoreFetch(): void {
   globalThis.fetch = realFetch;
 }
 
-type AgentReachSearchMock = (query: string, timeoutMs: number) => Promise<Array<{
-  title: string;
-  url: string;
-  snippet: string;
-}>>;
+type AgentReachSearchMock = (query: string, timeoutMs: number) => Promise<unknown>;
 
 declare global {
   var __cuemindAgentReachSearchMock: AgentReachSearchMock | undefined;
@@ -557,6 +561,136 @@ async function testServerTavilyKeyTakesPrecedence(): Promise<void> {
   }
 }
 
+async function testSearchRejectsEmptyTitleAndSnippet(): Promise<void> {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    results: [
+      { title: "", url: "https://example.com/empty-title", content: "usable snippet" },
+      { title: "Usable title", url: "https://example.com/empty-snippet", content: "" },
+      { title: "Only usable source", url: "https://example.com/usable", content: "usable snippet" },
+    ],
+  }), { status: 200 })) as typeof fetch;
+  try {
+    await assert.rejects(
+      () => searchWeb({
+        provider: "tavily",
+        apiKey: "test-key",
+        query: "metadata validation",
+        timeoutMs: 1_000,
+        enableAgentReachFallback: false,
+      }),
+      (error: unknown) => error instanceof InsufficientSearchSourcesError,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+}
+
+async function testSearchRejectsDuplicateUrlsAsOneSource(): Promise<void> {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    results: [
+      { title: "First result", url: "https://example.com/same", content: "first" },
+      { title: "Duplicate result", url: "https://example.com/same#section", content: "duplicate" },
+    ],
+  }), { status: 200 })) as typeof fetch;
+  try {
+    await assert.rejects(
+      () => searchWeb({
+        provider: "tavily",
+        apiKey: "test-key",
+        query: "duplicate validation",
+        timeoutMs: 1_000,
+        enableAgentReachFallback: false,
+      }),
+      (error: unknown) => error instanceof InsufficientSearchSourcesError,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+}
+
+async function testTavilyFetchFailureFallsBackToAgentReach(): Promise<void> {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new TypeError("fetch failed");
+  }) as typeof fetch;
+  installAgentReachMock(async () => [
+    { title: "Fallback source", url: "https://example.com/fallback", snippet: "fallback context" },
+    { title: "Fallback source two", url: "https://example.com/fallback-two", snippet: "more fallback context" },
+  ]);
+  try {
+    const result = await searchWeb({
+      provider: "tavily",
+      apiKey: "test-key",
+      query: "network fallback",
+      timeoutMs: 1_000,
+    });
+    assert.equal(result.provider, "agent-reach");
+    assert.equal(result.fallbackUsed, true);
+    assert.equal(result.results.length, 2);
+  } finally {
+    restoreAgentReachMock();
+    globalThis.fetch = previousFetch;
+  }
+}
+
+async function testTavilyAuthFailureDoesNotFallBack(): Promise<void> {
+  const previousFetch = globalThis.fetch;
+  let fallbackCalls = 0;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })) as typeof fetch;
+  installAgentReachMock(async () => {
+    fallbackCalls += 1;
+    return [
+      { title: "Unexpected fallback", url: "https://example.com/unexpected", snippet: "must not be used" },
+      { title: "Unexpected fallback two", url: "https://example.com/unexpected-two", snippet: "must not be used" },
+    ];
+  });
+  try {
+    await assert.rejects(
+      () => searchWeb({
+        provider: "tavily",
+        apiKey: "test-key",
+        query: "authentication failure",
+        timeoutMs: 1_000,
+      }),
+      /Tavily returned HTTP 401/,
+    );
+    assert.equal(fallbackCalls, 0);
+  } finally {
+    restoreAgentReachMock();
+    globalThis.fetch = previousFetch;
+  }
+}
+
+async function testAgentReachMockPreservesInvalidOutputError(): Promise<void> {
+  installAgentReachMock(async () => "not-json");
+  try {
+    await assert.rejects(
+      () => searchWithAgentReach({ query: "invalid output", timeoutMs: 1_000 }),
+      (error: unknown) => error instanceof AgentReachSearchError && error.code === "agent_reach_invalid_output",
+    );
+  } finally {
+    restoreAgentReachMock();
+  }
+}
+
+async function testAgentReachMockPreservesInsufficientSourcesError(): Promise<void> {
+  installAgentReachMock(async () => [
+    { title: "", url: "https://example.com/empty-title", snippet: "ignored" },
+    { title: "Empty snippet", url: "https://example.com/empty-snippet", snippet: "" },
+    { title: "Only source", url: "https://example.com/only", snippet: "one source" },
+  ]);
+  try {
+    await assert.rejects(
+      () => searchWithAgentReach({ query: "insufficient sources", timeoutMs: 1_000 }),
+      (error: unknown) => error instanceof AgentReachSearchError && error.code === "agent_reach_no_usable_sources",
+    );
+  } finally {
+    restoreAgentReachMock();
+  }
+}
+
 async function main(): Promise<void> {
   installSearchMock();
   try {
@@ -576,6 +710,12 @@ async function main(): Promise<void> {
     await testAgentReachUnavailableReplacesMissingKeyFailure();
     await testAgentReachFallbackCanBeDisabled();
     await testServerTavilyKeyTakesPrecedence();
+    await testSearchRejectsEmptyTitleAndSnippet();
+    await testSearchRejectsDuplicateUrlsAsOneSource();
+    await testTavilyFetchFailureFallsBackToAgentReach();
+    await testTavilyAuthFailureDoesNotFallBack();
+    await testAgentReachMockPreservesInvalidOutputError();
+    await testAgentReachMockPreservesInsufficientSourcesError();
   } finally {
     restoreFetch();
     restoreAgentReachMock();

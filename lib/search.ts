@@ -126,19 +126,33 @@ async function searchSerpApi(args: { apiKey: string; query: string }, signal: Ab
   });
 }
 
-function isHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 function ensureUsableResults(results: SearchResult[]): SearchResult[] {
-  const usable = results.filter((result) => isHttpUrl(result.url)).slice(0, 5);
+  const seenUrls = new Set<string>();
+  const usable: SearchResult[] = [];
+  for (const result of results) {
+    if (!result || typeof result !== "object") continue;
+    const title = typeof result.title === "string" ? result.title.trim() : "";
+    const snippet = typeof result.snippet === "string" ? result.snippet.trim() : "";
+    const url = normalizeHttpUrl(result.url);
+    if (!title || !snippet || !url || seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    usable.push({ title, url, snippet });
+    if (usable.length === 5) break;
+  }
   if (usable.length < 2) throw new InsufficientSearchSourcesError();
   return usable;
+}
+
+function normalizeHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,6 +167,13 @@ function shouldFallbackToAgentReach(error: unknown): boolean {
   if (error instanceof InsufficientSearchSourcesError) return true;
   if (error instanceof DOMException && error.name === "AbortError") return true;
   if (!(error instanceof Error)) return false;
-  return error.message === "Search API key is not configured" ||
-    /Tavily returned HTTP \d+/.test(error.message);
+  if (error.message === "Search API key is not configured") return true;
+  const httpStatus = error.message.match(/Tavily returned HTTP (\d+)/)?.[1];
+  if (httpStatus) {
+    const status = Number(httpStatus);
+    return status === 408 || status === 425 || status === 429 || status >= 500;
+  }
+  const errorCode = "code" in error && typeof error.code === "string" ? error.code : "";
+  return ["ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT"].includes(errorCode) ||
+    error.message === "fetch failed";
 }

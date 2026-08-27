@@ -1,5 +1,13 @@
 # CueMind plan task tracking
 
+## Priority Repairs
+
+- [x] Priority 1: normalize legacy evaluator terminal states so fixed-snapshot `generate_card` cases count as `card_shown`.
+- [x] Priority 2: split live runtime blocking dependency labels.
+- [x] Priority 3: harden search source validation, Tavily transient-error fallback, and agent-reach typed failures.
+- [ ] Priority 4: clarify Milvus contract verification versus retrieval quality.
+- [x] Schema/provider step 1: add typed raw-response failure classification without changing card schema or route behavior.
+
 ## 2026-08-27 Minimal Demo Plan
 
 - [x] Confirm scope: fixed 10-minute video demonstration.
@@ -16,13 +24,28 @@
   - [x] Task 8: final verification and phase-end cleanup audit.
 
 Plan artifact: `docs/plans/2026-08-27-cuemind-demo-implementation-plan.md`
-Current status: Tasks 1-7 complete; Task 8 complete. Human review is required for the blocked live gates.
+Current status: Tasks 1-8 complete; Priority 3 search-tool repair complete; Priority 4 pending. Human review is required for the blocked live gates.
+
+Provider contract repair status: step 1 complete; real provider response capture remains unverified.
 
 Task 7-8 closeout (2026-08-27):
 
-- Task 7 report fields and evidence boundaries are implemented. The deterministic current report is mock/fixed-snapshot evidence only: 8 candidates, 0 cards, card target `under_target`, and blocked dependency `live_search_or_context_card_runtime`.
+- Task 7 report fields and evidence boundaries are implemented. The evaluator emits mock/fixed-snapshot evidence only: 8 candidates, 0 cards, card target `under_target`, and separate blocked dependencies `live_search_unavailable` and `live_context_card_runtime_unverified`. Existing generated reports were not regenerated within the Priority 2 file boundary.
 - Task 8 final verification passed for the static checks and deterministic regressions recorded in `progress.md`. No factual correction was required in `docs/desktop-mvp.md`.
 - The phase is complete as an evidence-safe implementation handoff, not as a live-search or production-readiness pass.
+
+Provider/schema repair step 1 (2026-08-27):
+
+- Added a stable `failureCode` contract for `http_error`, `timeout`, `network_error`,
+  `invalid_json`, and `empty_response`, plus `stage` (`request` or `response`) and existing
+  provider identity in `ModelProviderError` serialization.
+- Preserved the existing `model_*` `code` values so the context-card route and existing callers
+  remain compatible. No Markdown stripping, schema relaxation, prompt change, or raw response
+  logging was introduced.
+- TDD RED: provider tests failed on the first new HTTP classification assertion because the
+  contract fields did not exist. GREEN: provider tests passed after the minimal implementation.
+- Real Tavily, agent-reach, llama.cpp, and remote provider response capture was not performed in
+  this step; the new classifications are covered by local deterministic HTTP fixtures only.
 
 ## Objective
 

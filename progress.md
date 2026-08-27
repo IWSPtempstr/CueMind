@@ -1,5 +1,20 @@
 # Progress
 
+## 2026-08-27 Priority Repairs
+
+- Priority 1 completed: normalized legacy context-card evaluator decisions (`generate_card`, `skip`, `schema_failed`) into the current terminal-state vocabulary before aggregation. Added `scripts/test-end-to-end-evaluator.ts`; RED reproduced `cardCount=0` for a legacy generated card, and GREEN verified `card_shown=3` for the formal fixed-snapshot report without changing live-evidence boundaries.
+- Priority 2 completed: split the end-to-end evaluator's combined live-runtime blocker into `live_search_unavailable` and `live_context_card_runtime_unverified`. Extended the evaluator regression with mock/fallback assertions; RED failed because the old composite label was still emitted, and GREEN passed after the minimal change. `searchEvidence` remains `fixed_snapshot_only`; no Milvus dependency was added to this repair.
+- Priority 3 completed: hardened `searchWeb` and `searchWithAgentReach` source handling. RED reproduced acceptance of empty title/snippet metadata, duplicate URLs, and Tavily `fetch failed` without fallback. GREEN now requires trimmed non-empty title/snippet, HTTP(S) URLs normalized without fragments, and unique normalized URLs before counting sources; transient Tavily failures fall back while 4xx authentication/parameter failures do not. Mock and CLI paths preserve `agent_reach_invalid_output` and `agent_reach_no_usable_sources`. Added route/search regressions in `scripts/test-context-card-route.ts`.
+- Priority 3 verification passed: context-card route, demo windowing, demo ledger, and end-to-end evaluator regressions; `npx tsc --noEmit`; `npm run lint`; and `git diff --check`. This repair does not verify remote source accessibility, semantic relevance, provider availability, agent-reach doctor readiness, live search quality, or production card quality. No Git commit was created. The current tool surface did not expose a subagent invocation handle for this repair, so implementation and verification were performed in the main execution context rather than falsely claiming independent subagent completion.
+
+### 2026-08-27 Priority 3 search-tool cleanup audit
+
+| Path | Item type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `lib/search.ts` | formal search adapter | Validates provider results and applies bounded Tavily-to-agent-reach fallback | keep | Production search contract and fail-closed source gate. |
+| `lib/agent-reach-search.ts` | formal search adapter | Executes the fixed agent-reach bridge and preserves typed failures | keep | Required fallback adapter and diagnostic error boundary. |
+| `scripts/test-context-card-route.ts` | official regression test | Covers source validation, fallback, authentication boundaries, and typed failures | keep | Deterministic contract coverage, not throwaway test code. |
+
 ## 2026-08-27 (minimal demo implementation plan)
 
 - Read `docs/product/cuemind-grilling-decisions.md` and reconciled it with the current CueMind codebase.
@@ -27,7 +42,7 @@
 - Task 6 review passed: context-card, windowing, and ledger regressions; `npx tsc --noEmit`; `npm run lint`; `npm run build`; `git diff --check`; and local dev smoke at `http://127.0.0.1:3100/` returned HTTP 200 with the CueMind shell. No `globals.css` change was needed. Task 7 is now pending.
 
 - Completed Phase D Task 7 with a fresh task-specific implementation/review pass. `scripts/evaluate-end-to-end.ts` now reports the frozen manifest version, candidate denominator, card count, terminal-state counts, source-validity count, card target, latency percentiles, and blocked external dependencies. The report preserves the difference between deterministic fixed-snapshot/mock evidence and live runtime evidence.
-- Task 7 evidence is intentionally partial: the current deterministic report has manifest `demo-manifest-v1`, 8 candidates (8 evaluable, 0 excluded), 0 cards, source-valid cards `0`, and card target `3-5` with status `under_target`. Its `searchEvidence` is `fixed_snapshot_only`; `live_search_or_context_card_runtime` remains blocked. This does not claim live search quality, live card generation, or production readiness.
+- Task 7 evidence is intentionally partial: the evaluator's deterministic mock/fixed-snapshot run has manifest `demo-manifest-v1`, 8 candidates (8 evaluable, 0 excluded), 0 cards, source-valid cards `0`, and card target `3-5` with status `under_target`. Its `searchEvidence` is `fixed_snapshot_only`; `live_search_unavailable` and `live_context_card_runtime_unverified` remain blocked. Existing generated reports were not regenerated within the Priority 2 file boundary. This does not claim live search quality, live card generation, or production readiness.
 - Task 7 review passed after correcting the evaluator boundary so mock replay cannot be classified as live evidence. The report uses `card_shown`/trace-aware counting for the new path and retains explicit unverified production claims.
 
 - Completed Phase D Task 8 final verification and phase-end cleanup audit. No factual error requiring a `docs/desktop-mvp.md` change was found; its existing Windows, packaging, live-search, long-video, Milvus, and production-readiness limitations remain consistent with the observed evidence.
@@ -517,3 +532,33 @@
 | `lib/knowledge-embeddings.ts` | Integration adapter | Calls the configured embedding endpoint and validates dimensions | keep | Prevents deterministic placeholder vectors from becoming evidence. |
 | `/tmp/cuemind-runtime/` | External runtime workspace | Holds server processes, logs, and generated reports | review | Keep for reproducibility; clean up only when local audit artifacts are no longer needed. |
 | `/tmp/cuemind-runtime/milvus/` | External compose workspace | Holds Milvus compose configuration and runtime state | review | Keep while Milvus is used locally; never commit container state or images. |
+
+## 2026-08-27 (schema/provider repair step 1)
+
+- Added the first typed raw-response failure contract in `lib/model-provider.ts` while preserving
+  the existing `model_*` `code` values used by the context-card route.
+- `failureCode` now distinguishes `http_error`, `timeout`, `network_error`, `invalid_json`, and
+  `empty_response`; `stage` records whether the failure occurred during `request` or `response`.
+- The OpenAI-compatible client now reads the response body as text before parsing so HTTP 200 with
+  an empty body is distinguishable from non-empty invalid JSON. It does not strip Markdown, relax
+  card schema validation, or log the raw response body.
+- Extended `scripts/test-model-providers.ts` with deterministic local-server coverage for HTTP
+  errors, timeout, network errors, empty responses, invalid response JSON, and invalid assistant
+  JSON. Existing success behavior, provider wrappers, auth handling, and legacy error codes remain
+  covered.
+- TDD evidence: RED occurred at the first new HTTP classification assertion before implementation;
+  GREEN completed after the minimal contract and parser changes.
+- Verification passed: provider regression, context-card route regression, demo windowing, demo
+  ledger, end-to-end evaluator regression, fixture replay validation, `npx tsc --noEmit` before
+  and after build, `npm run lint`, `npm run build`, and `git diff --check`.
+- Evidence boundary: no real Tavily, agent-reach, llama.cpp, or remote provider response was
+  captured in this step. Real provider behavior and output quality remain unverified.
+
+### Schema/provider repair step 1 cleanup audit
+
+| Path | Type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `lib/model-provider.ts` | Production provider adapter | Carries compatible model errors and bounded raw-response classifications | keep | Required runtime contract; no raw response content is retained. |
+| `scripts/test-model-providers.ts` | Official regression script | Exercises deterministic HTTP/parser failure boundaries | keep | Required TDD regression coverage, not throwaway test code. |
+| `lib/llama-cpp.ts` | Provider wrapper | Preserves local provider identity and shared client behavior | keep | Existing production boundary; no temporary code added. |
+| `lib/remote-api.ts` | Provider wrapper | Preserves remote provider identity and shared client behavior | keep | Existing production boundary; no temporary code added. |
