@@ -13,7 +13,6 @@ import useDesktopTranscript from "@/hooks/useDesktopTranscript";
 import useMediaUploader from "@/hooks/useMediaUploader";
 import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
-import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
 import { exportSession } from "@/lib/export";
 import { END_OF_MEETING_PROMPT } from "@/lib/prompts";
@@ -129,10 +128,9 @@ export default function Home(): ReactElement {
     const timer = window.setTimeout(() => {
       setReportRequested(false);
       setIsReportLoading(true);
-      const settings = loadCueMindSettings();
       void fetch("/api/summarize", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...groqRequestHeaders(settings) },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ earlierTranscript: transcriptRef.current.map((chunk) => chunk.text).join("\n"), summarizationPrompt: END_OF_MEETING_PROMPT }),
       }).then(async (response) => {
         const payload: unknown = await response.json();

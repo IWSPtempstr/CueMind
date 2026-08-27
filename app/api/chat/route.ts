@@ -1,4 +1,4 @@
-// Streams Groq chat completions (SSE) for the meeting copilot using transcript context and capped history.
+// Streams local llama.cpp chat completions (SSE) for the meeting copilot using transcript context and capped history.
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -6,12 +6,12 @@ import {
   cappedPrompt,
   cappedText,
   enforceRateLimit,
-  resolveGroqApiKey,
 } from "@/lib/api-security";
 import {
-  GROQ_CHAT_COMPLETIONS_URL,
-  groqApiErrorMessage,
-} from "@/lib/groq-route-helpers";
+  isAbortTimeoutError,
+  resolveLocalProvider,
+} from "@/lib/llama-cpp";
+import { normalizeChatCompletionsUrl } from "@/lib/model-provider";
 import {
   CHAT_CONTEXT_CHARS,
   CHAT_HISTORY_MAX_MESSAGES,
@@ -21,8 +21,9 @@ import {
   MAX_CONTEXT_CHARS,
   MAX_MESSAGE_CHARS,
   MAX_PROMPT_CHARS,
-  MODELS,
 } from "@/lib/prompts";
+
+const CHAT_TIMEOUT_MS = 60_000;
 
 interface ChatHistoryEntry {
   role: "user" | "assistant";
@@ -57,14 +58,6 @@ export async function POST(
 ): Promise<Response | NextResponse<{ error: string }>> {
   const limited = enforceRateLimit(request, "chat", 30);
   if (limited) return limited;
-
-  const apiKey = resolveGroqApiKey(request);
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "No API key provided" },
-      { status: 401 },
-    );
-  }
 
   let body: unknown;
   try {
@@ -117,7 +110,9 @@ export async function POST(
 
   const chatHistory = parseChatHistory(record.chatHistory);
 
-  const groqMessages: Array<{ role: string; content: string }> = [
+  const provider = resolveLocalProvider(record);
+
+  const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: chatPromptText },
     {
       role: "system",
@@ -132,51 +127,49 @@ export async function POST(
     { role: "user", content: message },
   ];
 
-  let groqResponse: Response;
+  let upstreamResponse: Response;
   try {
-    groqResponse = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+    upstreamResponse = await fetch(
+      normalizeChatCompletionsUrl(provider.baseUrl),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: provider.model,
+          messages,
+          stream: true,
+          max_tokens: CHAT_MAX_TOKENS,
+        }),
+        signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
       },
-      body: JSON.stringify({
-        model: MODELS.chat,
-        messages: groqMessages,
-        stream: true,
-        max_tokens: CHAT_MAX_TOKENS,
-      }),
-    });
-  } catch {
+    );
+  } catch (caught) {
     return NextResponse.json(
-      { error: "Could not reach chat service" },
+      {
+        error: isAbortTimeoutError(caught)
+          ? "llama.cpp provider timed out"
+          : "llama.cpp provider unreachable",
+      },
       { status: 502 },
     );
   }
 
-  if (!groqResponse.ok) {
-    const rawText = await groqResponse.text();
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawText) as unknown;
-    } catch {
-      return NextResponse.json(
-        { error: "Chat request failed" },
-        { status: groqResponse.status },
-      );
-    }
-    const errText = groqApiErrorMessage(parsed, "Chat request failed");
-    return NextResponse.json({ error: errText }, { status: groqResponse.status });
+  if (!upstreamResponse.ok) {
+    return NextResponse.json(
+      { error: `llama.cpp provider HTTP ${upstreamResponse.status}` },
+      { status: 502 },
+    );
   }
 
-  if (!groqResponse.body) {
+  if (!upstreamResponse.body) {
     return NextResponse.json(
       { error: "Empty response from chat service" },
       { status: 502 },
     );
   }
 
-  return new Response(groqResponse.body, {
+  // Passthrough keeps the OpenAI-compatible SSE framing the client already parses.
+  return new Response(upstreamResponse.body, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",

@@ -161,9 +161,11 @@ export interface JsonChatRequest {
   system: string;
   prompt: string;
   timeoutMs: number;
+  /** Optional output token cap forwarded as `max_tokens` when provided. */
+  maxTokens?: number;
 }
 
-function normalizeChatCompletionsUrl(baseUrl: string): string {
+export function normalizeChatCompletionsUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, "");
   const withV1 = /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
   return `${withV1}/chat/completions`;
@@ -239,6 +241,9 @@ async function postChatCompletions(
       ],
       temperature: 0,
       response_format: { type: "json_object" },
+      ...(request.maxTokens !== undefined
+        ? { max_tokens: request.maxTokens }
+        : {}),
     }),
     signal,
     cache: "no-store",
@@ -304,7 +309,7 @@ async function parseChatCompletionsJson<T>(
   }
 }
 
-function extractChatAssistantContent(payload: unknown): string | null {
+export function extractChatAssistantContent(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) {
     return null;
   }

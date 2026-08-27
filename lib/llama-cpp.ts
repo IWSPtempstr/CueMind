@@ -19,3 +19,83 @@ export async function generateLlamaCppJson<T>(
   }
   return generateOpenAiCompatibleJson<T>({ provider: "llama.cpp", ...args });
 }
+
+/** Endpoint configuration resolved for routes that call the local provider. */
+export interface LocalLlamaCppProvider {
+  baseUrl: string;
+  model: string;
+  /** Local llama-server needs no auth; kept empty so callers share one shape. */
+  apiKey: string;
+}
+
+/**
+ * Unified local provider resolution for chat/summarize/suggestions routes.
+ * Prefers an optional request-body override
+ * (`{ settings: { llamaCppBaseUrl, llamaCppModel } }`), then falls back to
+ * `LLAMA_CPP_BASE_URL` / `LLAMA_CPP_MODEL`, then to the built-in defaults.
+ */
+export function resolveLocalProvider(
+  requestBody?: unknown,
+): LocalLlamaCppProvider {
+  const root =
+    typeof requestBody === "object" &&
+    requestBody !== null &&
+    !Array.isArray(requestBody)
+      ? (requestBody as { settings?: unknown }).settings
+      : null;
+  const overrides =
+    typeof root === "object" && root !== null && !Array.isArray(root)
+      ? (root as { llamaCppBaseUrl?: unknown; llamaCppModel?: unknown })
+      : null;
+  const overrideString = (value: unknown): string =>
+    typeof value === "string" && value.trim() ? value.trim() : "";
+
+  return {
+    baseUrl:
+      overrideString(overrides?.llamaCppBaseUrl) ||
+      process.env.LLAMA_CPP_BASE_URL?.trim() ||
+      "http://127.0.0.1:8082/v1",
+    model:
+      overrideString(overrides?.llamaCppModel) ||
+      process.env.LLAMA_CPP_MODEL?.trim() ||
+      "cuemind-qwen3-4b-instruct-2507-q4_k_m",
+    apiKey: "",
+  };
+}
+
+/**
+ * Maps provider failures onto the four failure classes (unreachable / timeout /
+ * HTTP error / invalid JSON) using the same wording family as the
+ * `providerFailureReason` mapper in the context-cards route. Never includes
+ * upstream payloads, so no key or body content can leak through it.
+ */
+export function llamaCppFailureMessage(
+  caught: unknown,
+  fallback: string,
+): string {
+  if (caught instanceof ModelProviderError) {
+    switch (caught.code) {
+      case "model_unreachable":
+        return "llama.cpp provider unreachable";
+      case "model_timeout":
+        return "llama.cpp provider timed out";
+      case "model_http_error":
+        return `llama.cpp provider HTTP ${caught.status ?? "error"}`;
+      case "model_invalid_json":
+        return "llama.cpp provider returned invalid JSON";
+      case "model_schema_invalid":
+        return "llama.cpp provider returned an invalid schema";
+    }
+  }
+  return fallback;
+}
+
+/** True when a fetch rejected because its `AbortSignal.timeout` fired. */
+export function isAbortTimeoutError(caught: unknown): boolean {
+  return (
+    typeof caught === "object" &&
+    caught !== null &&
+    "name" in caught &&
+    (caught as { name?: unknown }).name === "TimeoutError"
+  );
+}

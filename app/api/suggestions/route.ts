@@ -1,5 +1,5 @@
-// Generates exactly three structured meeting suggestions from transcript context via Groq.
-// Flow: validate x-groq-api-key → validate JSON body → call Groq chat → return { suggestions } or { error }.
+// Generates exactly three structured meeting suggestions from transcript context via the local llama.cpp provider.
+// Flow: validate JSON body → call local llama.cpp (JSON mode) → parseSuggestionsPayload validation → { suggestions } or { error }.
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -7,54 +7,21 @@ import {
   cappedPrompt,
   cappedText,
   enforceRateLimit,
-  resolveGroqApiKey,
 } from "@/lib/api-security";
 import {
-  extractGroqChatAssistantContent,
-  GROQ_CHAT_COMPLETIONS_URL,
-  groqApiErrorMessage,
-} from "@/lib/groq-route-helpers";
+  generateLlamaCppJson,
+  llamaCppFailureMessage,
+  resolveLocalProvider,
+} from "@/lib/llama-cpp";
 import {
   MAX_PROMPT_CHARS,
   MAX_SUGGESTION_INPUT_CHARS,
-  MODELS,
   SUGGESTIONS_MAX_TOKENS,
   SUGGESTIONS_PROMPT,
-  SUGGESTIONS_TEMPERATURE,
 } from "@/lib/prompts";
 import type { Suggestion, SuggestionType } from "@/types/suggestions";
 
-const SUGGESTIONS_JSON_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    suggestions: {
-      type: "array",
-      minItems: 3,
-      maxItems: 3,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          type: {
-            type: "string",
-            enum: [
-              "question",
-              "talking_point",
-              "answer",
-              "fact_check",
-              "clarify",
-            ],
-          },
-          preview: { type: "string" },
-          detail: { type: "string" },
-        },
-        required: ["type", "preview", "detail"],
-      },
-    },
-  },
-  required: ["suggestions"],
-} as const;
+const SUGGESTIONS_TIMEOUT_MS = 60_000;
 
 const SUGGESTION_TYPES: readonly SuggestionType[] = [
   "question",
@@ -68,13 +35,8 @@ function isSuggestionType(value: string): value is SuggestionType {
   return (SUGGESTION_TYPES as readonly string[]).includes(value);
 }
 
-function parseSuggestionsPayload(raw: string): Suggestion[] | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
+/** Structural validation: exactly 3 items with known type enum and string fields. */
+function parseSuggestionsPayload(parsed: unknown): Suggestion[] | null {
   if (
     typeof parsed !== "object" ||
     parsed === null ||
@@ -117,14 +79,6 @@ export async function POST(
   const limited = enforceRateLimit(request, "suggestions", 30);
   if (limited) return limited;
 
-  const apiKey = resolveGroqApiKey(request);
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "No API key provided" },
-      { status: 401 },
-    );
-  }
-
   let body: unknown;
   try {
     body = (await request.json()) as unknown;
@@ -162,67 +116,35 @@ ${earlierSummary || "None"}
 ${previousSuggestions || "None"}
 </previous_suggestions>`;
 
-  let groqResponse: Response;
+  const provider = resolveLocalProvider(record);
+  const systemPrompt = `${activePrompt}
+
+Return ONLY a valid JSON object with exactly 3 items in this shape:
+{"suggestions":[{"type":"question|talking_point|answer|fact_check|clarify","preview":"...","detail":"..."}]}
+No markdown fences, no commentary.`;
+
+  let payload: unknown;
   try {
-    groqResponse = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODELS.suggestions,
-        messages: [
-          { role: "system", content: activePrompt },
-          { role: "user", content: userMessage },
-        ],
-        temperature: SUGGESTIONS_TEMPERATURE,
-        max_tokens: SUGGESTIONS_MAX_TOKENS,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "meeting_suggestions",
-            strict: true,
-            schema: SUGGESTIONS_JSON_SCHEMA,
-          },
-        },
-      }),
+    payload = await generateLlamaCppJson<unknown>({
+      baseUrl: provider.baseUrl,
+      model: provider.model,
+      apiKey: provider.apiKey,
+      system: systemPrompt,
+      prompt: userMessage,
+      timeoutMs: SUGGESTIONS_TIMEOUT_MS,
+      maxTokens: SUGGESTIONS_MAX_TOKENS,
     });
-  } catch {
+  } catch (caught) {
     return NextResponse.json(
-      { error: "Could not reach suggestions service" },
+      { error: llamaCppFailureMessage(caught, "Suggestions request failed") },
       { status: 502 },
     );
   }
 
-  const rawText = await groqResponse.text();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText) as unknown;
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid response from suggestions service" },
-      { status: 502 },
-    );
-  }
-
-  if (!groqResponse.ok) {
-    const message = groqApiErrorMessage(parsed, "Suggestions request failed");
-    return NextResponse.json({ error: message }, { status: groqResponse.status });
-  }
-
-  const assistantText = extractGroqChatAssistantContent(parsed);
-  if (assistantText === null) {
-    return NextResponse.json(
-      { error: "Invalid suggestions response" },
-      { status: 502 },
-    );
-  }
-
-  const suggestions = parseSuggestionsPayload(assistantText);
+  const suggestions = parseSuggestionsPayload(payload);
   if (suggestions === null) {
     return NextResponse.json(
-      { error: "Could not parse suggestions" },
+      { error: "llama.cpp provider returned an invalid schema" },
       { status: 502 },
     );
   }
