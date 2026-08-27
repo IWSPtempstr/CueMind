@@ -55,7 +55,8 @@ export default function MicTranscript(props: Props): ReactElement {
           uploaderSlot
         ) : (
           <div className="flex flex-col items-center gap-3">
-            <button type="button" onClick={() => onRecordingChange(!isRecording)} aria-pressed={isRecording} disabled={isUploadProcessing} aria-label={isUploadProcessing ? "转写中…" : isRecording ? "停止录音" : "开始录音"} className={`flex size-24 items-center justify-center rounded-full border-2 text-4xl shadow-lg ${isRecording ? "border-red-400/60 bg-red-600" : "border-blue-500/40 bg-blue-600 hover:bg-blue-500"} ${isUploadProcessing ? "cursor-not-allowed opacity-40" : ""}`}>🎙️</button>
+            <button type="button" onClick={() => onRecordingChange(!isRecording)} aria-pressed={isRecording} disabled={isUploadProcessing} aria-label={isUploadProcessing ? "转写中…" : isRecording ? "停止录音" : "开始录音"} className={`flex size-24 items-center justify-center rounded-full border-2 shadow-lg ${isRecording ? "border-red-400/60 bg-red-600 text-3xl text-white" : "border-blue-500/40 bg-blue-600 text-4xl hover:bg-blue-500"} ${isUploadProcessing ? "cursor-not-allowed opacity-40" : ""}`}>{isRecording ? "■" : "🎙️"}</button>
+            {isRecording ? <p className="text-[10px] text-neutral-500">点击结束并生成会议总结</p> : null}
             <div className="h-2 w-40 overflow-hidden rounded-full bg-neutral-800" aria-label={`Microphone level ${Math.round(micLevel * 100)} percent`}><div className="h-full bg-emerald-500 transition-[width] duration-75" style={{ width: `${Math.round(micLevel * 100)}%` }} /></div>
             {isRecording ? <button type="button" onClick={onPauseToggle} className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-300 hover:bg-neutral-800">{isPaused ? "▶ 继续" : "Ⅱ 暂停"}</button> : null}
             {retryCount > 0 ? <p className="text-xs text-amber-300">保留 {retryCount} 个音频片段，等待重试…</p> : null}

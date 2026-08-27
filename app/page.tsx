@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import ChatPanel from "@/components/ChatPanel";
+import ChatPanelDrawer from "@/components/ChatPanelDrawer";
+import HealthPanel, { type AsrStatusSnapshot, type UploadStatusSnapshot } from "@/components/HealthPanel";
 import LiveSuggestions from "@/components/LiveSuggestions";
-import LatencyPanel from "@/components/LatencyPanel";
 import MediaUploadPanel from "@/components/MediaUploadPanel";
 import MicTranscript from "@/components/MicTranscript";
 import SettingsModal from "@/components/SettingsModal";
@@ -17,6 +18,7 @@ import { isErrorResponseBody } from "@/lib/api-response";
 import { exportSession } from "@/lib/export";
 import { END_OF_MEETING_PROMPT } from "@/lib/prompts";
 import { loadSessions, storeSession } from "@/lib/session-storage";
+import { summarizeLatency } from "@/lib/telemetry";
 import type { MeetingReport, SessionSnapshot } from "@/types/session";
 import type { Suggestion } from "@/types/suggestions";
 
@@ -40,6 +42,7 @@ export default function Home(): ReactElement {
   const chat = useChat({ transcriptChunks: recorder.transcriptChunks });
   const [pendingSuggestion, setPendingSuggestion] = useState<Suggestion | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [meetingReport, setMeetingReport] = useState<MeetingReport | null>(null);
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportRequested, setReportRequested] = useState(false);
@@ -147,6 +150,38 @@ export default function Home(): ReactElement {
     window.setTimeout(suggestions.triggerRefresh, 500);
   }, [recorder, suggestions.triggerRefresh]);
 
+  const latencySamples = useMemo(
+    () => [...desktopRecorder.latencySamples, ...contextCards.latencySamples],
+    [contextCards.latencySamples, desktopRecorder.latencySamples],
+  );
+  const latencySummaries = useMemo(
+    () => ([
+      { stage: "asr", label: "ASR" },
+      { stage: "keyword", label: "关键词" },
+      { stage: "search", label: "检索" },
+      { stage: "generation", label: "生成" },
+      { stage: "total", label: "卡片总耗时" },
+    ] as const).map(({ stage, label }) => ({ stage, label, ...summarizeLatency(latencySamples, stage) })),
+    [latencySamples],
+  );
+
+  const asrStatus: AsrStatusSnapshot = {
+    state: recorder.isPaused ? "paused" : recorder.isRecording ? "recording" : "idle",
+    source: desktopRecorder.isDesktop ? "系统音频(桌面)" : "浏览器麦克风",
+    retryCount: recorder.retryCount,
+    error: recorder.error,
+  };
+  const uploadStatus: UploadStatusSnapshot | null = uploader.isProcessing
+    ? {
+        processing: true,
+        fileName: uploader.processingFileName,
+        progressPercent: uploader.progress,
+        windows: uploader.transcribeProgress
+          ? { received: uploader.transcribeProgress.received, total: uploader.transcribeProgress.total }
+          : null,
+      }
+    : null;
+
   return (
     <div className="flex h-dvh min-h-0 w-full flex-col bg-[#0a0a0a] text-neutral-200">
       <header className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 border-b border-neutral-800 bg-neutral-950 px-4 py-1">
@@ -177,6 +212,18 @@ export default function Home(): ReactElement {
           <button type="button" disabled={!hasContent} onClick={() => exportSession(snapshot, "md")} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 disabled:opacity-40">
             Markdown
           </button>
+          <button
+            type="button"
+            onClick={() => setIsChatOpen(true)}
+            className="relative rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200"
+          >
+            会后追问
+            {chat.messages.length > 0 ? (
+              <span className="absolute -right-2 -top-2 flex min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-4 text-white">
+                {chat.messages.length > 99 ? "99+" : chat.messages.length}
+              </span>
+            ) : null}
+          </button>
           <button type="button" onClick={() => setIsSettingsOpen(true)} className="flex size-8 items-center justify-center rounded-lg bg-neutral-800 text-neutral-400" aria-label="Open settings">
             ⚙
           </button>
@@ -198,14 +245,6 @@ export default function Home(): ReactElement {
           {persistenceError}
         </div>
       ) : null}
-      <LatencyPanel
-        samples={[...desktopRecorder.latencySamples, ...contextCards.latencySamples]}
-        skippedFailures={contextCards.failures.length}
-        latestTotalLatencyMs={contextCards.cards[0]?.latencyMs.total ?? null}
-        cardCount={contextCards.cards.length}
-        queueStatus={desktopRecorder.error?.includes("队列") ? "有待处理" : "正常"}
-        degradationStatus={contextCards.cards.some((card) => card.demoTrace && card.demoTrace.decisionSource !== "model") ? "已启用" : null}
-      />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col lg:flex-row [&>section]:min-w-0">
         <MicTranscript
@@ -241,7 +280,10 @@ export default function Home(): ReactElement {
           nextRefreshAt={suggestions.nextRefreshAt}
           onManualRefresh={manualRefresh}
           error={suggestions.error}
-          onSuggestionSelect={(suggestion) => setPendingSuggestion({ ...suggestion })}
+          onSuggestionSelect={(suggestion) => {
+            setPendingSuggestion({ ...suggestion });
+            setIsChatOpen(true);
+          }}
           dismissedIds={suggestions.dismissedIds}
           pinnedIds={suggestions.pinnedIds}
           onFeedback={suggestions.recordFeedback}
@@ -250,6 +292,18 @@ export default function Home(): ReactElement {
           contextCardsLoading={contextCards.isLoading}
           contextCardsError={contextCards.error}
         />
+        <HealthPanel
+          asrStatus={asrStatus}
+          uploadStatus={uploadStatus}
+          cardCount={contextCards.cards.length}
+          failureCount={contextCards.failures.length}
+          latestTotalLatencyMs={contextCards.cards[0]?.latencyMs.total ?? null}
+          latencySummaries={latencySummaries}
+          queueStatus={desktopRecorder.error?.includes("队列") ? "有待处理" : "正常"}
+          degradationStatus={contextCards.cards.some((card) => card.demoTrace && card.demoTrace.decisionSource !== "model") ? "已启用" : null}
+        />
+      </main>
+      <ChatPanelDrawer isOpen={isChatOpen} onClose={() => setIsChatOpen(false)}>
         <ChatPanel
           messages={chat.messages}
           isStreaming={chat.isStreaming}
@@ -262,7 +316,7 @@ export default function Home(): ReactElement {
           retryLastFailed={chat.retryLastFailed}
           canRetry={chat.canRetry}
         />
-      </main>
+      </ChatPanelDrawer>
     </div>
   );
 }
