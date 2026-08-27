@@ -11,7 +11,7 @@ import SettingsModal from "@/components/SettingsModal";
 import useChat from "@/hooks/useChat";
 import useContextCards from "@/hooks/useContextCards";
 import useDesktopTranscript from "@/hooks/useDesktopTranscript";
-import useMediaUploader from "@/hooks/useMediaUploader";
+import useMediaUploader, { isUploadedRecordCompleted } from "@/hooks/useMediaUploader";
 import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
 import { isErrorResponseBody } from "@/lib/api-response";
@@ -25,6 +25,10 @@ import type { Suggestion } from "@/types/suggestions";
 function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptChunks">): string {
   const firstWords = snapshot.transcriptChunks[0]?.text.trim().slice(0, 44);
   return firstWords || `会议 · ${snapshot.createdAt.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+}
+
+function formatSessionDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export default function Home(): ReactElement {
@@ -48,11 +52,31 @@ export default function Home(): ReactElement {
   const [reportRequested, setReportRequested] = useState(false);
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [topicSummary, setTopicSummary] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState(new Date());
   const [resumeCandidate, setResumeCandidate] = useState<SessionSnapshot | null>(null);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const transcriptRef = useRef(recorder.transcriptChunks);
   useEffect(() => { transcriptRef.current = recorder.transcriptChunks; }, [recorder.transcriptChunks]);
+  // 已处理过"上传完成"事件的 uploadId 去重集合（主题摘要只生成一次）。
+  const handledUploadIdsRef = useRef(new Set<string>());
+
+  const generateTopicSummary = useCallback((transcriptText: string): void => {
+    const trimmed = transcriptText.trim();
+    if (!trimmed) return;
+    // fire-and-forget：失败静默，不影响主流程。
+    void fetch("/api/session-title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript: trimmed }),
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const payload: unknown = await response.json();
+      if (typeof payload !== "object" || payload === null || !("topic" in payload)) return;
+      const topic = (payload as { topic: unknown }).topic;
+      if (typeof topic === "string" && topic.trim().length > 0) setTopicSummary(topic.trim());
+    }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const saved = loadSessions();
@@ -65,6 +89,7 @@ export default function Home(): ReactElement {
     if (!hasContent || activeSessionId) return;
     setActiveSessionId(crypto.randomUUID());
     setCreatedAt(new Date());
+    setTopicSummary(null);
     setResumeCandidate(null);
   }, [activeSessionId, hasContent]);
 
@@ -78,8 +103,12 @@ export default function Home(): ReactElement {
       chatMessages: chat.messages,
       meetingReport,
     };
-    return { ...base, title: sessionTitle(base) };
-  }, [activeSessionId, chat.messages, createdAt, meetingReport, recorder.transcriptChunks, suggestions.batches]);
+    return {
+      ...base,
+      title: topicSummary ?? sessionTitle(base),
+      ...(topicSummary ? { topicSummary } : {}),
+    };
+  }, [activeSessionId, chat.messages, createdAt, meetingReport, recorder.transcriptChunks, suggestions.batches, topicSummary]);
 
   useEffect(() => {
     if (!activeSessionId || !hasContent) return;
@@ -100,6 +129,7 @@ export default function Home(): ReactElement {
     suggestions.setBatches(session.suggestionBatches);
     chat.setMessages(session.chatMessages);
     setMeetingReport(session.meetingReport);
+    setTopicSummary(session.topicSummary ?? null);
     setActiveSessionId(session.id);
     setCreatedAt(session.createdAt);
     setResumeCandidate(null);
@@ -111,6 +141,7 @@ export default function Home(): ReactElement {
     suggestions.setBatches([]);
     chat.setMessages([]);
     setMeetingReport(null);
+    setTopicSummary(null);
     setActiveSessionId(crypto.randomUUID());
     setCreatedAt(new Date());
     setResumeCandidate(null);
@@ -131,6 +162,8 @@ export default function Home(): ReactElement {
     const timer = window.setTimeout(() => {
       setReportRequested(false);
       setIsReportLoading(true);
+      // 与会议总结并行生成会话主题摘要（fire-and-forget）。
+      generateTopicSummary(transcriptRef.current.map((chunk) => chunk.text).join("\n"));
       void fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -143,7 +176,18 @@ export default function Home(): ReactElement {
       }).catch((caught: unknown) => setPersistenceError(caught instanceof Error ? caught.message : "Could not build the meeting report")).finally(() => setIsReportLoading(false));
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [recorder.isRecording, recorder.transcriptChunks, reportRequested]);
+  }, [generateTopicSummary, recorder.isRecording, recorder.transcriptChunks, reportRequested]);
+
+  // 触发点 2：上传完成（completed 记录按 uploadId 去重），转写内容足够时补生成主题摘要。
+  useEffect(() => {
+    const completedUnhandled = uploader.uploadedFiles.filter(
+      (record) => isUploadedRecordCompleted(record) && !handledUploadIdsRef.current.has(record.uploadId),
+    );
+    if (completedUnhandled.length === 0) return;
+    for (const record of completedUnhandled) handledUploadIdsRef.current.add(record.uploadId);
+    if (recorder.transcriptChunks.length < 3 || topicSummary !== null) return;
+    generateTopicSummary(recorder.transcriptChunks.map((chunk) => chunk.text).join("\n"));
+  }, [generateTopicSummary, recorder.transcriptChunks, topicSummary, uploader.uploadedFiles]);
 
   const manualRefresh = useCallback((): void => {
     recorder.flushCurrentChunk();
@@ -199,7 +243,7 @@ export default function Home(): ReactElement {
             <option value="">会话（{sessions.length}）</option>
             {sessions.map((session) => (
               <option key={session.id} value={session.id}>
-                {session.title}
+                {formatSessionDate(session.createdAt)} - {session.topicSummary || session.title}
               </option>
             ))}
           </select>
