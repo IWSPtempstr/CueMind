@@ -396,31 +396,65 @@ function parseRequest(value: unknown): ContextCardRequest | null {
     !value.transcriptChunkIds.every(isString)
   ) return null;
 
-  const candidateId = value.candidateId;
-  const datasetVersion = value.datasetVersion;
-  const windowingVersion = value.windowingVersion;
-  if (
-    !isNonEmptyString(candidateId) ||
-    !isNonEmptyString(datasetVersion) ||
-    !isNonEmptyString(windowingVersion)
-  ) return null;
-  const coreStartMs = value.coreStartMs;
-  const coreEndMs = value.coreEndMs;
-  const contextStartMs = value.contextStartMs;
-  const contextEndMs = value.contextEndMs;
-  if (
-    !isFiniteNonNegativeNumber(coreStartMs) ||
-    !isFiniteNonNegativeNumber(coreEndMs) ||
-    !isFiniteNonNegativeNumber(contextStartMs) ||
-    !isFiniteNonNegativeNumber(contextEndMs)
-  ) return null;
-  if (
-    coreStartMs > coreEndMs ||
-    contextStartMs > coreStartMs ||
-    contextEndMs < coreEndMs ||
-    coreStartMs - contextStartMs > 2_000 ||
-    contextEndMs - coreEndMs > 2_000
-  ) return null;
+  // 实时简单模式（live-simple）：应用内 hook 不携带窗口元数据。仅当 candidateId 与
+  // 四个时间字段全部缺失时，在服务端合成元数据；部分缺失视为 mixed，仍然拒绝。
+  const isLiveSimpleRequest =
+    value.candidateId === undefined &&
+    value.coreStartMs === undefined &&
+    value.coreEndMs === undefined &&
+    value.contextStartMs === undefined &&
+    value.contextEndMs === undefined;
+
+  let candidateId: string;
+  let datasetVersion: string;
+  let windowingVersion: string;
+  let coreStartMs: number;
+  let coreEndMs: number;
+  let contextStartMs: number;
+  let contextEndMs: number;
+
+  if (isLiveSimpleRequest) {
+    candidateId = crypto.randomUUID();
+    datasetVersion = "client-live";
+    windowingVersion = "hook-1";
+    coreStartMs = 0;
+    coreEndMs = 0;
+    contextStartMs = 0;
+    contextEndMs = 0;
+  } else {
+    const rawCandidateId = value.candidateId;
+    const rawDatasetVersion = value.datasetVersion;
+    const rawWindowingVersion = value.windowingVersion;
+    if (
+      !isNonEmptyString(rawCandidateId) ||
+      !isNonEmptyString(rawDatasetVersion) ||
+      !isNonEmptyString(rawWindowingVersion)
+    ) return null;
+    const rawCoreStartMs = value.coreStartMs;
+    const rawCoreEndMs = value.coreEndMs;
+    const rawContextStartMs = value.contextStartMs;
+    const rawContextEndMs = value.contextEndMs;
+    if (
+      !isFiniteNonNegativeNumber(rawCoreStartMs) ||
+      !isFiniteNonNegativeNumber(rawCoreEndMs) ||
+      !isFiniteNonNegativeNumber(rawContextStartMs) ||
+      !isFiniteNonNegativeNumber(rawContextEndMs)
+    ) return null;
+    if (
+      rawCoreStartMs > rawCoreEndMs ||
+      rawContextStartMs > rawCoreStartMs ||
+      rawContextEndMs < rawCoreEndMs ||
+      rawCoreStartMs - rawContextStartMs > 2_000 ||
+      rawContextEndMs - rawCoreEndMs > 2_000
+    ) return null;
+    candidateId = rawCandidateId.trim();
+    datasetVersion = rawDatasetVersion.trim();
+    windowingVersion = rawWindowingVersion.trim();
+    coreStartMs = rawCoreStartMs;
+    coreEndMs = rawCoreEndMs;
+    contextStartMs = rawContextStartMs;
+    contextEndMs = rawContextEndMs;
+  }
 
   const settings = value.settings;
   const modelProvider = settings.modelProvider;
@@ -438,9 +472,9 @@ function parseRequest(value: unknown): ContextCardRequest | null {
   if (searchProvider !== "tavily" && searchProvider !== "bing" && searchProvider !== "serpapi") return null;
 
   return {
-    candidateId: candidateId.trim(),
-    datasetVersion: datasetVersion.trim(),
-    windowingVersion: windowingVersion.trim(),
+    candidateId,
+    datasetVersion,
+    windowingVersion,
     coreStartMs,
     coreEndMs,
     contextStartMs,

@@ -110,12 +110,16 @@ export default function ChatPanel({
   canRetry,
 }: ChatPanelProps): ReactElement {
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
+  // StrictMode / Fast Refresh 下挂载期 effect 会执行两次；同一 pendingSuggestion 对象只允许消费一次，
+  // 否则会重复插入气泡并触发两次聊天流。
+  const handledSuggestionRef = useRef<Suggestion | null>(null);
   const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
-    if (pendingSuggestion === null) {
+    if (pendingSuggestion === null || handledSuggestionRef.current === pendingSuggestion) {
       return;
     }
+    handledSuggestionRef.current = pendingSuggestion;
     addSuggestionToChat(pendingSuggestion);
     onSuggestionHandled();
   }, [pendingSuggestion, addSuggestionToChat, onSuggestionHandled]);

@@ -439,6 +439,56 @@ async function testMissingCandidateIdIsRejected(): Promise<void> {
   assert.equal(payload.trace.finalState, "invalid_request");
 }
 
+// 实时简单模式：仅携带 hook 发送的四个字段（knownKeywords 校验保持必填，与线上一致），
+// 不含 candidateId/时间元数据时应在服务端合成元数据并走通完整流程。
+async function testLiveSimpleBodyWithoutMetadataGeneratesCard(): Promise<void> {
+  let calls = 0;
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    calls += 1;
+    if (calls === 1) {
+      writeJson(res, 200, chatCompletion({ keyword: "KV Cache" }));
+    } else {
+      writeJson(res, 200, chatCompletion({
+        keyword: "KV Cache",
+        explanation: "缓存键值对以加速大模型推理。",
+        whyNow: "会议正在讨论吞吐优化。",
+      }));
+    }
+  });
+  try {
+    const response = await POST(makeRequest({
+      recentTranscript: "我们讨论一下 KV Cache 对推理吞吐的影响",
+      knownKeywords: [],
+      transcriptChunkIds: ["chunk-live-1"],
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+    }));
+    assert.equal(response.status, 200);
+    const payload = await readPayload(response);
+    assert.notEqual(payload.failure?.reason, "Invalid context-card request");
+    assert.ok(typeof payload.trace.candidateId === "string" && payload.trace.candidateId.length > 0);
+    assert.equal(payload.trace.datasetVersion, "client-live");
+    assert.equal(payload.trace.windowingVersion, "hook-1");
+    assert.ok(payload.card);
+    assert.equal(payload.card.keyword, "KV Cache");
+    assert.equal(payload.trace.finalState, "card_shown");
+    assert.equal(calls, 2);
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+// mixed 元数据：candidateId 存在但缺少 coreStartMs 时仍应拒绝。
+async function testPartialMetadataIsStillRejected(): Promise<void> {
+  const body = baseBody();
+  delete body.coreStartMs;
+  const response = await POST(makeRequest(body));
+  assert.equal(response.status, 400);
+  const payload = await readPayload(response);
+  assert.equal(payload.card, null);
+  assert.equal(payload.failure?.reason, "Invalid context-card request");
+  assert.equal(payload.trace.finalState, "invalid_request");
+}
+
 async function testTavilyFallsBackToAgentReachWhenKeyMissing(): Promise<void> {
   let calls = 0;
   const { server, baseUrl } = await startMockServer((_req, res) => {
@@ -706,6 +756,8 @@ async function main(): Promise<void> {
     await testDistinctNormalizedKeywordIsNotSuppressed();
     await testInvalidCandidateIntervalIsRejected();
     await testMissingCandidateIdIsRejected();
+    await testLiveSimpleBodyWithoutMetadataGeneratesCard();
+    await testPartialMetadataIsStillRejected();
     await testTavilyFallsBackToAgentReachWhenKeyMissing();
     await testAgentReachUnavailableReplacesMissingKeyFailure();
     await testAgentReachFallbackCanBeDisabled();
