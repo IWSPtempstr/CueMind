@@ -12,7 +12,7 @@ const parsed = parseDesktopEvent(JSON.stringify({
 }));
 
 if (parsed?.type === "transcript_ready") {
-  const source: "system" | "microphone" = parsed.source;
+  const source: "system" | "microphone" | "upload" = parsed.source;
   const text: string = parsed.text;
   void source;
   void text;

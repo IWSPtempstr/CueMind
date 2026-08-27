@@ -134,7 +134,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAudioSource(value: unknown): value is AudioSource {
-  return value === "system" || value === "microphone";
+  return value === "system" || value === "microphone" || value === "upload";
 }
 
 function isString(value: unknown): value is string {

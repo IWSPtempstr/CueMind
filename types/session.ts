@@ -1,7 +1,7 @@
 import type { ChatMessage } from "@/types/chat";
 import type { SuggestionBatch } from "@/types/suggestions";
 
-export type AudioSource = "system" | "microphone";
+export type AudioSource = "system" | "microphone" | "upload";
 
 export interface LatencyTrace {
   captureStartedAt?: Date;

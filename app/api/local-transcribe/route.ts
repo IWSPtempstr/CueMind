@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 interface LocalTranscribeBody {
   audioPath: string;
-  source: "system" | "microphone";
+  source: "system" | "microphone" | "upload";
   startMs: number;
   endMs: number;
   settings: {
@@ -53,7 +53,7 @@ export async function POST(
 
 function parseRequest(value: unknown): LocalTranscribeBody | null {
   if (!isRecord(value) || !isString(value.audioPath) || !value.audioPath.trim()) return null;
-  if (value.source !== "system" && value.source !== "microphone") return null;
+  if (value.source !== "system" && value.source !== "microphone" && value.source !== "upload") return null;
   if (!isFiniteNumber(value.startMs) || !isFiniteNumber(value.endMs)) return null;
   if (!isRecord(value.settings)) return null;
   if (!isString(value.settings.whisperPath) || !value.settings.whisperPath.trim()) return null;

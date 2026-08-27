@@ -182,3 +182,184 @@ function classifyProcessError(stderr: string, code: number | null): string {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+// --- Media -> WAV conversion (ffmpeg based, independent from whisper pipeline) ---
+
+export type MediaConvertErrorCode =
+  | "ffmpeg_not_found"
+  | "unsupported_media"
+  | "ffmpeg_timed_out"
+  | "ffmpeg_failed";
+
+export class MediaConvertError extends Error {
+  readonly code: MediaConvertErrorCode;
+
+  constructor(code: MediaConvertErrorCode, message: string) {
+    super(message);
+    this.name = "MediaConvertError";
+    this.code = code;
+  }
+}
+
+export interface ConvertMediaOptions {
+  /** Path to the ffmpeg executable. Defaults to "ffmpeg". */
+  ffmpegPath?: string;
+  /** Optional trim start in milliseconds (applied before -i as -ss seconds). */
+  startMs?: number;
+  /** Optional trim end in milliseconds; requires startMs to be provided too. */
+  endMs?: number;
+  /** Kill switch for the ffmpeg subprocess. Defaults to 600_000 ms. */
+  timeoutMs?: number;
+}
+
+export interface ConvertMediaResult {
+  wavPath: string;
+  originalDurationMs: number | null;
+}
+
+const SUPPORTED_MEDIA_EXTENSIONS = [
+  "mp4",
+  "webm",
+  "mov",
+  "mkv",
+  "m4a",
+  "mp3",
+  "flac",
+  "ogg",
+  "wav",
+] as const;
+
+const SUPPORTED_MEDIA_FORMATS_LABEL = SUPPORTED_MEDIA_EXTENSIONS.join(", ");
+const MEDIA_EXTENSIONS_SET = new Set<string>(SUPPORTED_MEDIA_EXTENSIONS);
+const DEFAULT_FFMPEG_TIMEOUT_MS = 600_000;
+const FFMPEG_STDERR_SUMMARY_LIMIT = 500;
+
+export async function convertMediaToWav(
+  inputPath: string,
+  outputWavPath: string,
+  options?: ConvertMediaOptions,
+): Promise<ConvertMediaResult> {
+  const extension = getInputFileExtension(inputPath);
+  // Classification happens before any subprocess is started.
+  if (!MEDIA_EXTENSIONS_SET.has(extension)) {
+    throw new MediaConvertError(
+      "unsupported_media",
+      `Unsupported media format "${extension ? `.${extension}` : "(no extension)"}". Supported formats: ${SUPPORTED_MEDIA_FORMATS_LABEL}.`,
+    );
+  }
+
+  if (extension === "wav") {
+    return { wavPath: inputPath, originalDurationMs: await readWavDurationMs(inputPath) };
+  }
+
+  const startMs = normalizeTrimMs(options?.startMs);
+  const endMs = normalizeTrimMs(options?.endMs);
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_FFMPEG_TIMEOUT_MS;
+  const command = options?.ffmpegPath ?? "ffmpeg";
+
+  const args: string[] = ["-y"];
+  if (startMs !== null) args.push("-ss", formatSeconds(startMs));
+  args.push("-i", inputPath);
+  if (startMs !== null && endMs !== null && endMs > startMs) {
+    args.push("-t", formatSeconds(endMs - startMs));
+  }
+  args.push("-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", outputWavPath);
+
+  const outcome = await runFfmpegProcess(command, args, timeoutMs);
+  if (outcome.timedOut) {
+    throw new MediaConvertError("ffmpeg_timed_out", `ffmpeg media conversion timed out after ${timeoutMs} milliseconds`);
+  }
+  if (
+    outcome.spawnErrorCode === "ENOENT"
+    || /command not found/i.test(outcome.stderr)
+  ) {
+    throw new MediaConvertError(
+      "ffmpeg_not_found",
+      `ffmpeg executable was not found ("${command}"). Install ffmpeg or configure its path.${summarizeFfmpegStderr(outcome.stderr)}`,
+    );
+  }
+  if (outcome.exitCode !== 0) {
+    throw new MediaConvertError(
+      "ffmpeg_failed",
+      `ffmpeg exited with code ${outcome.exitCode ?? "unknown"}${summarizeFfmpegStderr(outcome.stderr)}`,
+    );
+  }
+
+  const durationMs = await readWavDurationMs(outputWavPath);
+  if (durationMs === null) {
+    throw new MediaConvertError("ffmpeg_failed", `ffmpeg did not produce a valid WAV file at "${outputWavPath}"`);
+  }
+  return { wavPath: outputWavPath, originalDurationMs: durationMs };
+}
+
+interface FfmpegProcessOutcome {
+  exitCode: number | null;
+  spawnErrorCode: string | null;
+  timedOut: boolean;
+  stderr: string;
+}
+
+function runFfmpegProcess(
+  command: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<FfmpegProcessOutcome> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      windowsHide: true,
+    });
+    let stderr = "";
+    let settled = false;
+    const settle = (outcome: Omit<FfmpegProcessOutcome, "stderr">) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ ...outcome, stderr });
+    };
+    const timer = setTimeout(() => {
+      child.kill();
+      settle({ exitCode: null, spawnErrorCode: null, timedOut: true });
+    }, timeoutMs);
+
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      settle({
+        exitCode: null,
+        spawnErrorCode: typeof errorCode === "string" ? errorCode : null,
+        timedOut: false,
+      });
+    });
+    child.on("close", (code) => {
+      settle({ exitCode: code, spawnErrorCode: null, timedOut: false });
+    });
+  });
+}
+
+function getInputFileExtension(path: string): string {
+  const base = path.split(/[\\/]/).pop() ?? path;
+  const dotIndex = base.lastIndexOf(".");
+  if (dotIndex <= 0 || dotIndex === base.length - 1) return "";
+  return base.slice(dotIndex + 1).toLowerCase();
+}
+
+function normalizeTrimMs(value: number | undefined): number | null {
+  if (value === undefined || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.round(value));
+}
+
+function formatSeconds(ms: number): string {
+  return (ms / 1000).toString();
+}
+
+function summarizeFfmpegStderr(stderr: string): string {
+  const detail = stderr.trim();
+  if (!detail) return "";
+  const summary = detail.length > FFMPEG_STDERR_SUMMARY_LIMIT
+    ? `${detail.slice(0, FFMPEG_STDERR_SUMMARY_LIMIT)}...`
+    : detail;
+  return ` (${summary})`;
+}
