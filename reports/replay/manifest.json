@@ -2,7 +2,7 @@
   "dataset": "/home/work/asr/CueMind/fixtures/demo-meeting/sample-events.jsonl",
   "datasetType": "fixture_replay",
   "inputPath": "/home/work/asr/CueMind/fixtures/demo-meeting/sample-events.jsonl",
-  "generatedAt": "2026-08-26T07:54:44.628Z",
+  "generatedAt": "2026-08-27T04:24:21.306Z",
   "evaluator": "scripts/validate-replay.ts",
   "modelProvider": null,
   "modelName": null,

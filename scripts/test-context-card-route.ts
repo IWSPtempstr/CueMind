@@ -14,6 +14,11 @@ type FetchInit = Parameters<typeof fetch>[1];
 const realFetch = globalThis.fetch;
 
 interface RouteTrace {
+  candidateId: string;
+  datasetVersion: string;
+  windowingVersion: string;
+  decisionSource: string;
+  duplicateOfCandidateId?: string;
   modelProvider: string;
   modelName: string;
   modelBaseUrl: string;
@@ -148,6 +153,13 @@ function settings(overrides: Record<string, unknown> = {}): Record<string, unkno
 
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    candidateId: "candidate-demo-001",
+    datasetVersion: "demo-manifest-v1",
+    windowingVersion: "candidate-window-v1",
+    coreStartMs: 12000,
+    coreEndMs: 18000,
+    contextStartMs: 10000,
+    contextEndMs: 18000,
     recentTranscript: "我们讨论一下 KV Cache 对推理吞吐的影响",
     knownKeywords: [],
     transcriptChunkIds: ["chunk-1"],
@@ -195,7 +207,11 @@ async function testLocalProviderSelected(): Promise<void> {
     assert.equal(payload.trace.modelProvider, "llama.cpp");
     assert.equal(payload.trace.modelName, "qwen3");
     assert.equal(payload.trace.modelBaseUrl, baseUrl);
-    assert.equal(payload.trace.finalState, "card_generated");
+    assert.equal(payload.trace.candidateId, "candidate-demo-001");
+    assert.equal(payload.trace.datasetVersion, "demo-manifest-v1");
+    assert.equal(payload.trace.windowingVersion, "candidate-window-v1");
+    assert.equal(payload.trace.decisionSource, "model");
+    assert.equal(payload.trace.finalState, "card_shown");
     assert.equal(payload.card.keyword, "KV Cache");
     assert.equal(calls, 2);
   } finally {
@@ -231,7 +247,7 @@ async function testRemoteProviderSelected(): Promise<void> {
     assert.equal(payload.trace.modelProvider, "remote-api");
     assert.equal(payload.trace.modelName, "remote-model");
     assert.equal(payload.trace.modelBaseUrl, baseUrl);
-    assert.equal(payload.trace.finalState, "card_generated");
+    assert.equal(payload.trace.finalState, "card_shown");
   } finally {
     await stopMockServer(server);
   }
@@ -284,7 +300,7 @@ async function testInvalidCardSchema(): Promise<void> {
     })));
     const payload = await readPayload(response);
     assert.equal(payload.card, null);
-    assert.equal(payload.trace.finalState, "model_failed");
+    assert.equal(payload.trace.finalState, "invalid_schema");
     assert.equal(payload.failure?.reason, "llama.cpp provider returned an invalid schema");
   } finally {
     await stopMockServer(server);
@@ -306,6 +322,117 @@ async function testSearchFailureAfterKeyword(): Promise<void> {
   } finally {
     await stopMockServer(server);
   }
+}
+
+async function testGenericKeywordSkipsModel(): Promise<void> {
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    writeJson(res, 200, chatCompletion({ keyword: "技术" }));
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+    })));
+    const payload = await readPayload(response);
+    assert.equal(payload.card, null);
+    assert.equal(payload.trace.finalState, "model_skip");
+    assert.equal(payload.trace.decisionSource, "hard_rule");
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+async function testKnownKeywordDuplicateIsSuppressedWithOriginalCandidate(): Promise<void> {
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    writeJson(res, 200, chatCompletion({ keyword: "KV Cache" }));
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      knownKeywords: [" kv cache "],
+      knownCandidates: [{ candidateId: "candidate-old", keyword: " kv cache " }],
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+    })));
+    const payload = await readPayload(response);
+    assert.equal(payload.card, null);
+    assert.equal(payload.trace.finalState, "suppressed_as_duplicate");
+    assert.equal(payload.trace.decisionSource, "hard_rule");
+    assert.equal(payload.trace.duplicateOfCandidateId, "candidate-old");
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+async function testRepeatedOverlapWindowIsSuppressedWithOriginalCandidate(): Promise<void> {
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    writeJson(res, 200, chatCompletion({ keyword: "KV Cache" }));
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      candidateId: "candidate-overlap-002",
+      coreStartMs: 18000,
+      coreEndMs: 24000,
+      contextStartMs: 16000,
+      contextEndMs: 24000,
+      knownKeywords: ["kv cache"],
+      knownCandidates: [{ candidateId: "candidate-overlap-001", keyword: "KV Cache" }],
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+    })));
+    const payload = await readPayload(response);
+    assert.equal(payload.card, null);
+    assert.equal(payload.trace.finalState, "suppressed_as_duplicate");
+    assert.equal(payload.trace.decisionSource, "hard_rule");
+    assert.equal(payload.trace.duplicateOfCandidateId, "candidate-overlap-001");
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+async function testDistinctNormalizedKeywordIsNotSuppressed(): Promise<void> {
+  let calls = 0;
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    calls += 1;
+    if (calls === 1) {
+      writeJson(res, 200, chatCompletion({ keyword: "KV Cache" }));
+    } else {
+      writeJson(res, 200, chatCompletion({
+        keyword: "KV Cache",
+        explanation: "缓存键值对以加速大模型推理。",
+        whyNow: "会议正在讨论吞吐优化。",
+      }));
+    }
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      knownKeywords: [" RAG "],
+      knownCandidates: [{ candidateId: "candidate-rag", keyword: "rag" }],
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+    })));
+    const payload = await readPayload(response);
+    assert.ok(payload.card);
+    assert.equal(payload.trace.finalState, "card_shown");
+    assert.equal(payload.trace.decisionSource, "model");
+    assert.equal(payload.trace.duplicateOfCandidateId, undefined);
+    assert.equal(calls, 2);
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+async function testInvalidCandidateIntervalIsRejected(): Promise<void> {
+  const response = await POST(makeRequest(baseBody({ coreStartMs: 20000, coreEndMs: 10000 })));
+  assert.equal(response.status, 400);
+  const payload = await readPayload(response);
+  assert.equal(payload.card, null);
+  assert.equal(payload.trace.finalState, "invalid_request");
+}
+
+async function testMissingCandidateIdIsRejected(): Promise<void> {
+  const body = baseBody();
+  delete body.candidateId;
+  const response = await POST(makeRequest(body));
+  assert.equal(response.status, 400);
+  const payload = await readPayload(response);
+  assert.equal(payload.card, null);
+  assert.equal(payload.trace.finalState, "invalid_request");
 }
 
 async function testTavilyFallsBackToAgentReachWhenKeyMissing(): Promise<void> {
@@ -332,7 +459,7 @@ async function testTavilyFallsBackToAgentReachWhenKeyMissing(): Promise<void> {
     })));
     const payload = await readPayload(response);
     assert.ok(payload.card);
-    assert.equal(payload.trace.finalState, "card_generated");
+    assert.equal(payload.trace.finalState, "card_shown");
     assert.ok(payload.trace.events?.some((event) =>
       event.type === "tool_result" &&
       event.tool === "search_web" &&
@@ -439,6 +566,12 @@ async function main(): Promise<void> {
     await testProviderFailureWithoutSilentFallback();
     await testInvalidCardSchema();
     await testSearchFailureAfterKeyword();
+    await testGenericKeywordSkipsModel();
+    await testKnownKeywordDuplicateIsSuppressedWithOriginalCandidate();
+    await testRepeatedOverlapWindowIsSuppressedWithOriginalCandidate();
+    await testDistinctNormalizedKeywordIsNotSuppressed();
+    await testInvalidCandidateIntervalIsRejected();
+    await testMissingCandidateIdIsRejected();
     await testTavilyFallsBackToAgentReachWhenKeyMissing();
     await testAgentReachUnavailableReplacesMissingKeyFailure();
     await testAgentReachFallbackCanBeDisabled();

@@ -5,7 +5,8 @@
     "jsonLinesValid": true,
     "eventIdsUnique": true,
     "transcriptTimingValid": true,
-    "transcriptTextNonEmpty": true
+    "transcriptTextNonEmpty": true,
+    "traceLedgerValid": true
   },
   "metrics": {
     "inputPath": "/home/work/asr/CueMind/fixtures/demo-meeting/sample-events.jsonl",
@@ -31,12 +32,24 @@
     "providerFailureCount": 0,
     "invalidJsonCount": 0,
     "schemaInvalidCount": 0,
-    "fallbackCount": 0
+    "fallbackCount": 0,
+    "providerStructuredOutputEventCount": 0,
+    "searchEventCount": 0,
+    "searchFallbackCount": 0,
+    "cardGeneratedCount": 0,
+    "cardFailureCount": 0,
+    "cardLatencyMs": null
   },
   "providerFailureCount": 0,
   "invalidJsonCount": 0,
   "schemaInvalidCount": 0,
   "fallbackCount": 0,
+  "providerStructuredOutputEventCount": 0,
+  "searchEventCount": 0,
+  "searchFallbackCount": 0,
+  "cardGeneratedCount": 0,
+  "cardFailureCount": 0,
+  "cardLatencyMs": null,
   "blockedExternalEvidence": [
     "real_whisper_cpp",
     "local_llm",

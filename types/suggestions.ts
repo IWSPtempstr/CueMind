@@ -26,14 +26,30 @@ export interface ContextCardSource {
   snippet: string;
 }
 
+export interface ContextCardDemoTrace {
+  candidateId: string;
+  datasetVersion: string;
+  windowingVersion: string;
+  finalState: "card_shown" | "model_skip" | "search_failed" | "model_failed" | "invalid_schema" | "invalid_request";
+  decisionSource: "hard_rule" | "model" | "search" | "system";
+}
+
 export interface ContextCard {
   id: string;
+  candidateId: string;
+  datasetVersion: string;
+  windowingVersion: string;
+  coreStartMs: number;
+  coreEndMs: number;
+  contextStartMs: number;
+  contextEndMs: number;
   keyword: string;
   explanation: string;
   whyNow: string;
   sources: [ContextCardSource, ContextCardSource];
   createdAt: Date;
   transcriptChunkIds: string[];
+  demoTrace?: ContextCardDemoTrace;
   latencyMs: {
     keyword: number;
     search: number;
@@ -48,4 +64,5 @@ export interface ContextCardFailure {
   reason: string;
   failedAt: Date;
   transcriptChunkIds: string[];
+  demoTrace?: ContextCardDemoTrace;
 }

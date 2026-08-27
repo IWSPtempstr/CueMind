@@ -1,0 +1,21 @@
+{
+  "version": "demo-manifest-v1",
+  "mediaPath": "dataset/【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig.mp4",
+  "mediaSha256": "7a777fa685b0c2d7de5cc4bf53a10e2920a76fec91c5cc4948ab4a651607def6",
+  "startMs": 0,
+  "endMs": 600000,
+  "scenario": "chinese-agent-technical-talk",
+  "asrProvider": "local-whisper",
+  "asrVersion": "whisper.cpp 1.9.3-dev + ggml-small.bin",
+  "asrModelPath": "/home/work/asr/.runtime/models/ggml-small.bin",
+  "asrModelSha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+  "windowingVersion": "candidate-window-v1",
+  "windowing": {
+    "targetCoreMinMs": 8000,
+    "targetCoreMaxMs": 12000,
+    "maxCoreMs": 12000,
+    "contextOverlapMs": 2000,
+    "closeReasons": ["pause", "sentence_end", "speaker_change", "semantic_boundary", "max_duration", "end_of_input"]
+  },
+  "notes": "The segment is frozen after selection; changing it requires manifest v2."
+}

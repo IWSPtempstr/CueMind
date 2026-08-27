@@ -9,12 +9,14 @@ const DEFAULT_OUTPUT = "reports/end-to-end-evaluation";
 type JsonObject = Record<string, unknown>;
 
 interface CaseResult {
+  replayMode?: "mock" | "live";
   searchPath?: string;
   actualDecision?: string;
   cardSuccess?: boolean;
   gracefulFailure?: boolean;
   latencyMs?: { search?: number; generation?: number; total?: number };
   failureCode?: string;
+  cardSources?: string[];
 }
 
 async function main(): Promise<void> {
@@ -23,6 +25,7 @@ async function main(): Promise<void> {
   const providerReportDir = resolve(process.env.PROVIDER_REPORT_DIR ?? DEFAULT_PROVIDER_REPORT);
   const milvusReportDir = resolve(process.env.MILVUS_REPORT_DIR ?? DEFAULT_MILVUS_REPORT);
   const replayReportDir = resolve(process.env.REPLAY_REPORT_DIR ?? DEFAULT_REPLAY_REPORT);
+  const demoManifest = await readJsonIfPresent(resolve("fixtures/demo-meeting/demo-manifest.json"));
   const contextManifest = await readJsonIfPresent(`${contextReportDir}/manifest.json`);
   const contextScorecard = await readJsonIfPresent(`${contextReportDir}/scorecard.json`);
   const contextCases = await readJsonl<CaseResult>(`${contextReportDir}/cases.jsonl`);
@@ -36,12 +39,31 @@ async function main(): Promise<void> {
     : [];
   const failures: Record<string, number> = {};
   for (const item of cases) if (item.failureCode) failures[item.failureCode] = (failures[item.failureCode] ?? 0) + 1;
-  const contextIsLive = replayCases.length > 0 || contextManifest?.executionMode === "live";
+  const cardCount = cases.filter((item) => item.actualDecision === "card_shown").length;
+  const sourceValidityCount = cases.filter((item) => item.actualDecision === "card_shown" && validSources(item.cardSources)).length;
+  const contextIsLive = replayCases.some((item) => item.replayMode === "live") || contextManifest?.executionMode === "live";
   const milvusIsComplete = milvusScorecard?.status === "complete";
   const replayIsAvailable = replayScorecard !== null;
+  const cardTarget = { min: 3, max: 5, status: cardCount >= 3 && cardCount <= 5 ? "met" : cardCount < 3 ? "under_target" : "target_only" };
+  const blockedExternalDependencies = [
+    !contextIsLive ? "live_search_or_context_card_runtime" : null,
+    !milvusIsComplete ? "Milvus_realtime_retrieval" : null,
+    !replayIsAvailable ? "replay_scorecard" : null,
+  ].filter((value): value is string => value !== null);
   const scorecard = {
     status: cases.length === 0 ? "blocked_external_dependency" : contextIsLive && milvusIsComplete && replayIsAvailable ? "complete" : "partial",
     releaseGate: contextIsLive && milvusIsComplete && replayIsAvailable ? "pass" : "blocked_external_dependency",
+    manifestVersion: typeof demoManifest?.version === "string" ? demoManifest.version : "missing",
+    candidateDenominator: {
+      total: cases.length,
+      evaluable: cases.filter((item) => item.actualDecision !== "unknown").length,
+      excluded: cases.filter((item) => item.actualDecision === "unknown").length,
+    },
+    cardCount,
+    terminalStateCounts: countBy(cases, (item) => item.actualDecision ?? "unknown"),
+    sourceValidityCount,
+    cardTarget,
+    blockedExternalDependencies,
     denominator: {
       replayCases: cases.length,
       scoredCases: cases.filter((item) => item.cardSuccess || item.gracefulFailure).length,
@@ -136,21 +158,33 @@ async function readTraceReplayCases(): Promise<CaseResult[]> {
         const generation = events.find((event) => event.type === "card_generation");
         const card = isRecord(value.card) ? value.card : null;
         const terminal = typeof trace.finalState === "string" ? trace.finalState : "unknown";
+        const requestMetadata = isRecord(value.requestMetadata) ? value.requestMetadata : null;
+        const replayMode = requestMetadata?.mode === "live" || requestMetadata?.mode === "mock"
+          ? requestMetadata.mode
+          : undefined;
         return [{
+          replayMode,
           searchPath: typeof search?.provider === "string" ? search.provider : terminal === "skipped" ? "none" : "failure",
           actualDecision: terminal,
-          cardSuccess: terminal === "card_generated" && card !== null,
-          gracefulFailure: terminal === "skipped" || terminal === "search_failed" || terminal === "model_failed",
+          cardSuccess: terminal === "card_shown" && card !== null,
+          gracefulFailure: ["model_skip", "suppressed_as_duplicate", "invalid_schema", "skipped", "search_failed", "model_failed"].includes(terminal),
           latencyMs: {
             search: typeof search?.durationMs === "number" ? search.durationMs : undefined,
             generation: typeof generation?.durationMs === "number" ? generation.durationMs : undefined,
             total: typeof trace.totalLatencyMs === "number" ? trace.totalLatencyMs : undefined,
           },
           failureCode: isRecord(value.failure) && typeof value.failure.reason === "string" ? value.failure.reason : undefined,
+          cardSources: card && Array.isArray(card.sources)
+            ? card.sources.flatMap((source) => isRecord(source) && typeof source.url === "string" ? [source.url] : typeof source === "string" ? [source] : [])
+            : undefined,
         }];
       } catch { return []; }
     });
   } catch { return []; }
+}
+
+function validSources(sources: string[] | undefined): boolean {
+  return Boolean(sources && sources.filter((source) => /^https?:\/\//i.test(source)).length >= 2);
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {
@@ -173,6 +207,10 @@ function renderReport(manifest: JsonObject, scorecard: JsonObject): string {
     "# CueMind End-to-End Evaluation Report",
     "",
     `- Status: \`${String(scorecard.status)}\``,
+    `- Manifest: \`${String(scorecard.manifestVersion)}\``,
+    `- Candidates: ${formatValue(scorecard.candidateDenominator)}; cards=${String(scorecard.cardCount)}; source-valid cards=${String(scorecard.sourceValidityCount)}`,
+    `- Card target: ${formatValue(scorecard.cardTarget)} (target is informational and does not imply pass)`,
+    `- Blocked external dependencies: ${formatValue(scorecard.blockedExternalDependencies)}`,
     `- Replay cases: ${String(denominator.replayCases)}; scored=${String(denominator.scoredCases)}; excluded=${String(denominator.excludedCases)}`,
     "",
     "## Evidence Layers",

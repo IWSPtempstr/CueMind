@@ -1,5 +1,79 @@
 # Progress
 
+## 2026-08-27 (minimal demo implementation plan)
+
+- Read `docs/product/cuemind-grilling-decisions.md` and reconciled it with the current CueMind codebase.
+- Confirmed the requested scope is the minimal fixed-video demonstration: 10-minute Chinese AI Agent technical content, local ASR, conservative card triggering, sourced cards, trace, replay, and latency evidence.
+- Added `docs/plans/2026-08-27-cuemind-demo-design.md` with the approved architecture and explicit out-of-scope list.
+- Added `docs/plans/2026-08-27-cuemind-demo-implementation-plan.md` with four phases and eight bounded tasks, including contracts, files, checks, review gates, and cleanup audits.
+- Verified the selected existing video metadata used by the plan: duration `2865.581s`; SHA256 `7a777fa685b0c2d7de5cc4bf53a10e2920a76fec91c5cc4948ab4a651607def6`.
+- Completed Phase A Task 1 files: `fixtures/demo-meeting/demo-manifest.json` and `fixtures/demo-meeting/README.md`. Verification passed with JSON parsing, SHA256 comparison, `git diff --check`, `npm run lint`, `npx tsc --noEmit`, and `npm run build`.
+- Phase A Task 1 review completed after a second-pass fix: added concrete windowing parameters, ASR model path/hash, and explicit local-fixture boundaries to satisfy reproducibility concerns.
+- No runtime code was changed. `git diff --check` passed. Execution remains pending explicit selection of subagent-driven or inline implementation.
+
+- Completed Phase A Task 2 with a fresh subagent and fixed TDD fixture: added `scripts/test-demo-windowing.ts` and the pure `buildDemoCandidateWindows` helper in `lib/replay.ts`. The helper emits stable core/context intervals, sentence-end/max-duration/end-of-input close reasons, and candidate-ID inputs without network, storage, UI, wall-clock, or random state.
+- Task 2 review passed: exact windowing assertions, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check`. The six fixed cases cover sentence-boundary closure, minimum accumulation, 2-second context overlap, 12-second maximum, end-of-input closure, and overlap-only chunk exclusion. Task 3 is now pending.
+
+- Completed Phase B Task 3 with separate red-green subagents. The context-card route now validates bounded candidate metadata and intervals, carries `candidateId`, `datasetVersion`, `windowingVersion`, `decisionSource`, and one explicit terminal state in its trace, and returns `card_shown`, `model_skip`, `search_failed`, `model_failed`, `invalid_schema`, or `invalid_request` without trace secrets or full transcript content.
+- Task 3 review passed: `TMPDIR=/tmp npx tsx scripts/test-context-card-route.ts`, `TMPDIR=/tmp npx tsx scripts/test-demo-windowing.ts`, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check`. The route regression covers success metadata, generic/duplicate keyword skips, search/provider/schema paths, and malformed candidate inputs. Task 4 is now pending.
+
+- Completed Phase B Task 4 with separate red-green subagents. Duplicate suppression is conservative and deterministic: only trim/lowercase exact keyword matches against prior candidates become `suppressed_as_duplicate`, with `duplicateOfCandidateId` preserved in the trace; generic terms and old requests without candidate IDs retain `model_skip` behavior. No semantic similarity or learned suppression was added.
+- The hook submits existing `{ candidateId, keyword }` pairs, excludes suppressed candidates from the rendered card list, and retains their terminal trace in the local failure/status record. Task 4 review passed: route and window regressions, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check`. Task 5 is now pending.
+
+- Completed Phase C Task 5 with fresh subagents. Replay now loads `fixtures/demo-meeting/demo-manifest.json` by default, builds deterministic candidate windows, derives SHA-256 candidate IDs from manifest/window inputs, sends bounded candidate metadata, and writes a redacted terminal trace envelope. `validateDemoLedger` enforces candidate/trace uniqueness, valid terminal states, and input/evaluable/excluded conservation; legacy `card_generated` is accepted for older replay artifacts while new `card_shown` is counted.
+- Task 5 review passed: demo ledger test, context-card route regression, fixture replay validation, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `git diff --check`. The fixture report remains explicitly metadata-only and makes no live model/search/card-quality claim. Task 6 is now pending.
+
+- Completed Phase C Task 6 with a fresh UI subagent after applying `impeccable` product-register constraints. `LiveSuggestions` now gives the first context card visual priority, bounds prior cards in a scroll region, and exposes source/failure/degradation text with `aria-live`; `LatencyPanel` surfaces latest total latency, card count, failure count, queue and degradation state without raw traces; the page enforces `min-w-0` across the desktop three-column layout while preserving mobile stacking.
+- Task 6 review passed: context-card, windowing, and ledger regressions; `npx tsc --noEmit`; `npm run lint`; `npm run build`; `git diff --check`; and local dev smoke at `http://127.0.0.1:3100/` returned HTTP 200 with the CueMind shell. No `globals.css` change was needed. Task 7 is now pending.
+
+- Completed Phase D Task 7 with a fresh task-specific implementation/review pass. `scripts/evaluate-end-to-end.ts` now reports the frozen manifest version, candidate denominator, card count, terminal-state counts, source-validity count, card target, latency percentiles, and blocked external dependencies. The report preserves the difference between deterministic fixed-snapshot/mock evidence and live runtime evidence.
+- Task 7 evidence is intentionally partial: the current deterministic report has manifest `demo-manifest-v1`, 8 candidates (8 evaluable, 0 excluded), 0 cards, source-valid cards `0`, and card target `3-5` with status `under_target`. Its `searchEvidence` is `fixed_snapshot_only`; `live_search_or_context_card_runtime` remains blocked. This does not claim live search quality, live card generation, or production readiness.
+- Task 7 review passed after correcting the evaluator boundary so mock replay cannot be classified as live evidence. The report uses `card_shown`/trace-aware counting for the new path and retains explicit unverified production claims.
+
+- Completed Phase D Task 8 final verification and phase-end cleanup audit. No factual error requiring a `docs/desktop-mvp.md` change was found; its existing Windows, packaging, live-search, long-video, Milvus, and production-readiness limitations remain consistent with the observed evidence.
+- Final verification results: `npx tsc --noEmit` passed; `npm run lint` passed; `npm run build` passed; `git diff --check` passed; `TMPDIR=/tmp npx tsx scripts/test-demo-windowing.ts` passed; `TMPDIR=/tmp npx tsx scripts/test-context-card-route.ts` passed; and `TMPDIR=/tmp npx tsx scripts/test-demo-ledger.ts` passed. Report-writing replay/evaluator commands were exercised in an isolated verification copy so the user-owned generated reports in this worktree were not overwritten.
+- The current handoff is implementation-complete but evidence-partial. Mock-only/fixed-snapshot output must not be presented as live external search or live context-card runtime evidence; live search/runtime availability remains the blocking dependency, and the 3-5 card target is under target in the deterministic report.
+
+### 2026-08-27 Phase D Task 8 cleanup audit
+
+| Path | Item type | Current purpose | Recommendation | Rationale |
+| --- | --- | --- | --- | --- |
+| `app/api/context-cards/route.ts` | formal production code | Validates candidate metadata and emits sourced-card terminal traces | keep | In-scope business behavior and the API contract; never disposable. |
+| `types/suggestions.ts` | formal type contract | Defines card metadata, source, failure, and terminal-state shapes | keep | Required shared interface for the live path and replay ledger. |
+| `lib/replay.ts` | formal replay code | Builds deterministic candidate windows and ledger inputs | keep | Core reproducibility behavior, covered by regression tests. |
+| `hooks/useContextCards.ts` | formal UI integration code | Submits candidates and retains suppressed/failure status | keep | Required user-visible behavior for duplicate and degraded states. |
+| `components/LiveSuggestions.tsx` | formal UI code | Renders current card, bounded history, sources, and degradation | keep | The approved three-column demo workflow, not temporary UI. |
+| `components/LatencyPanel.tsx` | formal UI code | Shows bounded latency and health metrics | keep | Required demo telemetry surface; no raw trace/debug output. |
+| `app/page.tsx` | formal page composition | Wires the bounded desktop demo state | keep | Required application entry point for the implemented workflow. |
+| `scripts/test-demo-windowing.ts` | official regression test | Checks deterministic interval and close-reason cases | keep | Formal contract test; must not be deleted as throwaway code. |
+| `scripts/test-context-card-route.ts` | official regression test | Checks validation, terminal states, source failures, and duplicates | keep | Formal route regression coverage. |
+| `scripts/test-demo-ledger.ts` | official regression test | Checks candidate IDs, terminal uniqueness, and conservation | keep | Formal ledger regression coverage. |
+| `scripts/run-context-card-replay.ts` | evaluation runner | Produces bounded trace-bearing mock/live replay records | keep | Required reproducibility and evidence-generation tool; mock mode is explicitly labeled. |
+| `scripts/validate-replay.ts` | evaluation validator | Validates JSONL integrity and candidate-ledger conservation | keep | Required audit gate for replay artifacts. |
+| `scripts/evaluate-end-to-end.ts` | evaluation script | Aggregates provider, search, replay, and card evidence | keep | Required final report generator with evidence boundaries. |
+| `fixtures/demo-meeting/demo-manifest.json` | frozen fixture manifest | Pins media, time range, ASR metadata, and windowing version | keep | Reproducibility anchor for the 10-minute demonstration. |
+| `fixtures/demo-meeting/sample-events.jsonl` | user/demo fixture data | Supplies bounded transcript events for replay validation | keep | Fixture input required by the demo and protected from cleanup. |
+| `dataset/` | user-provided dataset | Holds supplied meeting/video source material | keep | User data is explicitly protected and outside cleanup deletion. |
+| `reports/end-to-end-evaluation/` | generated evidence reports | Stores scorecard, manifest, cases, and human-readable report | review | Keep as audit evidence, but review/regenerate when the source artifacts or evaluator version changes; do not treat mock output as live proof. |
+| `reports/replay/` | generated replay report | Stores machine-readable replay validation evidence | keep | Needed to audit the candidate ledger and terminal-state conservation. |
+| `reports/context-card-evaluation/` | generated evaluation report | Stores fixed-source card protocol results | review | Retain for reproducibility; review its fixed-snapshot status before using it for any release claim. |
+| `reports/provider-evaluation/` | generated provider report | Stores local/remote structured-output evidence | review | Retain the recorded runs, but review runtime provenance and environment before reuse. |
+| `reports/milvus-retrieval-evaluation/` | generated retrieval report | Stores retrieval contract/live dependency status | keep | Its blocked/partial boundary is useful evidence and must not be erased. |
+| `/tmp/cuemind-runtime/` | external temporary runtime artifacts | Holds local servers, logs, and replay outputs | review | Outside the repository; retain only while needed for audit/reproduction, then clean by explicit operator choice. |
+| `docs/desktop-mvp.md` | product evidence document | Records verified behavior and known platform/runtime gaps | keep | No factual error was found; it is the handoff boundary for unverified claims. |
+| `progress.md` | project progress ledger | Records task results, evidence, and cleanup audits | keep | Required spec-first execution bookkeeping. |
+| `task_plan.md` | project task ledger | Records task order, boundaries, and final status | keep | Required execution plan and review state. |
+
+### 暂不纳入
+
+- knowledge persistence（IndexedDB/SQLite）、provisional/active knowledge lifecycle、cross-meeting reuse。
+- user feedback learning、context-level negative feedback、LLM Judge、人审抽样、冻结集质量门禁、online model training、automatic prompt/taxonomy changes。
+- source conflict workflow/version rollback、background source freshness validation。
+- full meeting-level remote authorization/privacy-policy UI。
+- Milvus/embedding semantic retrieval in the realtime path。
+- Windows hardware acceptance、helper compilation、installer packaging。
+- production SLA、live search quality/agent-reach availability、long-video ASR stability、production card quality/readiness。
+
 ## 2026-08-25
 
 - Inspected current repository and existing evaluation contract.

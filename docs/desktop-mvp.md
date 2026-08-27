@@ -30,6 +30,15 @@ CueMind Desktop is a Windows meeting cognition assistant. It listens to default 
 
 ## Evidence Log
 
+### Task1-6 Observed Evidence
+
+- Task1: the fixed 10-minute demo manifest is `demo-manifest-v1`, with a SHA-256-pinned media segment and deterministic candidate-window contract.
+- Task2: the local whisper.cpp adapter was observed on a real 30-second Chinese WAV: whisper.cpp 1.9.3-dev, Small model, 10,265 ms adapter latency, RTF 0.3422.
+- Task3: local llama.cpp Qwen3-4B structured keyword output was observed on RTX 4060 Ti and CPU; the GPU run reported 510 ms keyword latency.
+- Task4: the context-card route was observed to validate requests, emit structured failures, enforce source requirements, and suppress duplicate candidates.
+- Task5: the trace-bearing replay path was observed across 20 bounded windows, with 20 provider/search events and 10 cards; card latency P50/P95 was 2,835/4,155 ms in the recorded local run.
+- Task6: the end-to-end evaluator and Milvus contract were observed to produce explicit partial/blocked evidence when required live dependencies or replay artifacts are unavailable.
+
 | Date | Host | Check | Result | Artifact |
 | --- | --- | --- | --- | --- |
 | 2026-08-21 | WSL2 | `npx tsc --noEmit` | Pass | local terminal |
@@ -51,6 +60,16 @@ CueMind Desktop is a Windows meeting cognition assistant. It listens to default 
 | 2026-08-21 | Windows 10/11 x64 | Local ASR tiny/base WAV smoke | Pending: requires whisper.cpp executable and model on Windows |  |
 | 2026-08-21 | Windows 10/11 x64 | Real llama.cpp + two-source card | Pending: requires llama.cpp model and search API key |  |
 | 2026-08-21 | Windows 10/11 x64 | 10-minute replay demo | Pending |  |
+
+### Explicitly Not Included or Not Verified
+
+- Windows hardware capture and the Windows helper build/runtime.
+- Electron/NSIS packaging and packaged startup.
+- Live search behavior and live-search provider availability.
+- Knowledge persistence across meetings.
+- Milvus realtime operation and production ingestion/embedding behavior.
+- Training, Judge evaluation, feedback learning, and learned suppression.
+- Production SLA, scale, reliability, and accuracy claims.
 
 ## Implementation Status
 

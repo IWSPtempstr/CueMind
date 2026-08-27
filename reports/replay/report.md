@@ -13,6 +13,12 @@
 - Invalid JSON: 0
 - Schema-invalid outputs: 0
 - Fallbacks: 0
+- Provider structured-output events: 0
+- Search events: 0
+- Search fallbacks: 0
+- Cards generated: 0
+- Card failures: 0
+- Card latency: null (no card events)
 
 ## Evidence Boundary
 

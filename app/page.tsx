@@ -192,9 +192,16 @@ export default function Home(): ReactElement {
           {persistenceError}
         </div>
       ) : null}
-      <LatencyPanel samples={[...desktopRecorder.latencySamples, ...contextCards.latencySamples]} skippedFailures={contextCards.failures.length} />
+      <LatencyPanel
+        samples={[...desktopRecorder.latencySamples, ...contextCards.latencySamples]}
+        skippedFailures={contextCards.failures.length}
+        latestTotalLatencyMs={contextCards.cards[0]?.latencyMs.total ?? null}
+        cardCount={contextCards.cards.length}
+        queueStatus={desktopRecorder.error?.includes("队列") ? "有待处理" : "正常"}
+        degradationStatus={contextCards.cards.some((card) => card.demoTrace && card.demoTrace.decisionSource !== "model") ? "已启用" : null}
+      />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      <main className="flex min-h-0 w-full flex-1 flex-col lg:flex-row">
+      <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col lg:flex-row [&>section]:min-w-0">
         <MicTranscript
           transcriptChunks={recorder.transcriptChunks}
           isRecording={recorder.isRecording}

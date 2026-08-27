@@ -53,24 +53,28 @@ export default function LiveSuggestions(props: Props): ReactElement {
         {contextCardsError ? <p className="text-xs text-amber-300">{contextCardsError}</p> : null}
         {contextCardsLoading ? <p className="animate-pulse text-xs text-blue-300">正在检索并整理关键词背景...</p> : null}
         {contextCards.length > 0 ? (
-          <section className="flex flex-col gap-3">
+          <section className="flex min-w-0 flex-col gap-3" aria-live="polite" aria-atomic="false">
             <div className="flex items-center justify-between">
               <h3 className="text-[10px] font-semibold uppercase tracking-wider text-blue-300">CONTEXT CARDS</h3>
               <span className="text-[10px] text-neutral-600">本地模型 + Web 来源</span>
             </div>
-            {contextCards.map((card) => <ContextCardView key={card.id} card={card} />)}
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-200">当前背景</p>
+              <ContextCardView card={contextCards[0]} />
+            </div>
+            {contextCards.length > 1 ? (
+              <div className="max-h-96 min-w-0 space-y-3 overflow-y-auto pr-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">此前背景 · {contextCards.length - 1}</p>
+                {contextCards.slice(1).map((card) => <ContextCardView key={card.id} card={card} />)}
+              </div>
+            ) : null}
+            <p className="text-[10px] text-neutral-500">来源：每张卡片均附带检索来源。</p>
           </section>
         ) : null}
         {contextCardFailures.length > 0 ? (
-          <details className="rounded border border-neutral-800 bg-neutral-950/70 px-3 py-2 text-xs text-neutral-500">
-            <summary className="cursor-pointer">调试记录：{contextCardFailures.length} 次卡片未生成</summary>
-            <div className="mt-2 flex flex-col gap-1.5">
-              {contextCardFailures.slice(0, 5).map((failure) => (
-                <p key={failure.id}>{failure.failedAt.toLocaleTimeString()} · {failure.reason}</p>
-              ))}
-            </div>
-          </details>
+          <p className="text-xs text-amber-300" aria-live="polite">失败：{contextCardFailures.length} 次背景卡片未生成，已保留可用内容。</p>
         ) : null}
+        {contextCards.some((card) => card.demoTrace && card.demoTrace.decisionSource !== "model") ? <p className="text-xs text-neutral-500">降级：部分背景卡片使用规则或检索结果。</p> : null}
         {isLoading ? <p className="animate-pulse text-center text-sm text-neutral-500">正在生成建议…</p> : null}
         {!isLoading && batches.length === 0 ? <p className="text-center text-sm text-neutral-600">开始录音后，建议会显示在这里。</p> : null}
         <div className="flex flex-col gap-6">

@@ -1,6 +1,28 @@
 {
   "status": "partial",
   "releaseGate": "blocked_external_dependency",
+  "manifestVersion": "demo-manifest-v1",
+  "candidateDenominator": {
+    "total": 8,
+    "evaluable": 8,
+    "excluded": 0
+  },
+  "cardCount": 0,
+  "terminalStateCounts": {
+    "generate_card": 3,
+    "skip": 2,
+    "search_failed": 2,
+    "schema_failed": 1
+  },
+  "sourceValidityCount": 0,
+  "cardTarget": {
+    "min": 3,
+    "max": 5,
+    "status": "under_target"
+  },
+  "blockedExternalDependencies": [
+    "live_search_or_context_card_runtime"
+  ],
   "denominator": {
     "replayCases": 8,
     "scoredCases": 8,
@@ -9,7 +31,7 @@
   "providerStructuredOutput": "complete",
   "searchEvidence": "fixed_snapshot_only",
   "cardGeneration": "complete",
-  "milvusEvidence": "blocked_external_dependency",
+  "milvusEvidence": "complete",
   "replayEvidence": "pass",
   "searchPathCounts": {
     "tavily": 4,

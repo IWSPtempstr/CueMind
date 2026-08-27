@@ -6,9 +6,18 @@ import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
 import type { ContextCard, ContextCardFailure } from "@/types/suggestions";
 
+type ContextCardTrace = NonNullable<ContextCard["demoTrace"]> & {
+  finalState: NonNullable<ContextCard["demoTrace"]>["finalState"] | "suppressed_as_duplicate";
+  duplicateOfCandidateId?: string;
+};
+
 type ContextCardResponse =
-  | { card: ContextCard; failure?: never }
-  | { card: null; failure: { reason: string } };
+  | { card: ContextCard; failure?: never; trace?: unknown }
+  | { card: null; failure: { reason: string }; trace?: unknown };
+
+type ContextCardFailureWithTrace = ContextCardFailure & {
+  demoTrace?: ContextCardTrace;
+};
 
 interface UseContextCardsArgs {
   transcriptChunks: TranscriptChunk[];
@@ -24,7 +33,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
   latencySamples: LatencySample[];
 } {
   const [cards, setCardState] = useState<ContextCard[]>([]);
-  const [failures, setFailures] = useState<ContextCardFailure[]>([]);
+  const [failures, setFailures] = useState<ContextCardFailureWithTrace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
@@ -47,6 +56,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
     lastRunAtRef.current = now;
     setIsLoading(true);
     const knownKeywords = cardsRef.current.map((card) => card.keyword);
+    const knownCandidates = cardsRef.current.map(({ candidateId, keyword }) => ({ candidateId, keyword }));
     try {
       const response = await fetch("/api/context-cards", {
         method: "POST",
@@ -54,6 +64,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
         body: JSON.stringify({
           recentTranscript: chunks.slice(-8).map((chunk) => chunk.text).join("\n"),
           knownKeywords,
+          knownCandidates,
           transcriptChunkIds: chunks.slice(-8).map((chunk) => chunk.id),
           settings: {
             modelProvider: settings.modelProvider,
@@ -95,6 +106,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
           reason: payload.failure.reason,
           failedAt: new Date(),
           transcriptChunkIds: chunks.slice(-8).map((chunk) => chunk.id),
+          demoTrace: payload.trace as ContextCardTrace | undefined,
         }, ...previous]);
       }
       setError(null);

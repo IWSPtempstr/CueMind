@@ -1,5 +1,29 @@
 # CueMind plan task tracking
 
+## 2026-08-27 Minimal Demo Plan
+
+- [x] Confirm scope: fixed 10-minute video demonstration.
+- [x] Write approved design and explicit out-of-scope boundaries.
+- [x] Write task-by-task implementation plan with fixed file boundaries and validation gates.
+- [x] Execute Phase A-D from `docs/plans/2026-08-27-cuemind-demo-implementation-plan.md`.
+  - [x] Task 1: freeze the 10-minute demonstration manifest.
+  - [x] Task 2: define deterministic mixed-window behavior.
+  - [x] Task 3: add explicit decision and terminal-state fields.
+  - [x] Task 4: enforce conservative duplicate suppression.
+  - [x] Task 5: make replay manifest-driven and ledger-complete.
+  - [x] Task 6: render the bounded three-column demo state.
+  - [x] Task 7: produce the end-to-end demo report.
+  - [x] Task 8: final verification and phase-end cleanup audit.
+
+Plan artifact: `docs/plans/2026-08-27-cuemind-demo-implementation-plan.md`
+Current status: Tasks 1-7 complete; Task 8 complete. Human review is required for the blocked live gates.
+
+Task 7-8 closeout (2026-08-27):
+
+- Task 7 report fields and evidence boundaries are implemented. The deterministic current report is mock/fixed-snapshot evidence only: 8 candidates, 0 cards, card target `under_target`, and blocked dependency `live_search_or_context_card_runtime`.
+- Task 8 final verification passed for the static checks and deterministic regressions recorded in `progress.md`. No factual correction was required in `docs/desktop-mvp.md`.
+- The phase is complete as an evidence-safe implementation handoff, not as a live-search or production-readiness pass.
+
 ## Objective
 
 Execute the P0-P3 specification in `docs/plans/2026-08-25-cuemind-detailed-implementation-plan.md` for CueMind's local-first realtime meeting cognition assistant. Each phase is reviewed, validated, and committed once before the next phase starts.

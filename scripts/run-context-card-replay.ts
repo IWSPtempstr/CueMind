@@ -1,7 +1,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { POST } from "@/app/api/context-cards/route";
+import { buildDemoCandidateWindows, type DemoCandidateWindow } from "@/lib/replay";
 
 type ReplayTranscript = {
   id: string;
@@ -11,15 +13,19 @@ type ReplayTranscript = {
 };
 
 type ReplayResult = {
-  replayWindow: { id: string; startMs: number; endMs: number; transcriptChunkIds: string[] };
+  candidateId: string;
+  finalState: string;
+  replayWindow: { startMs: number; endMs: number; transcriptChunkIds: string[]; closeReason: string };
+  manifest: { version: string; mediaSha256: string; startMs: number; endMs: number; scenario: string; asrProvider: string; asrVersion: string; windowingVersion: string };
   requestMetadata: { mode: "live" | "mock"; endpoint: string; inputChars: number };
   card: unknown;
   failure: unknown;
-  trace: Record<string, unknown> | null;
+  trace: Record<string, unknown>;
   stageLatencyMs: { keyword?: number; search?: number; generation?: number; total?: number };
 };
 
-const DEFAULT_INPUT = "/tmp/cuemind-runtime/cuemind-10min-replay.jsonl";
+const DEFAULT_INPUT = "fixtures/demo-meeting/sample-events.jsonl";
+const DEFAULT_MANIFEST = "fixtures/demo-meeting/demo-manifest.json";
 const DEFAULT_OUTPUT = "/tmp/cuemind-runtime/cuemind-10min-context-card-replay.jsonl";
 const DEFAULT_ENDPOINT = "http://127.0.0.1:3000/api/context-cards";
 
@@ -27,12 +33,13 @@ async function main(): Promise<void> {
   loadDotEnv(resolve(".env"));
   const mode = process.env.REPLAY_MODE === "mock" ? "mock" : "live";
   const inputPath = resolve(process.env.REPLAY_INPUT ?? DEFAULT_INPUT);
+  const manifestPath = resolve(process.env.REPLAY_MANIFEST ?? DEFAULT_MANIFEST);
   const outputPath = resolve(process.env.REPLAY_OUTPUT ?? DEFAULT_OUTPUT);
   const endpoint = process.env.CONTEXT_CARD_ENDPOINT?.trim() || DEFAULT_ENDPOINT;
-  const windowMs = boundedInteger(process.env.REPLAY_WINDOW_MS, 30_000, 5_000, 120_000);
   const maxWindows = boundedInteger(process.env.REPLAY_MAX_WINDOWS, Number.POSITIVE_INFINITY, 1, 1_000);
+  const manifest = await readManifest(manifestPath);
   const transcripts = await readTranscripts(inputPath);
-  const windows = buildWindows(transcripts, windowMs).slice(0, maxWindows);
+  const windows = buildCandidateWindows(transcripts, manifest).slice(0, maxWindows);
   if (windows.length === 0) throw new Error("Replay contains no transcript windows");
 
   const settings = buildSettings();
@@ -41,10 +48,18 @@ async function main(): Promise<void> {
   const restoreFetch = mode === "mock" ? installMockFetch() : undefined;
   try {
     for (const window of windows) {
+      const candidateId = stableCandidateId(window);
       const body = {
-        recentTranscript: window.transcripts.map((item) => item.text).join(" ").slice(-12_000),
+        candidateId,
+        datasetVersion: manifest.version,
+        windowingVersion: manifest.windowingVersion,
+        coreStartMs: window.coreStartMs,
+        coreEndMs: window.coreEndMs,
+        contextStartMs: window.contextStartMs,
+        contextEndMs: window.contextEndMs,
+        recentTranscript: transcripts.filter((item) => item.startMs < window.contextEndMs && item.endMs > window.contextStartMs).map((item) => item.text).join(" ").slice(-12_000),
         knownKeywords,
-        transcriptChunkIds: window.transcripts.map((item) => item.id),
+        transcriptChunkIds: window.transcriptChunkIds,
         settings,
       };
       const started = performance.now();
@@ -52,19 +67,22 @@ async function main(): Promise<void> {
         ? await POST(new Request(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }))
         : await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const payload = await response.json() as Record<string, unknown>;
-      const trace = isRecord(payload.trace) ? payload.trace : null;
+      const trace = sanitizeTerminalTrace(payload.trace, candidateId);
       const card = isRecord(payload.card) ? payload.card : null;
       const failure = isRecord(payload.failure) ? payload.failure : null;
       const keyword = card && typeof card.keyword === "string" ? card.keyword.trim() : extractKeyword(trace);
       if (keyword && !knownKeywords.includes(keyword)) knownKeywords.push(keyword);
       const stageLatencyMs = extractStageLatency(trace, card, Math.round(performance.now() - started));
       results.push({
+        candidateId,
+        finalState: typeof trace.finalState === "string" ? trace.finalState : "invalid_schema",
         replayWindow: {
-          id: `window-${String(results.length + 1).padStart(3, "0")}`,
-          startMs: window.startMs,
-          endMs: window.endMs,
-          transcriptChunkIds: window.transcripts.map((item) => item.id),
+          startMs: window.coreStartMs,
+          endMs: window.coreEndMs,
+          transcriptChunkIds: window.transcriptChunkIds,
+          closeReason: window.windowCloseReason,
         },
+        manifest: publicManifest(manifest),
         requestMetadata: { mode, endpoint: mode === "live" ? redactEndpoint(endpoint) : "in-process-route", inputChars: body.recentTranscript.length },
         card,
         failure,
@@ -78,7 +96,66 @@ async function main(): Promise<void> {
 
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, results.map((item) => JSON.stringify(item)).join("\n") + "\n", "utf8");
-  console.log(JSON.stringify({ mode, inputPath, outputPath, windowMs, windowCount: results.length, cardCount: results.filter((item) => item.card !== null).length }, null, 2));
+  console.log(JSON.stringify({ mode, inputPath, manifestPath, outputPath, windowCount: results.length, cardCount: results.filter((item) => item.card !== null).length }, null, 2));
+}
+
+interface DemoManifest {
+  version: string;
+  mediaPath: string;
+  mediaSha256: string;
+  startMs: number;
+  endMs: number;
+  scenario: string;
+  asrProvider: string;
+  asrVersion: string;
+  windowingVersion: string;
+  windowing: { targetCoreMinMs: number; maxCoreMs: number; contextOverlapMs: number };
+}
+
+async function readManifest(path: string): Promise<DemoManifest> {
+  const value = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+  const windowing = isRecord(value.windowing) ? value.windowing : {};
+  if (!isNonEmptyString(value.version) || !isNonEmptyString(value.mediaPath) || !isNonEmptyString(value.mediaSha256) ||
+    !isNonEmptyString(value.scenario) || !isNonEmptyString(value.asrProvider) || !isNonEmptyString(value.asrVersion) || !isNonEmptyString(value.windowingVersion) ||
+    !isFiniteNumber(value.startMs) || !isFiniteNumber(value.endMs) || value.endMs <= value.startMs ||
+    !isFiniteNumber(windowing.targetCoreMinMs) || !isFiniteNumber(windowing.maxCoreMs) || !isFiniteNumber(windowing.contextOverlapMs)) {
+    throw new Error(`Invalid demo manifest: ${path}`);
+  }
+  return { version: value.version, mediaPath: value.mediaPath, mediaSha256: value.mediaSha256, startMs: value.startMs, endMs: value.endMs, scenario: value.scenario, asrProvider: value.asrProvider, asrVersion: value.asrVersion, windowingVersion: value.windowingVersion, windowing: { targetCoreMinMs: windowing.targetCoreMinMs, maxCoreMs: windowing.maxCoreMs, contextOverlapMs: windowing.contextOverlapMs } };
+}
+
+function buildCandidateWindows(transcripts: ReplayTranscript[], manifest: DemoManifest): DemoCandidateWindow[] {
+  return buildDemoCandidateWindows(transcripts
+    .filter((item) => item.startMs >= manifest.startMs && item.endMs <= manifest.endMs)
+    .map((item) => ({ ...item, sentenceBoundary: /[.!?\u3002\uff01\uff1f]$/.test(item.text.trim()) })), {
+    datasetVersion: manifest.version,
+    mediaId: manifest.mediaSha256,
+    asrVersion: manifest.asrVersion,
+    windowingVersion: manifest.windowingVersion,
+    minimumDurationMs: manifest.windowing.targetCoreMinMs,
+    contextOverlapMs: manifest.windowing.contextOverlapMs,
+    maximumDurationMs: manifest.windowing.maxCoreMs,
+  });
+}
+
+function stableCandidateId(window: DemoCandidateWindow): string {
+  return createHash("sha256").update(JSON.stringify(window.candidateIdInputs)).digest("hex");
+}
+
+function publicManifest(manifest: DemoManifest): ReplayResult["manifest"] {
+  return { version: manifest.version, mediaSha256: manifest.mediaSha256, startMs: manifest.startMs, endMs: manifest.endMs, scenario: manifest.scenario, asrProvider: manifest.asrProvider, asrVersion: manifest.asrVersion, windowingVersion: manifest.windowingVersion };
+}
+
+function sanitizeTerminalTrace(value: unknown, candidateId: string): Record<string, unknown> {
+  const trace = isRecord(value) ? value : {};
+  return {
+    traceId: typeof trace.traceId === "string" ? trace.traceId : "missing-trace-id",
+    candidateId,
+    finalState: typeof trace.finalState === "string" ? trace.finalState : "invalid_schema",
+    decisionSource: typeof trace.decisionSource === "string" ? trace.decisionSource : "system",
+    duplicateOfCandidateId: typeof trace.duplicateOfCandidateId === "string" ? trace.duplicateOfCandidateId : undefined,
+    totalLatencyMs: typeof trace.totalLatencyMs === "number" ? trace.totalLatencyMs : undefined,
+  };
 }
 
 function buildSettings() {
@@ -107,19 +184,6 @@ async function readTranscripts(path: string): Promise<ReplayTranscript[]> {
   });
 }
 
-function buildWindows(transcripts: ReplayTranscript[], windowMs: number): Array<{ startMs: number; endMs: number; transcripts: ReplayTranscript[] }> {
-  if (transcripts.length === 0) return [];
-  const first = transcripts[0].startMs;
-  const last = transcripts[transcripts.length - 1].endMs;
-  const windows: Array<{ startMs: number; endMs: number; transcripts: ReplayTranscript[] }> = [];
-  for (let start = first; start <= last; start += windowMs) {
-    const end = start + windowMs;
-    const items = transcripts.filter((item) => item.startMs < end && item.endMs > start);
-    if (items.length > 0) windows.push({ startMs: start, endMs: end, transcripts: items });
-  }
-  return windows;
-}
-
 function installMockFetch(): () => void {
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -144,7 +208,7 @@ function installMockFetch(): () => void {
 }
 
 function extractKeyword(trace: Record<string, unknown> | null): string | null {
-  return trace?.finalState === "card_generated" ? "Agent Harness" : null;
+  return trace?.finalState === "card_shown" || trace?.finalState === "card_generated" ? "Agent Harness" : null;
 }
 
 function extractStageLatency(trace: Record<string, unknown> | null, card: Record<string, unknown> | null, fallbackTotal: number) {
@@ -187,6 +251,14 @@ function loadDotEnv(path: string): void {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 void main().catch((error: unknown) => {

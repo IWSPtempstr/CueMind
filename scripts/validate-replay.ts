@@ -37,6 +37,81 @@ interface PercentileSummary {
   p95: number;
 }
 
+export type DemoLedgerFinalState =
+  | "card_shown"
+  | "card_generated"
+  | "model_skip"
+  | "suppressed_as_duplicate"
+  | "search_failed"
+  | "model_failed"
+  | "timeout"
+  | "invalid_schema"
+  | "remote_blocked"
+  | "excluded_unscorable";
+
+export interface DemoLedgerValidation {
+  valid: boolean;
+  errors: string[];
+  inputCount: number;
+  evaluableCount: number;
+  excludedCount: number;
+  terminalCount: number;
+}
+
+interface DemoLedgerRecordInput {
+  candidateId?: unknown;
+  traceId?: unknown;
+  finalState?: unknown;
+}
+
+const DEMO_LEDGER_FINAL_STATES = new Set<DemoLedgerFinalState>([
+  "card_shown",
+  "card_generated",
+  "model_skip",
+  "suppressed_as_duplicate",
+  "search_failed",
+  "model_failed",
+  "timeout",
+  "invalid_schema",
+  "remote_blocked",
+  "excluded_unscorable",
+]);
+
+export function validateDemoLedger(records: readonly DemoLedgerRecordInput[]): DemoLedgerValidation {
+  const errors: string[] = [];
+  const candidateIds = new Set<string>();
+  const traceIds = new Set<string>();
+  let excludedCount = 0;
+  let terminalCount = 0;
+
+  records.forEach((record, index) => {
+    const label = `record ${index + 1}`;
+    const candidateId = typeof record.candidateId === "string" ? record.candidateId.trim() : "";
+    if (!candidateId) errors.push(`${label} has no candidateId`);
+    else if (candidateIds.has(candidateId)) errors.push(`${label} duplicates candidateId ${candidateId}`);
+    else candidateIds.add(candidateId);
+
+    const traceId = typeof record.traceId === "string" ? record.traceId.trim() : "";
+    if (!traceId) errors.push(`${label} has no traceId`);
+    else if (traceIds.has(traceId)) errors.push(`${label} duplicates traceId ${traceId}`);
+    else traceIds.add(traceId);
+
+    if (record.finalState === "excluded_unscorable") {
+      excludedCount += 1;
+    } else if (typeof record.finalState === "string" && DEMO_LEDGER_FINAL_STATES.has(record.finalState as DemoLedgerFinalState)) {
+      terminalCount += 1;
+    } else {
+      errors.push(`${label} has an invalid finalState`);
+    }
+  });
+
+  const inputCount = records.length;
+  const evaluableCount = inputCount - excludedCount;
+  if (inputCount !== evaluableCount + excludedCount) errors.push("input conservation mismatch");
+  if (evaluableCount !== terminalCount) errors.push("terminal conservation mismatch");
+  return { valid: errors.length === 0, errors, inputCount, evaluableCount, excludedCount, terminalCount };
+}
+
 async function main(): Promise<void> {
   const inputPath = resolve(process.argv[2] ?? "fixtures/demo-meeting/sample-events.jsonl");
   const outputDir = resolve(process.argv[3] ?? "reports/replay");
@@ -62,7 +137,7 @@ async function main(): Promise<void> {
       : "Fixture event integrity and latency metadata only; no ASR, LLM, search, or card-quality claim.",
   };
   const scorecard = {
-    status: summary.invalidLineCount === 0 && summary.duplicateEventIdCount === 0 && summary.invalidTimingCount === 0 && summary.emptyTranscriptCount === 0
+    status: summary.invalidLineCount === 0 && summary.duplicateEventIdCount === 0 && summary.invalidTimingCount === 0 && summary.emptyTranscriptCount === 0 && workflowEvidence.ledger.valid
       ? "pass"
       : "fail",
     denominator: summary.eventCount,
@@ -71,6 +146,7 @@ async function main(): Promise<void> {
       eventIdsUnique: summary.duplicateEventIdCount === 0,
       transcriptTimingValid: summary.invalidTimingCount === 0,
       transcriptTextNonEmpty: summary.emptyTranscriptCount === 0,
+      traceLedgerValid: workflowEvidence.ledger.valid,
     },
     metrics: summary,
     providerFailureCount: summary.providerFailureCount,
@@ -113,9 +189,10 @@ function isTraceBearingReplayLine(line: string): boolean {
     const value = JSON.parse(line) as unknown;
     if (!isRecord(value) || !isRecord(value.replayWindow) || !isRecord(value.trace)) return false;
     const window = value.replayWindow;
-    return typeof window.id === "string" && typeof window.startMs === "number" &&
+    return typeof window.startMs === "number" &&
       typeof window.endMs === "number" && window.endMs > window.startMs &&
-      Array.isArray(window.transcriptChunkIds) && window.transcriptChunkIds.every((id) => typeof id === "string");
+      Array.isArray(window.transcriptChunkIds) && window.transcriptChunkIds.every((id) => typeof id === "string") &&
+      validateDemoLedger([value.trace]).valid;
   } catch {
     return false;
   }
@@ -191,6 +268,7 @@ interface WorkflowEvidence {
   cardGeneratedCount: number;
   cardFailureCount: number;
   cardLatencyMs: PercentileSummary | null;
+  ledger: DemoLedgerValidation;
 }
 
 function extractWorkflowEvidence(raw: string): WorkflowEvidence {
@@ -201,11 +279,15 @@ function extractWorkflowEvidence(raw: string): WorkflowEvidence {
   let cardGeneratedCount = 0;
   let cardFailureCount = 0;
   const cardLatencies: number[] = [];
+  const ledgerRecords: DemoLedgerRecordInput[] = [];
   for (const line of raw.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
     let value: unknown;
     try { value = JSON.parse(line) as unknown; } catch { continue; }
     if (!isRecord(value)) continue;
-    if (isRecord(value.replayWindow) && isRecord(value.trace)) replayRecordCount += 1;
+    if (isRecord(value.replayWindow) && isRecord(value.trace)) {
+      replayRecordCount += 1;
+      ledgerRecords.push(value.trace);
+    }
     const trace = isRecord(value.trace) ? value.trace : value;
     if (typeof trace.modelProvider === "string") providerStructuredOutputEventCount += 1;
     if (Array.isArray(trace.events)) {
@@ -217,8 +299,8 @@ function extractWorkflowEvidence(raw: string): WorkflowEvidence {
         }
       }
     }
-    if (trace.finalState === "card_generated") cardGeneratedCount += 1;
-    if (trace.finalState === "model_failed" || trace.finalState === "search_failed") cardFailureCount += 1;
+    if (trace.finalState === "card_shown" || trace.finalState === "card_generated") cardGeneratedCount += 1;
+    if (trace.finalState === "model_failed" || trace.finalState === "search_failed" || trace.finalState === "timeout" || trace.finalState === "invalid_schema" || trace.finalState === "remote_blocked") cardFailureCount += 1;
     const card = isRecord(value.card) ? value.card : null;
     const latency = card && isRecord(card.latencyMs) ? card.latencyMs.total : null;
     if (typeof latency === "number" && Number.isFinite(latency)) cardLatencies.push(latency);
@@ -231,6 +313,7 @@ function extractWorkflowEvidence(raw: string): WorkflowEvidence {
     cardGeneratedCount,
     cardFailureCount,
     cardLatencyMs: cardLatencies.length > 0 ? summarizePercentiles(cardLatencies) : null,
+    ledger: validateDemoLedger(ledgerRecords),
   };
 }
 
@@ -303,4 +386,4 @@ function renderReport(manifest: Record<string, unknown>, scorecard: Record<strin
   ].join("\n");
 }
 
-void main();
+if (process.argv[1]?.endsWith("validate-replay.ts")) void main();
