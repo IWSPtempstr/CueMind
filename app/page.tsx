@@ -9,6 +9,7 @@ import SettingsModal from "@/components/SettingsModal";
 import useChat from "@/hooks/useChat";
 import useContextCards from "@/hooks/useContextCards";
 import useDesktopTranscript from "@/hooks/useDesktopTranscript";
+import useMediaUploader from "@/hooks/useMediaUploader";
 import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
 import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
@@ -28,8 +29,14 @@ export default function Home(): ReactElement {
   const browserRecorder = useMicRecorder();
   const desktopRecorder = useDesktopTranscript();
   const recorder = desktopRecorder.isDesktop ? desktopRecorder : browserRecorder;
-  const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: recorder.isRecording && !recorder.isPaused });
-  const contextCards = useContextCards({ transcriptChunks: recorder.transcriptChunks, isRecording: recorder.isRecording && !recorder.isPaused });
+  const uploader = useMediaUploader({
+    setTranscriptChunks: recorder.setTranscriptChunks,
+    // 回调经 hook 内部 ref 每次渲染刷新，避免长任务读到过期闭包。
+    getTranscriptChunks: () => recorder.transcriptChunks,
+  });
+  const isCardFlowActive = (recorder.isRecording && !recorder.isPaused) || uploader.isProcessing;
+  const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive });
+  const contextCards = useContextCards({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive });
   const chat = useChat({ transcriptChunks: recorder.transcriptChunks });
   const [pendingSuggestion, setPendingSuggestion] = useState<Suggestion | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
