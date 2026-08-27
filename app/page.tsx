@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import ChatPanel from "@/components/ChatPanel";
 import LiveSuggestions from "@/components/LiveSuggestions";
 import LatencyPanel from "@/components/LatencyPanel";
+import MediaUploadPanel from "@/components/MediaUploadPanel";
 import MicTranscript from "@/components/MicTranscript";
 import SettingsModal from "@/components/SettingsModal";
 import useChat from "@/hooks/useChat";
@@ -220,6 +221,19 @@ export default function Home(): ReactElement {
           recordingError={recorder.error}
           meetingReport={meetingReport}
           isReportLoading={isReportLoading}
+          isUploadProcessing={uploader.isProcessing}
+          uploaderSlot={
+            <MediaUploadPanel
+              isProcessing={uploader.isProcessing}
+              progress={uploader.progress}
+              processingFileName={uploader.processingFileName}
+              uploadedFiles={uploader.uploadedFiles}
+              error={uploader.error}
+              onSelectFiles={uploader.handleFileList}
+              onCancel={uploader.cancelUpload}
+              onClearError={uploader.clearError}
+            />
+          }
         />
         <LiveSuggestions
           batches={suggestions.batches}
