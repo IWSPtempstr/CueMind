@@ -16,6 +16,7 @@ import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
 import type { StoredChatMessage } from "@/lib/chat-store";
 import { isErrorResponseBody } from "@/lib/api-response";
+import { AUDIO_SOURCE_MODE_LABELS } from "@/lib/audio-source-mode";
 import { exportSession } from "@/lib/export";
 import { END_OF_MEETING_PROMPT } from "@/lib/prompts";
 import { loadSessions, storeSession } from "@/lib/session-storage";
@@ -339,6 +340,8 @@ export default function Home(): ReactElement {
     source: desktopRecorder.isDesktop ? "系统音频(桌面)" : "浏览器麦克风",
     retryCount: recorder.retryCount,
     error: recorder.error,
+    // 仅桌面模式显示输入源模式；浏览器录音没有该概念。
+    ...(desktopRecorder.isDesktop ? { sourceMode: AUDIO_SOURCE_MODE_LABELS[desktopRecorder.audioSourceMode] } : {}),
   };
   const uploadStatus: UploadStatusSnapshot | null = uploader.isProcessing
     ? {
@@ -428,6 +431,9 @@ export default function Home(): ReactElement {
           meetingReport={meetingReport}
           isReportLoading={isReportLoading}
           isUploadProcessing={uploader.isProcessing}
+          isDesktop={desktopRecorder.isDesktop}
+          audioSourceMode={desktopRecorder.audioSourceMode}
+          onAudioSourceModeChange={desktopRecorder.setAudioSourceMode}
           uploaderSlot={
             <MediaUploadPanel
               isProcessing={uploader.isProcessing}

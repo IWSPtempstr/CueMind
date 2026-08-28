@@ -41,6 +41,8 @@ export interface RuntimeStatusEvent {
   occurredAt: string;
   source?: AudioSource;
   outputDir?: string;
+  // capture_ready 事件携带的输入源模式（mic|system|mixed），来自 helper 的 --sources 参数。
+  sources?: string;
 }
 
 export function parseDesktopEvent(raw: string): DesktopEvent | null {
@@ -126,6 +128,7 @@ function parseRuntimeStatus(event: Record<string, unknown>): RuntimeStatusEvent 
     occurredAt: event.occurredAt,
     ...(isAudioSource(event.source) ? { source: event.source } : {}),
     ...(isString(event.outputDir) ? { outputDir: event.outputDir } : {}),
+    ...(isString(event.sources) ? { sources: event.sources } : {}),
   };
 }
 

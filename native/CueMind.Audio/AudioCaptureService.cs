@@ -11,13 +11,15 @@ public sealed class AudioCaptureService : IDisposable
 
     private readonly string outputDir;
     private readonly JsonlEventWriter writer;
+    private readonly string sources;
     private readonly TaskCompletionSource completion = new();
     private readonly List<TrackCapture> tracks = [];
 
-    public AudioCaptureService(string outputDir, JsonlEventWriter writer)
+    public AudioCaptureService(string outputDir, JsonlEventWriter writer, string sources)
     {
         this.outputDir = outputDir;
         this.writer = writer;
+        this.sources = sources is "mic" or "system" ? sources : "mixed";
     }
 
     public Task Completion => completion.Task;
@@ -38,19 +40,24 @@ public sealed class AudioCaptureService : IDisposable
         }
 
         var enumerator = new MMDeviceEnumerator();
-        var renderDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-        var captureDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
-
-        tracks.Add(new TrackCapture(
-            source: "system",
-            capture: new WasapiLoopbackCapture(renderDevice),
-            outputRoot: Path.Combine(outputDir, "system"),
-            writer: writer));
-        tracks.Add(new TrackCapture(
-            source: "microphone",
-            capture: new WasapiCapture(captureDevice),
-            outputRoot: Path.Combine(outputDir, "microphone"),
-            writer: writer));
+        if (sources is "system" or "mixed")
+        {
+            var renderDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            tracks.Add(new TrackCapture(
+                source: "system",
+                capture: new WasapiLoopbackCapture(renderDevice),
+                outputRoot: Path.Combine(outputDir, "system"),
+                writer: writer));
+        }
+        if (sources is "mic" or "mixed")
+        {
+            var captureDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
+            tracks.Add(new TrackCapture(
+                source: "microphone",
+                capture: new WasapiCapture(captureDevice),
+                outputRoot: Path.Combine(outputDir, "microphone"),
+                writer: writer));
+        }
 
         foreach (var track in tracks)
         {
@@ -62,7 +69,8 @@ public sealed class AudioCaptureService : IDisposable
             type = "runtime_status",
             status = "capture_ready",
             occurredAt = DateTimeOffset.UtcNow,
-            outputDir
+            outputDir,
+            sources
         });
         return Task.CompletedTask;
     }

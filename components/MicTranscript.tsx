@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import { AUDIO_SOURCE_MODE_LABELS, AUDIO_SOURCE_MODES, type AudioSourceMode } from "@/lib/audio-source-mode";
 import type { MeetingReport, TranscriptChunk } from "@/types/session";
 
 interface Props {
@@ -17,6 +18,9 @@ interface Props {
   isReportLoading: boolean;
   isUploadProcessing?: boolean;
   uploaderSlot?: ReactNode;
+  isDesktop?: boolean;
+  audioSourceMode?: AudioSourceMode;
+  onAudioSourceModeChange?: (mode: AudioSourceMode) => void;
 }
 
 function Highlight({ text, query }: { text: string; query: string }): ReactElement {
@@ -27,7 +31,7 @@ function Highlight({ text, query }: { text: string; query: string }): ReactEleme
 }
 
 export default function MicTranscript(props: Props): ReactElement {
-  const { transcriptChunks, isRecording, isPaused, micLevel, retryCount, onRecordingChange, onPauseToggle, recordingError, meetingReport, isReportLoading, isUploadProcessing = false, uploaderSlot } = props;
+  const { transcriptChunks, isRecording, isPaused, micLevel, retryCount, onRecordingChange, onPauseToggle, recordingError, meetingReport, isReportLoading, isUploadProcessing = false, uploaderSlot, isDesktop = false, audioSourceMode = "mixed", onAudioSourceModeChange } = props;
   const endRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"mic" | "upload">("mic");
@@ -46,9 +50,26 @@ export default function MicTranscript(props: Props): ReactElement {
         <h2 className="text-xs font-medium uppercase tracking-wider text-neutral-500">1. 麦克风与转写</h2>
         <span className={`rounded-full border border-neutral-700 px-2.5 py-1 text-[10px] font-semibold ${isRecording ? "text-red-400" : "text-neutral-400"}`}>{isPaused ? "已暂停" : isRecording ? "录音中" : "空闲"}</span>
       </header>
-      <div className="flex shrink-0 items-center gap-1 border-b border-neutral-800 px-5 py-2">
-        <button type="button" onClick={() => setActiveTab("mic")} aria-pressed={activeTab === "mic"} className={`rounded border px-3 py-1 text-xs ${activeTab === "mic" ? "border-neutral-600 bg-neutral-800 text-neutral-200" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>麦克风</button>
-        <button type="button" onClick={() => setActiveTab("upload")} aria-pressed={activeTab === "upload"} className={`rounded border px-3 py-1 text-xs ${activeTab === "upload" ? "border-neutral-600 bg-neutral-800 text-neutral-200" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>上传</button>
+      <div className="flex shrink-0 items-center justify-between border-b border-neutral-800 px-5 py-2">
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setActiveTab("mic")} aria-pressed={activeTab === "mic"} className={`rounded border px-3 py-1 text-xs ${activeTab === "mic" ? "border-neutral-600 bg-neutral-800 text-neutral-200" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>麦克风</button>
+          <button type="button" onClick={() => setActiveTab("upload")} aria-pressed={activeTab === "upload"} className={`rounded border px-3 py-1 text-xs ${activeTab === "upload" ? "border-neutral-600 bg-neutral-800 text-neutral-200" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}>上传</button>
+        </div>
+        {isDesktop ? (
+          <div className="flex items-center gap-1" role="group" aria-label="输入源模式">
+            {AUDIO_SOURCE_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={audioSourceMode === mode}
+                onClick={() => onAudioSourceModeChange?.(mode)}
+                className={`rounded border px-2.5 py-1 text-xs ${audioSourceMode === mode ? "border-neutral-600 bg-neutral-800 text-neutral-200" : "border-neutral-800 text-neutral-500 hover:text-neutral-300"}`}
+              >
+                {AUDIO_SOURCE_MODE_LABELS[mode]}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-5">
         {activeTab === "upload" ? (

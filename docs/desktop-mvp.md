@@ -77,6 +77,7 @@ Implemented and locally verified:
 
 - Electron shell with isolated preload bridge and helper lifecycle IPC.
 - Windows NAudio helper source with separate system and microphone tracks.
+  - ⚠️ 2026-08-27：输入源模式控制已实现（mic/system/mixed），但 Windows 双轨采集未实机验收（WSL 环境限制），不得宣称闭环。
 - Local whisper.cpp process adapter and desktop transcript event path.
 - llama.cpp JSON generation, Tavily/Bing/SerpAPI adapters, one retry for insufficient sources, and structured card failures.
 - Automatic context-card cooldown/deduplication, source links, and debug failure rows.

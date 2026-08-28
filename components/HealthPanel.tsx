@@ -10,6 +10,8 @@ export interface AsrStatusSnapshot {
   source: string;
   retryCount: number;
   error: string | null;
+  // 仅桌面模式传入：当前输入源模式（如「混合采集」）。
+  sourceMode?: string;
 }
 
 export interface UploadStatusSnapshot {
@@ -83,6 +85,7 @@ export default function HealthPanel(props: HealthPanelProps): ReactElement {
           </span>
         </div>
         <p className="mt-2 truncate text-xs text-neutral-300">输入来源：{uploadStatus?.processing ? "上传转写中…" : asrStatus.source}</p>
+        {asrStatus.sourceMode ? <p className="truncate text-xs text-neutral-300">输入源：{asrStatus.sourceMode}</p> : null}
         {uploadStatus?.processing ? (
           <div className="mt-2">
             {uploadStatus.fileName ? <p className="truncate text-[10px] text-neutral-500" title={uploadStatus.fileName}>{uploadStatus.fileName}</p> : null}

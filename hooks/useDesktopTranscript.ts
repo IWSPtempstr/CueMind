@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
+import type { AudioSourceMode } from "@/lib/audio-source-mode";
 import { parseDesktopEvent, type AudioChunkReadyEvent } from "@/lib/desktop-events";
 import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
@@ -15,6 +16,8 @@ interface UseDesktopTranscriptResult {
   error: string | null;
   transcriptChunks: TranscriptChunk[];
   setTranscriptChunks: (chunks: TranscriptChunk[]) => void;
+  audioSourceMode: AudioSourceMode;
+  setAudioSourceMode: (mode: AudioSourceMode) => void;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
   pauseRecording: () => void;
@@ -29,13 +32,21 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   const [transcriptChunks, setTranscriptState] = useState<TranscriptChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
+  const [audioSourceMode, setAudioSourceModeState] = useState<AudioSourceMode>("mixed");
   const queueRef = useRef<AudioChunkReadyEvent[]>([]);
   const processingRef = useRef(false);
   const seenChunkIdsRef = useRef(new Set<string>());
+  const audioSourceModeRef = useRef<AudioSourceMode>("mixed");
+  // 已同步到主进程的输入源模式；startRecording 前据此判断是否需要先同步。
+  const appliedAudioSourceModeRef = useRef<AudioSourceMode>("mixed");
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cuemindDesktop));
   }, []);
+
+  useEffect(() => {
+    audioSourceModeRef.current = audioSourceMode;
+  }, [audioSourceMode]);
 
   const setTranscriptChunks = useCallback((chunks: TranscriptChunk[]): void => {
     setTranscriptState(chunks);
@@ -135,17 +146,49 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
     });
   }, [enqueueChunk]);
 
+  // 切换输入源模式：更新本地 state；桌面环境存在桥时同步主进程（helper 在跑则主进程会重启）。
+  // 非桌面环境仅更新本地 state（no-op）。
+  const setAudioSourceMode = useCallback((mode: AudioSourceMode): void => {
+    setAudioSourceModeState(mode);
+    const bridge = window.cuemindDesktop;
+    if (typeof bridge?.setAudioSourceMode !== "function") return;
+    void bridge.setAudioSourceMode(mode).then((status) => {
+      if (status.lastError) {
+        setError(status.lastError);
+        return;
+      }
+      appliedAudioSourceModeRef.current = mode;
+    }).catch((caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : "切换输入源失败");
+    });
+  }, []);
+
   const startRecording = useCallback(async (): Promise<void> => {
     const bridge = window.cuemindDesktop;
     if (!bridge) {
       setError("桌面运行时不可用，将继续使用浏览器录音。");
       return;
     }
+    // 确保以当前选择的输入源模式启动：模式与已同步值不同时，先同步主进程（helper 在跑则重启）。
+    const desiredMode = audioSourceModeRef.current;
+    if (typeof bridge.setAudioSourceMode === "function" && appliedAudioSourceModeRef.current !== desiredMode) {
+      try {
+        const status = await bridge.setAudioSourceMode(desiredMode);
+        if (status.lastError) {
+          setError(status.lastError);
+          return;
+        }
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "切换输入源失败");
+        return;
+      }
+    }
     const status = await bridge.startAudioHelper();
     if (status.lastError) {
       setError(status.lastError);
       return;
     }
+    appliedAudioSourceModeRef.current = desiredMode;
     setError(null);
     setIsRecording(true);
   }, []);
@@ -171,6 +214,8 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
     error,
     transcriptChunks,
     setTranscriptChunks,
+    audioSourceMode,
+    setAudioSourceMode,
     startRecording,
     stopRecording,
     pauseRecording: unsupportedControl,

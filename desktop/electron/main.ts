@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import path from "node:path";
 import type { Readable } from "node:stream";
+import { normalizeAudioSourceMode, serializeAudioSourceArgs, type AudioSourceMode } from "./audio-source-mode";
 import type { DesktopRuntimeStatus } from "./types";
 
 const currentDir = __dirname;
@@ -14,6 +15,7 @@ let audioHelper: AudioHelperProcess | null = null;
 let uiServer: AudioHelperProcess | null = null;
 let lastError: string | null = null;
 let audioOutputDir: string | null = null;
+let audioSourceMode: AudioSourceMode = "mixed";
 const UI_PORT = 4173;
 
 function runtimeStatus(): DesktopRuntimeStatus {
@@ -21,6 +23,7 @@ function runtimeStatus(): DesktopRuntimeStatus {
     helperRunning: audioHelper !== null && audioHelper.exitCode === null,
     audioOutputDir,
     lastError,
+    audioSourceMode,
   };
 }
 
@@ -35,7 +38,8 @@ function helperPath(): string {
   return path.resolve(currentDir, "../../native/CueMind.Audio/bin/Release/net8.0-windows/win-x64/publish/CueMind.Audio.exe");
 }
 
-async function startAudioHelper(): Promise<DesktopRuntimeStatus> {
+async function startAudioHelper(mode?: AudioSourceMode): Promise<DesktopRuntimeStatus> {
+  if (mode) audioSourceMode = normalizeAudioSourceMode(mode);
   if (audioHelper && audioHelper.exitCode === null) return runtimeStatus();
   if (process.platform !== "win32") {
     lastError = "CueMind.Audio requires Windows 10 22H2 or Windows 11 x64.";
@@ -46,7 +50,7 @@ async function startAudioHelper(): Promise<DesktopRuntimeStatus> {
   await mkdir(audioOutputDir, { recursive: true });
   lastError = null;
 
-  const child = spawn(helperPath(), [audioOutputDir], {
+  const child = spawn(helperPath(), [audioOutputDir, ...serializeAudioSourceArgs(audioSourceMode)], {
     cwd: path.dirname(helperPath()),
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -71,14 +75,28 @@ async function startAudioHelper(): Promise<DesktopRuntimeStatus> {
   });
 
   child.once("exit", (code, signal) => {
-    if (audioHelper === child) audioHelper = null;
-    if (code !== 0 && signal !== "SIGTERM") {
-      lastError = `Audio helper exited unexpectedly (code=${code ?? "none"}, signal=${signal ?? "none"}).`;
+    // 仅当退出的仍是当前 helper 时才视为异常退出；主动 stop/切换模式重启导致的退出
+    // （audioHelper 已被置空或换成新 child）不写 lastError。
+    if (audioHelper === child) {
+      audioHelper = null;
+      if (code !== 0 && signal !== "SIGTERM") {
+        lastError = `Audio helper exited unexpectedly (code=${code ?? "none"}, signal=${signal ?? "none"}).`;
+      }
     }
     mainWindow?.webContents.send("runtime:status-changed", runtimeStatus());
   });
 
   mainWindow?.webContents.send("runtime:status-changed", runtimeStatus());
+  return runtimeStatus();
+}
+
+// 切换输入源模式：helper 在跑则 stop 后以新模式重启，否则仅记录模式、待下次 start 生效。
+async function setAudioSourceMode(mode: unknown): Promise<DesktopRuntimeStatus> {
+  audioSourceMode = normalizeAudioSourceMode(mode);
+  if (audioHelper !== null && audioHelper.exitCode === null) {
+    await stopAudioHelper();
+    return startAudioHelper();
+  }
   return runtimeStatus();
 }
 
@@ -151,9 +169,12 @@ async function createWindow(): Promise<void> {
   });
 }
 
+// ipcMain.handle 的监听函数实际签名是 (event, ...args)：渲染进程 invoke 的第一个参数落在第二个形参。
 ipcMain.handle("runtime:get-status", () => runtimeStatus());
-ipcMain.handle("runtime:start-audio-helper", () => startAudioHelper());
+ipcMain.handle("runtime:start-audio-helper", (_event, sources?: unknown) =>
+  startAudioHelper(typeof sources === "string" ? normalizeAudioSourceMode(sources) : undefined));
 ipcMain.handle("runtime:stop-audio-helper", () => stopAudioHelper());
+ipcMain.handle("runtime:set-audio-source-mode", (_event, sources?: unknown) => setAudioSourceMode(sources));
 
 app.whenReady().then(async () => {
   await createWindow();
