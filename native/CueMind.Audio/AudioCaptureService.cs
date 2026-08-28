@@ -210,7 +210,10 @@ public sealed class AudioCaptureService : IDisposable
                 startMs,
                 endMs,
                 sampleRate = capture.WaveFormat.SampleRate,
-                channels = capture.WaveFormat.Channels
+                channels = capture.WaveFormat.Channels,
+                // 窗口峰值电平（RMS，0..1）：双轨说话人归属的能量比较源
+                //（lib/speaker-attributes.ts 的 peakLevel）；旧消费方忽略即可。
+                energy = Math.Round(peakRms, 4)
             });
         }
 

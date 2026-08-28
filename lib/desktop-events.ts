@@ -13,6 +13,8 @@ export interface AudioChunkReadyEvent {
   endMs: number;
   sampleRate: number;
   channels: number;
+  /** 窗口峰值电平（RMS，0..1）：说话人归属的能量比较源；旧 helper 无此字段。 */
+  energy?: number;
 }
 
 export interface TranscriptReadyEvent {
@@ -83,6 +85,7 @@ function parseAudioChunkReady(event: Record<string, unknown>): AudioChunkReadyEv
     endMs: event.endMs,
     sampleRate: event.sampleRate,
     channels: event.channels,
+    ...(isFiniteNumber(event.energy) ? { energy: event.energy } : {}),
   };
 }
 

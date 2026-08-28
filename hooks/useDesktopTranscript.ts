@@ -96,13 +96,18 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
         { id: crypto.randomUUID(), stage: "asr", durationMs: payload.latencyMs, createdAt: asrEndedAt },
       ]);
       // 说话人归属（2.2-b 接线）：仅 mixed 双轨模式标注（attributeChunkSpeaker 内裁决），
-      // 单轨（mic|system 模式）chunk 不带 speaker（行为零变化红线）。事件无 energy/
-      // peakLevel 字段 → 纯通道映射退化路径；对轨时间重叠对比已接（recentEventsRef
-      // 近邻窗口），能量与重叠区数据待 C# 透出 energy 字段后接入（透传即可生效）。
+      // 单轨（mic|system 模式）chunk 不带 speaker（行为零变化红线）。C# 已透出 energy
+      // 字段（窗口峰值 RMS）→ 直接作为 peakLevel 参与重叠区能量比较与泄漏跟随
+      // （lib/speaker-attributes.ts）；旧 helper 无 energy → 纯通道映射退化路径。
       const otherTrack = recentEventsRef.current
         .filter((item) => item.id !== event.id && (item.source === "microphone" || item.source === "system") && item.source !== event.source)
-        .map((item) => ({ source: item.source as "microphone" | "system", startMs: item.startMs, endMs: item.endMs }));
-      const speaker = attributeChunkSpeaker(audioSourceModeRef.current, event.source, event.startMs, event.endMs, otherTrack);
+        .map((item) => ({
+          source: item.source as "microphone" | "system",
+          startMs: item.startMs,
+          endMs: item.endMs,
+          ...(typeof item.energy === "number" ? { peakLevel: item.energy } : {}),
+        }));
+      const speaker = attributeChunkSpeaker(audioSourceModeRef.current, event.source, event.startMs, event.endMs, otherTrack, event.energy);
       setTranscriptState((previous) => [
         ...previous,
         {

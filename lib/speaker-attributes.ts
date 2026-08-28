@@ -146,10 +146,11 @@ export function attributeChunkSpeaker(
   startMs: number,
   endMs: number,
   otherTrack: SpeakerWindow[],
+  peakLevel?: number,
 ): SpeakerRole | undefined {
   if (mode !== "mixed") return undefined;
   if (source !== "microphone" && source !== "system") return undefined;
-  return resolveSpeakerRole({ source, startMs, endMs }, otherTrack);
+  return resolveSpeakerRole({ source, startMs, endMs, ...(peakLevel !== undefined ? { peakLevel } : {}) }, otherTrack);
 }
 
 /**

@@ -58,6 +58,41 @@ assert.equal(chunk.id, "chunk-1");
 assert.equal(chunk.source, "microphone");
 assert.equal(chunk.endMs, 5000);
 assert.equal(chunk.sampleRate, 48000);
+// 新 helper 带 energy（窗口峰值 RMS）→ 解析透出；本条无 energy 字段 → undefined。
+assert.equal(chunk.energy, undefined);
+
+const chunkWithEnergy = parseDesktopEvent(JSON.stringify({
+  type: "audio_chunk_ready",
+  id: "chunk-e",
+  source: "system",
+  path: String.raw`C:\audio\system\b.wav`,
+  startedAt: "2026-08-27T10:00:05.000Z",
+  endedAt: "2026-08-27T10:00:10.000Z",
+  startMs: 5000,
+  endMs: 10000,
+  sampleRate: 48000,
+  channels: 2,
+  energy: 0.4213,
+}));
+if (!chunkWithEnergy || chunkWithEnergy.type !== "audio_chunk_ready") throw new Error("带 energy 的 audio_chunk_ready 应正常解析");
+assert.equal(chunkWithEnergy.energy, 0.4213);
+// 非法 energy（字符串/NaN）宽容丢弃，事件仍解析。
+const chunkBadEnergy = parseDesktopEvent(JSON.stringify({
+  type: "audio_chunk_ready",
+  id: "chunk-b",
+  source: "system",
+  path: "x",
+  startedAt: "2026-08-27T10:00:10.000Z",
+  endedAt: "2026-08-27T10:00:15.000Z",
+  startMs: 10000,
+  endMs: 15000,
+  sampleRate: 48000,
+  channels: 2,
+  energy: "loud",
+}));
+if (chunkBadEnergy && chunkBadEnergy.type === "audio_chunk_ready") {
+  assert.equal(chunkBadEnergy.energy, undefined);
+}
 
 const error = parseDesktopEvent(JSON.stringify({
   type: "runtime_error",

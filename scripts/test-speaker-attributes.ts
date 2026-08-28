@@ -234,6 +234,25 @@ assert.equal(
   attributeChunkSpeaker("mixed", "system", 0, 5000, [{ source: "microphone", startMs: 0, endMs: 5000 }]),
   "remote",
 );
+// energy 激活（C# 透出后）：本窗 0.05 < 对轨 0.9 × 0.3 → 泄漏跟随主轨；
+// 本窗能量占优时保持本轨角色（重叠区能量比较生效）。
+assert.equal(
+  attributeChunkSpeaker("mixed", "microphone", 0, 5000, [{ source: "system", startMs: 0, endMs: 5000, peakLevel: 0.9 }], 0.05),
+  "remote",
+);
+assert.equal(
+  attributeChunkSpeaker("mixed", "system", 0, 5000, [{ source: "microphone", startMs: 0, endMs: 5000, peakLevel: 0.1 }], 0.8),
+  "remote",
+);
+assert.equal(
+  attributeChunkSpeaker("mixed", "microphone", 0, 5000, [{ source: "system", startMs: 0, endMs: 5000, peakLevel: 0.1 }], 0.8),
+  "you",
+);
+// 边界：本窗能量恰等于对轨 × 0.3（不算泄漏）→ 保持本轨。
+assert.equal(
+  attributeChunkSpeaker("mixed", "microphone", 0, 5000, [{ source: "system", startMs: 0, endMs: 5000, peakLevel: 1.0 }], 0.3),
+  "you",
+);
 
 // ---- 2.2-b UI 徽标回归：speakerBadge（MicTranscript 行内 YOU/REMOTE）----
 assert.deepEqual(speakerBadge("you"), { label: "YOU", className: "border-blue-800 text-blue-300" });
