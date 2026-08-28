@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import {
+  freshThrottleState,
   onConfirmed,
   onPartialSent,
   shouldSendPartial,
@@ -220,11 +221,13 @@ export default function useMicRecorder(): UseMicRecorderResult {
     }
   }, [transcribeBlobOnce]);
 
-  /** 每个 segment 创建时起一个 partial 调度循环：每 1s tick，由 shouldSendPartial 节流（≥4s 间隔）。 */
+  /** 每个 segment 创建时起一个 partial 调度循环：每 1s tick，由 shouldSendPartial 节流（两段式：首 2s、后续 4s）。 */
   const schedulePartialRef = useRef<(segment: Segment) => void>(() => undefined);
   schedulePartialRef.current = (segment: Segment): void => {
     clearPartialTimer();
     partialSegmentRef.current = segment;
+    // 新 segment：重置节流周期，以创建时刻为首个 partial 的门限基准。
+    partialThrottleRef.current = freshThrottleState(Date.now());
     partialTimerRef.current = window.setInterval(() => {
       void runPartialTranscription(segment);
     }, PARTIAL_TICK_MS);
