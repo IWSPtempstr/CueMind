@@ -40,11 +40,14 @@
 |---|---|
 | `app/api/chat/route.ts` → 改名 `app/api/ask/route.ts` | 插入关键词提取 + 搜索步骤；提示词改引用式契约；SSE 输出增加阶段事件（`searching` / `answer_chunk` / `done` / `degraded`） |
 | `hooks/useChat.ts` → 改名 `hooks/useAsk.ts` | 单飞锁（在途问题禁再发）；进度状态机；可选 `termHint` 参数 |
-| `components/ChatPanel.tsx` → `AskPanel.tsx`（抽屉壳保留） | 来源链接渲染（与卡片来源同构）；降级态展示；阶段进度指示 |
+| `components/ChatPanel.tsx` → `AskPanel.tsx` | 来源链接渲染（与卡片来源同构）；降级态展示；阶段进度指示 |
 | `lib/ask-cache.ts`（新，纯函数 + 内存缓存） | `term → results` 短 TTL 缓存（会话级，约 10 分钟），避免与卡片链路重复搜索 |
-| `types/settings.ts` + `useSettings.ts` + `SettingsModal.tsx` | `chatPrompt` → `askPrompt`（默认值改为引用式生成契约；读取时兼容旧键一次性迁移，沿用既有迁移模式） |
+| `types/settings.ts` + `useSettings.ts` + `SettingsModal.tsx` | `chatPrompt` → `askPrompt`（默认值改为引用式生成契约；读取时兼容旧键一次性迁移，沿用既有迁移模式）；**新增「实时健康指标」折叠区**（决策 68：HealthPanel 内容迁入，打开时实时刷新） |
 | `lib/chat-store.ts` | 不改动（表结构现成）；注释更新语义为询问历史 |
-| `app/page.tsx` | 接线更名（chat → ask）；卡片「问更多」入口属 B 阶段，A 阶段不做 |
+| `app/page.tsx` | **三栏重构（决策 68）**：中栏拆出独立 `ContextCardsPanel`（仅卡片+失败态）；右栏 `HealthPanel` 槽位换为 `AskPanel`；`ChatPanelDrawer` 移除；建议点击通路改为标注预填 |
+| `components/LiveSuggestions.tsx` | 拆分：卡片渲染迁出；建议卡 UI 移除（建议改左栏内联标注，见下） |
+| `components/MicTranscript.tsx` | 建议内联标注渲染（anchor 命中 chunk 行内类别徽标；点击预填右栏询问框） |
+| `lib/prompts.ts` | `SUGGESTIONS_PROMPT` 输出契约增加 `anchor` 字段（近期转写子串 ≤12 字） |
 
 ## 红线（逐条硬约束）
 
@@ -53,6 +56,21 @@
 3. **询问让位**：与卡片链路并发时询问排队（串行队列），卡片 P95 ≤8s 不动摇——验收必查
 4. **不编造**：来源 <2 走降级文案；schema 违规走 `invalid_schema` 终态（对齐决策 4 fail-closed）
 5. **不做主动检测**：仅手动触发；不监听转写自动发起询问
+
+## UI 重构（决策 68，与 A 阶段同批交付）
+
+三栏语义重排：
+
+| 栏 | 改造前 | 改造后 |
+|---|---|---|
+| 左 | 转写 | 转写 + **建议内联标注**（anchor 命中 chunk 行内徽标；点击预填右栏询问框） |
+| 中 | 建议卡 + 卡片混合 | **仅上下文卡片**（独立 `ContextCardsPanel`）+ 失败/降级态 |
+| 右 | HealthPanel | **AskPanel**（询问输入/阶段进度/引用式回答） |
+| 设置窗口 | — | 新增「实时健康指标」折叠区（HealthPanel 内容迁入，打开时实时刷新） |
+
+- 建议输出契约：`SUGGESTIONS_PROMPT` 增加 `anchor`（近期转写子串 ≤12 字）；**无锚点命中的建议丢弃**；命中 = 大小写不敏感子串匹配首个 chunk
+- 移除：`ChatPanelDrawer`、旧建议卡 UI（置顶/忽略/复制按钮随卡移除）
+- 建议生成节奏与模型调用不变；卡片链路零改动；健康指标数据源不变（仅渲染位置迁移）
 
 ## 延迟预算
 
@@ -73,8 +91,10 @@
   - schema 违规 → `invalid_schema` 终态
   - 缓存命中 → 第二次同关键词不发真实搜索（mock 计数断言）
   - 外发内容断言：请求体不含会议转写文本（隐私红线可测化）
+- 新脚本 `scripts/test-suggestion-anchor.ts`：anchor 命中/未命中（未命中丢弃）、大小写不敏感、≤12 字截断、类别徽标映射
 - 既有回归全绿；**`test-context-card-route.ts` 在模拟询问并发下重跑，P95 断言不回退**
 - `askPrompt` 旧键迁移用例
+- UI 冒烟：三栏渲染（中栏无建议卡、右栏为询问）；点击转写标注预填询问框；设置折叠区健康字段与旧面板一致
 - 门禁：每笔提交过 `tsc --noEmit && npm run lint && npm run build`（build 前停 :3000 dev server）
 
 ## 提交序列
@@ -83,8 +103,9 @@
 1. feat: rename chat prompt contract to askPrompt with citation schema (settings + migration)
 2. feat: ask route with keyword extraction, web search and fail-closed generation
 3. feat: ask cache for term-level search reuse
-4. feat: AskPanel UI with source citations and staged progress
-5. test: ask route regression (sources/degraded/schema/cache/privacy)
+4. refactor: three-column restructure — cards-only middle, AskPanel right, health into settings (decision 68)
+5. feat: inline suggestion annotations in transcript with anchor contract
+6. test: ask route + anchor regression (sources/degraded/schema/cache/privacy/anchor)
 ```
 
 ## B 阶段（后续，不在本计划范围）
