@@ -4,8 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { AudioSourceMode } from "@/lib/audio-source-mode";
 import { parseDesktopEvent, type AudioChunkReadyEvent } from "@/lib/desktop-events";
+import { resolveSpeakerRole } from "@/lib/speaker-attributes";
 import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
+
+/** 最近事件窗口容量（≈5 分钟双轨 5s chunk；说话人归属只关心近邻对轨）。 */
+const RECENT_EVENTS_LIMIT = 60;
 
 interface UseDesktopTranscriptResult {
   isDesktop: boolean;
@@ -36,6 +40,8 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   const queueRef = useRef<AudioChunkReadyEvent[]>([]);
   const processingRef = useRef(false);
   const seenChunkIdsRef = useRef(new Set<string>());
+  // 最近的双轨事件窗口（供说话人归属做对轨时间重叠比较；有界防长会话膨胀）。
+  const recentEventsRef = useRef<AudioChunkReadyEvent[]>([]);
   const audioSourceModeRef = useRef<AudioSourceMode>("mixed");
   // 已同步到主进程的输入源模式；startRecording 前据此判断是否需要先同步。
   const appliedAudioSourceModeRef = useRef<AudioSourceMode>("mixed");
@@ -89,6 +95,15 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
         { id: crypto.randomUUID(), stage: "capture", durationMs: Math.max(0, event.endMs - event.startMs), createdAt: new Date() },
         { id: crypto.randomUUID(), stage: "asr", durationMs: payload.latencyMs, createdAt: asrEndedAt },
       ]);
+      // 说话人归属（双轨纯 DSP）：对轨时间重叠 + 能量比较；事件无电平字段时
+      // 退化为"重叠即双方在场、各归各轨"（lib/speaker-attributes 语义）。
+      const otherTrack = recentEventsRef.current
+        .filter((item) => item.id !== event.id && (item.source === "microphone" || item.source === "system") && item.source !== event.source)
+        .map((item) => ({ source: item.source as "microphone" | "system", startMs: item.startMs, endMs: item.endMs }));
+      const speaker =
+        event.source === "microphone" || event.source === "system"
+          ? resolveSpeakerRole({ source: event.source, startMs: event.startMs, endMs: event.endMs }, otherTrack)
+          : undefined;
       setTranscriptState((previous) => [
         ...previous,
         {
@@ -96,6 +111,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
           text: payload.text.trim(),
           timestamp: new Date(event.startedAt),
           source: event.source,
+          ...(speaker ? { speaker } : {}),
           startMs: event.startMs,
           endMs: event.endMs,
           latency: {
@@ -115,6 +131,11 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   const enqueueChunk = useCallback((event: AudioChunkReadyEvent): void => {
     if (seenChunkIdsRef.current.has(event.id)) return;
     seenChunkIdsRef.current.add(event.id);
+    // 记入近邻事件窗口（说话人归属的对轨比较源）。
+    recentEventsRef.current.push(event);
+    if (recentEventsRef.current.length > RECENT_EVENTS_LIMIT) {
+      recentEventsRef.current.splice(0, recentEventsRef.current.length - RECENT_EVENTS_LIMIT);
+    }
     if (queueRef.current.length >= 3) {
       queueRef.current.shift();
       setError("本地转写队列已满，已丢弃最旧的待处理音频片段。");

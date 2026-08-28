@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { AUDIO_SOURCE_MODE_LABELS, AUDIO_SOURCE_MODES, type AudioSourceMode } from "@/lib/audio-source-mode";
+import { SPEAKER_ROLE_LABELS } from "@/lib/speaker-attributes";
 import type { MeetingReport, TranscriptChunk } from "@/types/session";
 
 interface Props {
@@ -112,7 +113,7 @@ export default function MicTranscript(props: Props): ReactElement {
             const windowChangeBreak = previousWindow !== null && currentWindow !== null && previousWindow !== currentWindow;
             const isTopicBreak = timeGapBreak || windowChangeBreak;
             return (
-              <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
+              <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}{chunk.speaker ? <span className={`rounded border px-1.5 py-0.5 text-[9px] ${chunk.speaker === "you" ? "border-blue-800 text-blue-300" : "border-emerald-800 text-emerald-300"}`}>{SPEAKER_ROLE_LABELS[chunk.speaker]}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
             );
           })}
           {isRecording && !isPaused && partialText ? (

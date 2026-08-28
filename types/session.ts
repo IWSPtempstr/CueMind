@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/types/chat";
 import type { SuggestionBatch } from "@/types/suggestions";
+import type { SpeakerRole } from "@/lib/speaker-attributes";
 
 export type AudioSource = "system" | "microphone" | "upload";
 
@@ -22,6 +23,8 @@ export interface TranscriptChunk {
   text: string;
   timestamp: Date;
   source?: AudioSource;
+  /** 双轨桌面模式的说话人角色（决策 2.2 纯 DSP 标注）；单轨/上传链路不设。 */
+  speaker?: SpeakerRole;
   startMs?: number;
   endMs?: number;
   confidence?: number;
