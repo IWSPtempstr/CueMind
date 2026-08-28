@@ -1,8 +1,19 @@
 "use client";
 
+// 范围（master plan 2.1 裁决）：partial 转写仅麦克风链路（决策 66）——桌面链路
+// 5s chunk 已近实时、上传链路有 SSE 进度，均不做。
+// 红线：partial 只进 partialText 展示态，绝不写 transcriptChunks、绝不触发
+// context-cards。卡片链路只消费 confirmed 文本：transcriptChunks 变化才由
+// page.tsx 的 effect 驱动 /api/context-cards，partial 不进该 state，天然隔离。
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
-import { PARTIAL_INTERVAL_MS, shouldRunPartialTranscription } from "@/lib/partial-transcription";
+import {
+  onConfirmed,
+  onPartialSent,
+  shouldSendPartial,
+  type PartialThrottleState,
+} from "@/lib/partial-transcript";
 import type { TranscriptChunk } from "@/types/session";
 
 const MIN_TRANSCRIBE_BYTES = 1000;
@@ -15,6 +26,8 @@ const MAX_RETRY_ATTEMPTS = 4;
 // "进行中"的音频可读（无 timeslice 时 parts 直到 stop 才有数据）。
 // 多 cluster webm 拼接对 ffmpeg/whisper 仍是合法输入，confirmed 路径不受影响。
 const RECORDER_TIMESLICE_MS = 1000;
+// partial 调度循环的 tick 周期；真实发送节奏由 shouldSendPartial 的 ≥4s 节流决定。
+const PARTIAL_TICK_MS = 1000;
 
 interface Segment {
   recorder: MediaRecorder;
@@ -59,6 +72,17 @@ function pickMimeType(): string | undefined {
   return undefined;
 }
 
+/** confirmed 与 partial 请求共用的 /api/upload-media FormData 组装（同一契约，避免重复）。 */
+function buildTranscribeFormData(blob: Blob, settings: ReturnType<typeof loadCueMindSettings>): FormData {
+  const formData = new FormData();
+  formData.append("media", blob, TRANSCRIBE_UPLOAD_FILENAME);
+  if (settings.localWhisperLanguage !== "auto") formData.append("language", settings.localWhisperLanguage);
+  formData.append("whisperPath", settings.localWhisperPath);
+  formData.append("whisperModelPath", settings.localWhisperModelPath);
+  formData.append("uploadId", crypto.randomUUID());
+  return formData;
+}
+
 export default function useMicRecorder(): UseMicRecorderResult {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -80,10 +104,11 @@ export default function useMicRecorder(): UseMicRecorderResult {
   const audioContextRef = useRef<AudioContext | null>(null);
   const meterFrameRef = useRef<number | null>(null);
   const retryTimersRef = useRef(new Set<number>());
-  // partial 转写通道（决策 66）：单飞 + 节流 + 主 segment 守卫。
+  // partial 转写通道（决策 66）：节流状态单飞 + 每 1s tick 判定（见 shouldSendPartial）。
   const partialTimerRef = useRef<number | null>(null);
-  const partialInFlightRef = useRef(false);
-  const lastPartialAttemptRef = useRef<number | null>(null);
+  const partialThrottleRef = useRef<PartialThrottleState>({ lastSentAt: 0, inFlight: false });
+  // 当前 partial 循环的属主 segment（轮换/flush 换主后旧循环随之作废）。
+  const partialSegmentRef = useRef<Segment | null>(null);
 
   const setTranscriptChunks = useCallback((chunks: TranscriptChunk[]): void => {
     setTranscriptState(chunks);
@@ -97,7 +122,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
   }, []);
 
   const clearPartialTimer = useCallback((): void => {
-    if (partialTimerRef.current !== null) window.clearTimeout(partialTimerRef.current);
+    if (partialTimerRef.current !== null) window.clearInterval(partialTimerRef.current);
     partialTimerRef.current = null;
   }, []);
 
@@ -122,17 +147,9 @@ export default function useMicRecorder(): UseMicRecorderResult {
 
   /** 单次转写请求（confirmed 与 partial 共用）；抛错由调用方决定重试或静默。 */
   const transcribeBlobOnce = useCallback(async (blob: Blob): Promise<string> => {
-    const settings = loadCueMindSettings();
-    const formData = new FormData();
-    formData.append("media", blob, TRANSCRIBE_UPLOAD_FILENAME);
-    if (settings.localWhisperLanguage !== "auto") formData.append("language", settings.localWhisperLanguage);
-    formData.append("whisperPath", settings.localWhisperPath);
-    formData.append("whisperModelPath", settings.localWhisperModelPath);
-    formData.append("uploadId", crypto.randomUUID());
-
     const response = await fetch("/api/upload-media", {
       method: "POST",
-      body: formData,
+      body: buildTranscribeFormData(blob, loadCueMindSettings()),
     });
     const payload: unknown = await response.json();
     if (!response.ok) throw new Error(isTranscribeError(payload) ? payload.error : "Transcription failed");
@@ -150,7 +167,9 @@ export default function useMicRecorder(): UseMicRecorderResult {
           { id: crypto.randomUUID(), text, timestamp },
         ].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()));
       }
-      // confirmed 文本已落账：清掉同 segment 的 partial 展示（决策 66 替换语义）。
+      // confirmed 文本已落账：清掉同 segment 的 partial 展示并重置节流周期
+      // （决策 66 替换语义，onConfirmed 开启下一个 partial 周期）。
+      partialThrottleRef.current = onConfirmed(partialThrottleRef.current);
       setPartialText(null);
       setError(null);
     } catch (caught) {
@@ -170,57 +189,60 @@ export default function useMicRecorder(): UseMicRecorderResult {
     }
   }, [transcribeBlobOnce]);
 
-  /** partial 转写：进行中 segment 的临时文本（决策 66）；单飞 + 节流 + 主 segment 守卫，失败静默。 */
+  /**
+   * partial 转写（决策 66）：进行中 segment 的临时文本，尽力而为——失败静默丢弃、
+   * 不重试（partial 丢了等下一 tick 即可）、不进 error 状态。响应只在仍是当前主
+   * segment 时才落 partialText；绝不写 transcriptChunks / 不触发 context-cards
+   * （见文件头红线注释）。
+   */
   const runPartialTranscription = useCallback(async (segment: Segment): Promise<void> => {
-    if (isStoppingRef.current || partialInFlightRef.current) return;
-    const blob = new Blob(segment.parts, { type: mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME });
+    if (isStoppingRef.current) return;
     const nowMs = Date.now();
-    if (!shouldRunPartialTranscription({
-      inFlight: partialInFlightRef.current,
-      segmentState: segment.recorder.state,
-      blobSize: blob.size,
-      peakLevel: segment.peakLevel,
-      nowMs,
-      lastAttemptMs: lastPartialAttemptRef.current,
-      silenceThreshold: SILENCE_RMS_THRESHOLD,
+    if (!shouldSendPartial(partialThrottleRef.current, nowMs, {
+      // MediaRecorder.pause() 会把 state 置为 "paused"，此处天然覆盖暂停语义。
+      isRecording: segment.recorder.state === "recording" && !isStoppingRef.current,
+      hasInFlight: partialThrottleRef.current.inFlight,
+      accumulatedBytes: segment.parts.reduce((total, part) => total + part.size, 0),
     })) return;
-    lastPartialAttemptRef.current = nowMs;
-    partialInFlightRef.current = true;
+    partialThrottleRef.current = onPartialSent(partialThrottleRef.current, nowMs);
+    partialThrottleRef.current = { ...partialThrottleRef.current, inFlight: true };
     try {
+      const blob = new Blob(segment.parts, { type: mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME });
       const text = await transcribeBlobOnce(blob);
       // 只有时序仍一致的当前主 segment 才允许更新 partial（旧 segment/已停止则丢弃）。
       if (!isStoppingRef.current && segment.recorder.state === "recording" && primarySegmentRef.current === segment) {
-        setPartialText(text && text.trim() ? text.trim() : null);
+        setPartialText(text || null);
       }
     } catch {
-      // partial 是尽力而为的展示层：失败保持上一帧，不进 error 状态。
+      // partial 是尽力而为的展示层：失败保持上一帧，静默丢弃。
     } finally {
-      partialInFlightRef.current = false;
+      partialThrottleRef.current = { ...partialThrottleRef.current, inFlight: false };
     }
   }, [transcribeBlobOnce]);
 
+  /** 每个 segment 创建时起一个 partial 调度循环：每 1s tick，由 shouldSendPartial 节流（≥4s 间隔）。 */
   const schedulePartialRef = useRef<(segment: Segment) => void>(() => undefined);
   schedulePartialRef.current = (segment: Segment): void => {
-    if (partialTimerRef.current !== null) window.clearTimeout(partialTimerRef.current);
-    const tick = (): void => {
-      partialTimerRef.current = null;
-      void runPartialTranscription(segment).finally(() => {
-        if (!isStoppingRef.current && segment.recorder.state === "recording") {
-          partialTimerRef.current = window.setTimeout(tick, PARTIAL_INTERVAL_MS);
-        }
-      });
-    };
-    partialTimerRef.current = window.setTimeout(tick, PARTIAL_INTERVAL_MS);
+    clearPartialTimer();
+    partialSegmentRef.current = segment;
+    partialTimerRef.current = window.setInterval(() => {
+      void runPartialTranscription(segment);
+    }, PARTIAL_TICK_MS);
   };
 
   const finalizeSegment = useCallback((segment: Segment): void => {
     segmentsRef.current.delete(segment);
+    // 属主 segment 停止：清掉它的 partial 循环，confirmed 转写接棒（决策 66 替换语义）。
+    if (partialSegmentRef.current === segment) {
+      clearPartialTimer();
+      partialSegmentRef.current = null;
+    }
     const blob = new Blob(segment.parts, { type: mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME });
     if (blob.size >= MIN_TRANSCRIBE_BYTES && segment.peakLevel >= SILENCE_RMS_THRESHOLD) {
       void transcribeBlob(blob, segment.startedAt);
     }
     if (isStoppingRef.current && segmentsRef.current.size === 0) cleanupStream();
-  }, [cleanupStream, transcribeBlob]);
+  }, [cleanupStream, clearPartialTimer, transcribeBlob]);
 
   const createSegment = useCallback((stream: MediaStream): Segment | null => {
     try {
@@ -322,7 +344,9 @@ export default function useMicRecorder(): UseMicRecorderResult {
 
   const stopRecording = useCallback((): void => {
     clearRotationTimers();
+    // 停止：清理所有 partial interval + 清空 partial 展示态（confirmed 接棒）。
     clearPartialTimer();
+    partialSegmentRef.current = null;
     isStoppingRef.current = true;
     setIsRecording(false);
     setIsPaused(false);
