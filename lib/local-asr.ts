@@ -1,4 +1,4 @@
-import { access, constants as fsConstants, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, constants as fsConstants, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { spawn } from "node:child_process";
@@ -72,6 +72,91 @@ export async function transcribeWithWhisperCpp(
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
+}
+
+// --- ASR warmup (master plan 2.3-b) ---
+
+/** Fields of LocalAsrRequest the warmup needs (mirrors ensureWarmedUp's parameter). */
+type WarmupRequest = Pick<
+  LocalAsrRequest,
+  "whisperPath" | "modelPath" | "language" | "timeoutMs" | "vad" | "promptContext"
+>;
+
+/** Warmup feeds 500 ms of silence through the real pipeline; a short timeout is plenty. */
+const WARMUP_TIMEOUT_MS = 30_000;
+const WARMUP_SAMPLE_RATE = 16_000;
+const WARMUP_DURATION_MS = 500;
+
+/**
+ * One warmup per transcribe implementation per process: the default
+ * transcribeWithWhisperCpp gets exactly one entry for the process lifetime,
+ * while test-injected fakes each get their own cache slot. Callers may
+ * fire-and-forget — the promise never rejects.
+ */
+const warmupPromises = new Map<typeof transcribeWithWhisperCpp, Promise<void>>();
+
+/**
+ * Best-effort cold-start warmup: transcribes a silent 500 ms 16 kHz mono WAV
+ * once so whisper pays the model-load/JSON-init cost up front instead of on
+ * the first real request. The result is discarded and any failure is silently
+ * swallowed — warmup must never block or fail real transcription requests.
+ * Concurrent and repeat calls share the same cached promise.
+ */
+export function ensureWarmedUp(
+  request?: WarmupRequest,
+  deps?: { transcribe?: typeof transcribeWithWhisperCpp },
+): Promise<void> {
+  const transcribe = deps?.transcribe ?? transcribeWithWhisperCpp;
+  const cached = warmupPromises.get(transcribe);
+  if (cached) return cached;
+  const promise = runWarmup(request, transcribe);
+  warmupPromises.set(transcribe, promise);
+  return promise;
+}
+
+async function runWarmup(request: WarmupRequest | undefined, transcribe: typeof transcribeWithWhisperCpp): Promise<void> {
+  const whisperPath = request?.whisperPath?.trim();
+  const modelPath = request?.modelPath?.trim();
+  if (!whisperPath || !modelPath) return; // Nothing to warm without executable/model paths.
+  let tempDir: string | null = null;
+  try {
+    tempDir = await mkdtemp(join(tmpdir(), "cuemind-warmup-"));
+    const wavPath = join(tempDir, "warmup-silence-16k.wav");
+    await writeFile(wavPath, buildSilentWav());
+    await transcribe({
+      whisperPath,
+      modelPath,
+      audioPath: wavPath,
+      language: request?.language ?? "auto",
+      timeoutMs: request?.timeoutMs ?? WARMUP_TIMEOUT_MS,
+      ...(request?.vad ? { vad: request.vad } : {}),
+      ...(request?.promptContext ? { promptContext: request.promptContext } : {}),
+    });
+  } catch {
+    // Deliberately silent: warmup failures must not surface to callers.
+  } finally {
+    if (tempDir) await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+/** 500 ms of 16 kHz mono 16-bit silence as an in-memory WAV (44-byte header + zeroed PCM frames). */
+function buildSilentWav(): Buffer {
+  const dataBytes = (WARMUP_SAMPLE_RATE * WARMUP_DURATION_MS * 2) / 1000; // 8000 frames × 2 bytes
+  const wav = Buffer.alloc(44 + dataBytes); // zero-filled PCM = digital silence
+  wav.write("RIFF", 0, "ascii");
+  wav.writeUInt32LE(36 + dataBytes, 4);
+  wav.write("WAVE", 8, "ascii");
+  wav.write("fmt ", 12, "ascii");
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20); // PCM
+  wav.writeUInt16LE(1, 22); // mono
+  wav.writeUInt32LE(WARMUP_SAMPLE_RATE, 24);
+  wav.writeUInt32LE(WARMUP_SAMPLE_RATE * 2, 28); // byte rate
+  wav.writeUInt16LE(2, 32); // block align
+  wav.writeUInt16LE(16, 34); // bits per sample
+  wav.write("data", 36, "ascii");
+  wav.writeUInt32LE(dataBytes, 40);
+  return wav;
 }
 
 /** Hard budget for the initial prompt (whisper caps it at n_text_ctx/2 tokens ≈ 200 chars). */

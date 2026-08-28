@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { transcribeWithWhisperCpp } from "@/lib/local-asr";
+import { ensureWarmedUp, transcribeWithWhisperCpp } from "@/lib/local-asr";
 
 export const runtime = "nodejs";
 
@@ -35,6 +35,12 @@ export async function POST(
       { status: 400 },
     );
   }
+
+  // 长会话预热（master plan 2.3-b）：fire-and-forget，不 await，保持路由延迟零变化。
+  // 首窗请求可能与预热并发执行（whisper-cli 进程级串行由 OS 调度）；预热的价值在于
+  // 提前消除 whisper 的 JSON/模型加载冷启动。ensureWarmedUp 内部吞错、永不 reject，
+  // 且进程生命周期内仅真实预热一次，void 丢弃不会产生 unhandled rejection。
+  void ensureWarmedUp(parsed.settings);
 
   try {
     const result = await transcribeWithWhisperCpp({
