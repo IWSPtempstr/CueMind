@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { appendCandidates } from "@/lib/candidate-store";
 import { generateLlamaCppJson } from "@/lib/llama-cpp";
 import { generateRemoteApiJson } from "@/lib/remote-api";
 import {
@@ -12,6 +13,8 @@ export const runtime = "nodejs";
 
 interface ContextCardRequest {
   candidateId: string;
+  /** M2-a 候选账本归属会话；可选（live-simple 未携带时账本记 "unassigned"）。 */
+  sessionId?: string;
   datasetVersion: string;
   windowingVersion: string;
   coreStartMs: number;
@@ -126,7 +129,11 @@ export async function POST(
     return NextResponse.json({
       card: null,
       failure: { reason: providerFailureReason(caught) },
-      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "model_failed", started),
+      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "model_failed", started, undefined, undefined, {
+        sessionId: parsed.sessionId,
+        keyword: null,
+        failureReason: providerFailureReason(caught),
+      }),
     });
   }
 
@@ -135,7 +142,10 @@ export async function POST(
     return NextResponse.json({
       card: null,
       failure: { reason: "No new specific keyword detected" },
-      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "hard_rule", "model_skip", started),
+      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "hard_rule", "model_skip", started, undefined, undefined, {
+        sessionId: parsed.sessionId,
+        keyword,
+      }),
     });
   }
 
@@ -155,6 +165,8 @@ export async function POST(
         "suppressed_as_duplicate",
         started,
         duplicate.candidateId,
+        undefined,
+        { sessionId: parsed.sessionId, keyword },
       ),
     });
   }
@@ -164,7 +176,10 @@ export async function POST(
     return NextResponse.json({
       card: null,
       failure: { reason: "No new specific keyword detected" },
-      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "hard_rule", "model_skip", started),
+      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "hard_rule", "model_skip", started, undefined, undefined, {
+        sessionId: parsed.sessionId,
+        keyword,
+      }),
     });
   }
 
@@ -204,7 +219,11 @@ export async function POST(
     return NextResponse.json({
       card: null,
       failure: { reason: errorMessage(caught) },
-      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "search", "search_failed", started, undefined, verticalHit),
+      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "search", "search_failed", started, undefined, verticalHit, {
+        sessionId: parsed.sessionId,
+        keyword,
+        failureReason: errorMessage(caught),
+      }),
     });
   }
   const searchMs = Math.round(performance.now() - searchStarted);
@@ -239,7 +258,11 @@ export async function POST(
     return NextResponse.json({
       card: null,
       failure: { reason: providerFailureReason(caught) },
-      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "model_failed", started),
+      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "model_failed", started, undefined, undefined, {
+        sessionId: parsed.sessionId,
+        keyword,
+        failureReason: providerFailureReason(caught),
+      }),
     });
   }
 
@@ -253,14 +276,22 @@ export async function POST(
     traceEvents.push({ step: traceEvents.length + 1, type: "card_generation", durationMs: generationMs });
     return NextResponse.json({
       card,
-      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "card_shown", started, undefined, verticalHit),
+      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "card_shown", started, undefined, verticalHit, {
+        sessionId: parsed.sessionId,
+        keyword,
+        card,
+      }),
     });
   } catch (caught) {
     traceEvents.push({ step: traceEvents.length + 1, type: "terminal" });
     return NextResponse.json({
       card: null,
       failure: { reason: providerFailureReason(caught) },
-      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "invalid_schema", started, undefined, verticalHit),
+      trace: makeTrace(traceId, parsed, parsed.transcriptChunkIds, provider, traceEvents, "model", "invalid_schema", started, undefined, verticalHit, {
+        sessionId: parsed.sessionId,
+        keyword,
+        failureReason: providerFailureReason(caught),
+      }),
     });
   }
 }
@@ -491,6 +522,7 @@ function parseRequest(value: unknown): ContextCardRequest | null {
 
   return {
     candidateId,
+    sessionId: isString(value.sessionId) ? value.sessionId : undefined,
     datasetVersion,
     windowingVersion,
     coreStartMs,
@@ -558,6 +590,24 @@ function providerFailureReason(error: unknown): string {
   return errorMessage(error);
 }
 
+/**
+ * M2-a 候选账本旁路上下文：由各终态 return 处按作用域可选提供。
+ * makeTrace 是全部终态的单点汇合，账本写入在此统一发生。
+ */
+interface CandidateLedgerContext {
+  /** parseRequest 透传的 sessionId；缺失时账本记 "unassigned"。 */
+  sessionId?: string;
+  /** 提取到的关键词；关键词阶段失败（尚无 keyword）时为 null。 */
+  keyword?: string | null;
+  /** card_shown 时已构建的卡片（用于 card_id 反查）。 */
+  card?: ContextCard | null;
+  /** 失败类终态的 failure.reason。 */
+  failureReason?: string | null;
+}
+
+/** 抑制/失败类终态才携带 suppress_reason；card_shown / model_skip 记 null。 */
+const SUPPRESS_REASON_FINAL_STATES = new Set(["model_failed", "search_failed", "invalid_schema"]);
+
 function makeTrace(
   traceId: string,
   metadata: Pick<ContextCardRequest, "candidateId" | "datasetVersion" | "windowingVersion">,
@@ -569,7 +619,30 @@ function makeTrace(
   started: number,
   duplicateOfCandidateId?: string,
   verticalHit?: boolean,
+  ledger?: CandidateLedgerContext,
 ): ContextCardTrace {
+  // M2-a 候选账本：fire-and-forget 旁路写入（better-sqlite3 同步且微秒级），
+  // 全部异常吞掉，绝不影响卡片链路响应；invalid_request（candidateId 为空）不产生账本行。
+  if (finalState !== "invalid_request" && metadata.candidateId.length > 0) {
+    const sessionKey = ledger?.sessionId?.trim();
+    try {
+      appendCandidates([{
+        sessionId: sessionKey ? sessionKey : "unassigned",
+        candidateId: metadata.candidateId,
+        term: ledger?.keyword ?? null,
+        finalState,
+        suppressReason: finalState === "suppressed_as_duplicate"
+          ? duplicateOfCandidateId ?? null
+          : SUPPRESS_REASON_FINAL_STATES.has(finalState)
+            ? ledger?.failureReason ?? null
+            : null,
+        cardId: ledger?.card?.id ?? null,
+        createdAt: new Date().toISOString(),
+      }]);
+    } catch {
+      /* 旁路失败不影响响应 */
+    }
+  }
   return {
     traceId,
     task: "context_card",

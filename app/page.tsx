@@ -98,7 +98,6 @@ export default function Home(): ReactElement {
   });
   const isCardFlowActive = (recorder.isRecording && !recorder.isPaused) || uploader.isProcessing;
   const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive });
-  const contextCards = useContextCards({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive });
   const chat = useChat({ transcriptChunks: recorder.transcriptChunks });
   const [pendingSuggestion, setPendingSuggestion] = useState<Suggestion | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -112,6 +111,9 @@ export default function Home(): ReactElement {
   const [createdAt, setCreatedAt] = useState(new Date());
   const [resumeCandidate, setResumeCandidate] = useState<SessionSnapshot | null>(null);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  // M2-a：卡片请求透传 activeSessionId（账本归属）。activeSessionId 在上方声明后才能引用，
+  // 故 useContextCards 置于 state 声明之后（hook 顺序跨渲染稳定即可）。
+  const contextCards = useContextCards({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive, sessionId: activeSessionId });
   const transcriptRef = useRef(recorder.transcriptChunks);
   useEffect(() => { transcriptRef.current = recorder.transcriptChunks; }, [recorder.transcriptChunks]);
   // 已处理过"上传完成"事件的 uploadId 去重集合（主题摘要只生成一次）。

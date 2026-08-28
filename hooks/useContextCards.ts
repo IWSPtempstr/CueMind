@@ -22,9 +22,11 @@ type ContextCardFailureWithTrace = ContextCardFailure & {
 interface UseContextCardsArgs {
   transcriptChunks: TranscriptChunk[];
   isRecording: boolean;
+  /** M2-a：候选账本归属会话；可空（服务端缺失时记 "unassigned"）。 */
+  sessionId?: string | null;
 }
 
-export default function useContextCards({ transcriptChunks, isRecording }: UseContextCardsArgs): {
+export default function useContextCards({ transcriptChunks, isRecording, sessionId }: UseContextCardsArgs): {
   cards: ContextCard[];
   failures: ContextCardFailure[];
   isLoading: boolean;
@@ -62,6 +64,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(sessionId ? { sessionId } : {}),
           recentTranscript: chunks.slice(-8).map((chunk) => chunk.text).join("\n"),
           knownKeywords,
           knownCandidates,
@@ -116,7 +119,7 @@ export default function useContextCards({ transcriptChunks, isRecording }: UseCo
       runningRef.current = false;
       setIsLoading(false);
     }
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
     if (!isRecording) return;

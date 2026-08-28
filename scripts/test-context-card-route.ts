@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import {
   createServer,
   type IncomingMessage,
   type Server,
   type ServerResponse,
 } from "node:http";
+import { tmpdir } from "node:os";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import { POST } from "@/app/api/context-cards/route";
+import {
+  countCandidates,
+  getCandidate,
+  getCandidateStoreBackend,
+  getCandidatesBySession,
+  getCandidatesByTerm,
+} from "@/lib/candidate-store";
 import {
   AgentReachSearchError,
   searchWithAgentReach,
@@ -143,6 +154,12 @@ function restoreAgentReachMock(): void {
 
 // --- request builders ---
 
+// M2-a：路由现在会旁路写候选账本（lib/candidate-store）。CUEMIND_DATA_DIR 未设时
+// 指向临时目录，避免污染开发 .data（store 懒初始化，首次 appendCandidates 前生效）。
+if (!process.env.CUEMIND_DATA_DIR?.trim()) {
+  process.env.CUEMIND_DATA_DIR = mkdtempSync(path.join(tmpdir(), "cuemind-route-test-"));
+}
+
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost/api/context-cards", {
     method: "POST",
@@ -196,6 +213,8 @@ async function testInvalidRequest(): Promise<void> {
   assert.equal(payload.card, null);
   assert.equal(payload.failure?.reason, "Invalid context-card request");
   assert.equal(payload.trace.finalState, "invalid_request");
+  // M2-a(c)：invalid_request 在 parseRequest 拒绝（首个测试 → 账本此时必须为空）。
+  assert.equal(countCandidates(), 0, "invalid_request（400 路径）不产生账本行");
 }
 
 async function testLocalProviderSelected(): Promise<void> {
@@ -214,6 +233,7 @@ async function testLocalProviderSelected(): Promise<void> {
   });
   try {
     const response = await POST(makeRequest(baseBody({
+      sessionId: "m2-route-card-shown",
       settings: settings({ modelProvider: "llama.cpp", llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
     })));
     assert.equal(response.status, 200);
@@ -234,6 +254,20 @@ async function testLocalProviderSelected(): Promise<void> {
       "card must carry the new keyPoints array",
     );
     assert.equal(calls, 2);
+    // M2-a(a)：card_shown 后账本落行（finalState / card_id / term / suppress_reason）。
+    const ledgerRows = getCandidatesBySession("m2-route-card-shown");
+    assert.equal(ledgerRows.length, 1, "card_shown 用例应在账本落一行");
+    const ledgerRow = ledgerRows[0];
+    assert.equal(ledgerRow.candidateId, "candidate-demo-001");
+    assert.equal(ledgerRow.finalState, "card_shown");
+    assert.equal(ledgerRow.term, "KV Cache");
+    assert.ok(ledgerRow.cardId !== null && ledgerRow.cardId.length > 0, "card_id 非空");
+    assert.equal(ledgerRow.suppressReason, null);
+    assert.equal(ledgerRow.createdAt.length > 0, true);
+    assert.equal(countCandidates() >= 1, true, "countCandidates 只读断言");
+    // card_id 反查 + term LIKE（ASCII 大小写不敏感）。
+    assert.equal(getCandidate(ledgerRow.cardId!)?.candidateId, "candidate-demo-001");
+    assert.ok(getCandidatesByTerm("kv cache").some((row) => row.candidateId === "candidate-demo-001"));
   } finally {
     await stopMockServer(server);
   }
@@ -367,6 +401,7 @@ async function testKnownKeywordDuplicateIsSuppressedWithOriginalCandidate(): Pro
   });
   try {
     const response = await POST(makeRequest(baseBody({
+      sessionId: "m2-route-dup",
       knownKeywords: [" kv cache "],
       knownCandidates: [{ candidateId: "candidate-old", keyword: " kv cache " }],
       settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
@@ -376,6 +411,13 @@ async function testKnownKeywordDuplicateIsSuppressedWithOriginalCandidate(): Pro
     assert.equal(payload.trace.finalState, "suppressed_as_duplicate");
     assert.equal(payload.trace.decisionSource, "hard_rule");
     assert.equal(payload.trace.duplicateOfCandidateId, "candidate-old");
+    // M2-a(b)：抑制终态落账本且携带 suppress_reason（= duplicateOfCandidateId）。
+    const dupRows = getCandidatesBySession("m2-route-dup");
+    assert.equal(dupRows.length, 1, "suppressed_as_duplicate 用例应在账本落一行");
+    assert.equal(dupRows[0].finalState, "suppressed_as_duplicate");
+    assert.equal(dupRows[0].suppressReason, "candidate-old");
+    assert.equal(dupRows[0].term, "KV Cache");
+    assert.equal(dupRows[0].cardId, null);
   } finally {
     await stopMockServer(server);
   }
@@ -438,14 +480,17 @@ async function testDistinctNormalizedKeywordIsNotSuppressed(): Promise<void> {
 }
 
 async function testInvalidCandidateIntervalIsRejected(): Promise<void> {
+  const rowsBefore = countCandidates();
   const response = await POST(makeRequest(baseBody({ coreStartMs: 20000, coreEndMs: 10000 })));
   assert.equal(response.status, 400);
   const payload = await readPayload(response);
   assert.equal(payload.card, null);
   assert.equal(payload.trace.finalState, "invalid_request");
+  assert.equal(countCandidates(), rowsBefore, "invalid_request 不新增账本行");
 }
 
 async function testMissingCandidateIdIsRejected(): Promise<void> {
+  const rowsBefore = countCandidates();
   const body = baseBody();
   delete body.candidateId;
   const response = await POST(makeRequest(body));
@@ -453,6 +498,7 @@ async function testMissingCandidateIdIsRejected(): Promise<void> {
   const payload = await readPayload(response);
   assert.equal(payload.card, null);
   assert.equal(payload.trace.finalState, "invalid_request");
+  assert.equal(countCandidates(), rowsBefore, "missing candidateId（invalid_request）不新增账本行");
 }
 
 // 实时简单模式：仅携带 hook 发送的四个字段（knownKeywords 校验保持必填，与线上一致），
@@ -488,6 +534,52 @@ async function testLiveSimpleBodyWithoutMetadataGeneratesCard(): Promise<void> {
     assert.equal(payload.card.keyword, "KV Cache");
     assert.equal(payload.trace.finalState, "card_shown");
     assert.equal(calls, 2);
+    // M2-a：live-simple 无 sessionId → 账本归属 "unassigned"。
+    const unassignedRows = getCandidatesBySession("unassigned");
+    assert.ok(
+      unassignedRows.some((row) => row.candidateId === payload.trace.candidateId && row.finalState === "card_shown"),
+      "live-simple 未携带 sessionId 时账本应记 unassigned",
+    );
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+// M2-a：live-simple + sessionId → 账本按传入 sessionId 归属（前端透传链路的服务端半边）。
+async function testLiveSimpleWithSessionIdAttributesLedger(): Promise<void> {
+  let calls = 0;
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    calls += 1;
+    if (calls === 1) {
+      writeJson(res, 200, chatCompletion({ keyword: "speculative decoding" }));
+    } else {
+      writeJson(res, 200, chatCompletion({
+        keyword: "speculative decoding",
+        keyPoints: ["用小模型草拟、大模型验证的解码加速。", "接受率决定加速上限。", "会议正讨论推理加速。"],
+        whyNow: "会议正在讨论解码加速。",
+      }));
+    }
+  });
+  try {
+    const response = await POST(makeRequest({
+      sessionId: "m2-live-simple",
+      recentTranscript: "我们讨论一下 speculative decoding 的加速原理",
+      knownKeywords: [],
+      transcriptChunkIds: ["chunk-live-2"],
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+    }));
+    assert.equal(response.status, 200);
+    const payload = await readPayload(response);
+    assert.ok(payload.card);
+    assert.equal(payload.trace.finalState, "card_shown");
+    const rows = getCandidatesBySession("m2-live-simple");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].candidateId, payload.trace.candidateId, "live-simple 合成的 candidateId 应落账本");
+    assert.equal(rows[0].sessionId, "m2-live-simple");
+    assert.equal(rows[0].finalState, "card_shown");
+    assert.equal(rows[0].term, "speculative decoding");
+    assert.ok(rows[0].cardId !== null);
+    assert.equal(calls, 2);
   } finally {
     await stopMockServer(server);
   }
@@ -495,6 +587,7 @@ async function testLiveSimpleBodyWithoutMetadataGeneratesCard(): Promise<void> {
 
 // mixed 元数据：candidateId 存在但缺少 coreStartMs 时仍应拒绝。
 async function testPartialMetadataIsStillRejected(): Promise<void> {
+  const rowsBefore = countCandidates();
   const body = baseBody();
   delete body.coreStartMs;
   const response = await POST(makeRequest(body));
@@ -503,6 +596,7 @@ async function testPartialMetadataIsStillRejected(): Promise<void> {
   assert.equal(payload.card, null);
   assert.equal(payload.failure?.reason, "Invalid context-card request");
   assert.equal(payload.trace.finalState, "invalid_request");
+  assert.equal(countCandidates(), rowsBefore, "partial metadata（invalid_request）不新增账本行");
 }
 
 async function testTavilyFallsBackToAgentReachWhenKeyMissing(): Promise<void> {
@@ -757,7 +851,79 @@ async function testAgentReachMockPreservesInsufficientSourcesError(): Promise<vo
   }
 }
 
+// M2-a(d) 旁路探针本体（子进程执行）：CUEMIND_DATA_DIR 指向普通文件 → 账本 store
+// 构造/写入必抛（sqlite 打不开 → JSONL mkdir 也失败）→ makeTrace 的 try/catch 全吞 →
+// 路由仍须 200 出卡。模拟「账本写入抛错不影响响应」。
+async function runBypassProbe(): Promise<void> {
+  installSearchMock();
+  let calls = 0;
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    calls += 1;
+    if (calls === 1) {
+      writeJson(res, 200, chatCompletion({ keyword: "KV Cache" }));
+    } else {
+      writeJson(res, 200, chatCompletion({
+        keyword: "KV Cache",
+        keyPoints: ["缓存键值对，加速大模型推理。", "KV Cache 命中率直接影响吞吐。", "会议正讨论推理优化。"],
+        whyNow: "会议正在讨论吞吐优化。",
+      }));
+    }
+  });
+  try {
+    const response = await POST(makeRequest({
+      sessionId: "m2-bypass-probe",
+      recentTranscript: "我们讨论一下 KV Cache 对推理吞吐的影响",
+      knownKeywords: [],
+      transcriptChunkIds: ["chunk-bypass-1"],
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+    }));
+    assert.equal(response.status, 200, "账本写入抛错时响应必须仍为 200");
+    const payload = await readPayload(response);
+    assert.ok(payload.card, "账本写入抛错时卡片链路必须不受影响");
+    assert.equal(payload.trace.finalState, "card_shown");
+    // 间接证明账本写入路径确实在抛错（store 无法构造），而非静默未触发。
+    let storeThrows = false;
+    try {
+      countCandidates();
+    } catch {
+      storeThrows = true;
+    }
+    assert.equal(storeThrows, true, "探针环境（CUEMIND_DATA_DIR 指向普通文件）下账本 store 应构造失败");
+    console.log("bypass probe: ledger write throws silently, route still 200 card_shown");
+  } finally {
+    restoreFetch();
+    await stopMockServer(server);
+  }
+}
+
+// 在子进程中重跑本脚本（探针模式）：candidate-store 单例按进程缓存，必须隔离。
+function runBypassChildSuite(): void {
+  const scriptPath = path.resolve(process.argv[1] ?? "scripts/test-context-card-route.ts");
+  const repoRoot = path.resolve(scriptPath, "..", "..");
+  const probeDir = mkdtempSync(path.join(tmpdir(), "cuemind-route-bypass-"));
+  const probeFile = path.join(probeDir, "not-a-dir");
+  writeFileSync(probeFile, "occupy the path so mkdirSync/data-dir creation fails");
+  const loaderArgs = process.execArgv.length > 0 ? [...process.execArgv] : ["--import", "tsx"];
+  const result = spawnSync(process.execPath, [...loaderArgs, scriptPath], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      CUEMIND_DATA_DIR: probeFile,
+      CUEMIND_ROUTE_BYPASS_PROBE: "1",
+    },
+    stdio: "inherit",
+  });
+  if (result.error) console.error(result.error);
+  assert.equal(result.status, 0, "旁路探针子进程失败：账本写入抛错影响了卡片响应");
+  console.log("context-card route bypass probe passed (child process)");
+}
+
 async function main(): Promise<void> {
+  // 子进程探针模式：只跑旁路用例后直接退出。
+  if (process.env.CUEMIND_ROUTE_BYPASS_PROBE === "1") {
+    await runBypassProbe();
+    return;
+  }
   installSearchMock();
   try {
     await testInvalidRequest();
@@ -773,6 +939,7 @@ async function main(): Promise<void> {
     await testInvalidCandidateIntervalIsRejected();
     await testMissingCandidateIdIsRejected();
     await testLiveSimpleBodyWithoutMetadataGeneratesCard();
+    await testLiveSimpleWithSessionIdAttributesLedger();
     await testPartialMetadataIsStillRejected();
     await testTavilyFallsBackToAgentReachWhenKeyMissing();
     await testAgentReachUnavailableReplacesMissingKeyFailure();
@@ -788,6 +955,10 @@ async function main(): Promise<void> {
     restoreFetch();
     restoreAgentReachMock();
   }
+  runBypassChildSuite();
+  console.log(
+    `candidate ledger backend = ${getCandidateStoreBackend()}, total rows = ${countCandidates()}`,
+  );
   console.log("context card route regression tests passed");
 }
 
