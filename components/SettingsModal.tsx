@@ -6,12 +6,10 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
   type KeyboardEvent,
   type ReactElement,
 } from "react";
 import useSettings from "@/hooks/useSettings";
-import { GROQ_API_KEY_HEADER } from "@/lib/prompts";
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   const selector =
@@ -33,19 +31,6 @@ export default function SettingsModal({
   const { settings, updateSetting, saveSettings, resetToDefaults } =
     useSettings();
   const panelRef = useRef<HTMLDivElement>(null);
-  const groqKeyInputRef = useRef<HTMLInputElement>(null);
-  const [keyStatus, setKeyStatus] = useState<string | null>(null);
-  const [isTestingKey, setIsTestingKey] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const frameId = window.requestAnimationFrame(() => {
-      groqKeyInputRef.current?.focus();
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -94,29 +79,6 @@ export default function SettingsModal({
     onClose();
   }, [saveSettings, onClose]);
 
-  const testKey = useCallback(async (): Promise<void> => {
-    setIsTestingKey(true);
-    setKeyStatus(null);
-    try {
-      const headers = settings.groqApiKey.trim()
-        ? { [GROQ_API_KEY_HEADER]: settings.groqApiKey.trim() }
-        : undefined;
-      const response = await fetch("/api/validate-key", { headers });
-      const payload = (await response.json()) as { error?: unknown };
-      setKeyStatus(
-        response.ok
-          ? "✓ Key works — the mic is cleared for takeoff."
-          : typeof payload.error === "string"
-            ? payload.error
-            : "Key validation failed.",
-      );
-    } catch {
-      setKeyStatus("Could not reach the validation service.");
-    } finally {
-      setIsTestingKey(false);
-    }
-  }, [settings.groqApiKey]);
-
   if (!isOpen) {
     return null;
   }
@@ -158,29 +120,11 @@ export default function SettingsModal({
           <div className="flex flex-col gap-8">
             <section className="flex flex-col gap-3 border-b border-neutral-800 pb-8">
               <label
-                htmlFor="settings-groq-key"
+                htmlFor="settings-key-storage"
                 className="text-sm font-medium text-neutral-200"
               >
-                Groq API Key（浏览器模式）
+                Key 保存范围
               </label>
-              <div className="flex gap-2">
-                <input
-                  ref={groqKeyInputRef}
-                  id="settings-groq-key"
-                  type="password"
-                  autoComplete="off"
-                  value={settings.groqApiKey}
-                  onChange={(event) => {
-                    updateSetting("groqApiKey", event.target.value);
-                  }}
-                  className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-sm text-neutral-200 placeholder:text-neutral-600 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
-                  placeholder="Paste your Groq API key"
-                />
-                <button type="button" onClick={() => void testKey()} disabled={isTestingKey} className="rounded-md border border-neutral-600 px-3 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50">
-                  {isTestingKey ? "测试中…" : "测试 Key"}
-                </button>
-              </div>
-              <label htmlFor="settings-key-storage" className="text-xs font-medium text-neutral-400">保存范围</label>
               <select
                 id="settings-key-storage"
                 value={settings.apiKeyStorage}
@@ -192,9 +136,8 @@ export default function SettingsModal({
                 <option value="memory">直到页面刷新</option>
               </select>
               <p className="text-xs leading-relaxed text-neutral-500">
-                浏览器只会把 Key 发给本应用 API 代理。共享设备建议使用会话或内存模式；如果服务端配置了 GROQ_API_KEY，也可以留空。
+                该范围适用于下方所有 API Key（模型、搜索）。共享设备建议使用会话或内存模式。
               </p>
-              {keyStatus ? <p className="text-xs text-blue-300" role="status">{keyStatus}</p> : null}
             </section>
 
             <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
@@ -311,7 +254,7 @@ export default function SettingsModal({
               <div>
                 <h3 className="text-sm font-medium text-neutral-200">本地 whisper.cpp</h3>
                 <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  桌面模式只读取本机路径，不上传音频；浏览器模式仍使用上面的 Groq 转写配置。
+                  桌面模式与浏览器麦克风转写都只读取本机路径、在本机完成转写，不上传音频；请填写 whisper.cpp 可执行文件与模型路径。
                 </p>
               </div>
               <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
@@ -345,6 +288,51 @@ export default function SettingsModal({
                   <option value="zh">中文</option>
                   <option value="en">英文</option>
                 </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                会议主题
+                <input
+                  type="text"
+                  value={settings.meetingTopic}
+                  onChange={(event) => updateSetting("meetingTopic", event.target.value)}
+                  placeholder="如：AI Agent 技术分享"
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
+                />
+              </label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="settings-domain-glossary" className="text-xs text-neutral-400">
+                  领域术语库
+                </label>
+                <textarea
+                  id="settings-domain-glossary"
+                  rows={2}
+                  value={settings.domainGlossary}
+                  onChange={(event) => updateSetting("domainGlossary", event.target.value)}
+                  placeholder="逗号分隔，如：Harness, Speculative Decoding, llama.cpp"
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                />
+                <p className="text-[11px] leading-snug text-neutral-600">
+                  作为转写初始提示词偏置模型输出，提高专有名词识别准确率。
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-neutral-400">
+                <input
+                  type="checkbox"
+                  checked={settings.enableVad}
+                  onChange={(event) => updateSetting("enableVad", event.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 text-blue-600"
+                />
+                启用 VAD 语音检测
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs text-neutral-400">
+                VAD 模型路径
+                <input
+                  type="text"
+                  value={settings.vadModelPath}
+                  onChange={(event) => updateSetting("vadModelPath", event.target.value)}
+                  placeholder="/home/work/asr/.runtime/models/ggml-silero-v5.1.2.bin"
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200"
+                />
               </label>
             </section>
 

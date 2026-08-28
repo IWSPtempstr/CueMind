@@ -1,7 +1,6 @@
-// User-editable Groq key, prompt templates, and transcript context window sizes persisted for the session.
+// User-editable prompt templates, local model paths, and transcript context window sizes persisted for the session.
 
 export interface Settings {
-  groqApiKey: string;
   apiKeyStorage: "local" | "session" | "memory";
   suggestionsPrompt: string;
   chatPrompt: string;
@@ -15,6 +14,10 @@ export interface Settings {
   localWhisperPath: string;
   localWhisperModelPath: string;
   localWhisperLanguage: "auto" | "zh" | "en";
+  meetingTopic: string;
+  domainGlossary: string;
+  enableVad: boolean;
+  vadModelPath: string;
   modelProvider: "llama.cpp" | "remote-api";
   llamaCppBaseUrl: string;
   llamaCppModel: string;

@@ -13,6 +13,8 @@ interface LocalTranscribeBody {
     modelPath: string;
     language: "auto" | "zh" | "en";
     timeoutMs?: number;
+    promptContext?: { topic?: string; glossary?: string };
+    vad?: { enabled: boolean; modelPath: string };
   };
 }
 
@@ -41,6 +43,8 @@ export async function POST(
       modelPath: parsed.settings.modelPath,
       language: parsed.settings.language,
       timeoutMs: parsed.settings.timeoutMs,
+      promptContext: parsed.settings.promptContext,
+      vad: parsed.settings.vad,
     });
     return NextResponse.json(result);
   } catch (caught) {
@@ -63,6 +67,10 @@ function parseRequest(value: unknown): LocalTranscribeBody | null {
   const timeoutMs = value.settings.timeoutMs;
   if (timeoutMs !== undefined && (!isFiniteNumber(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 300_000)) return null;
 
+  // Optional, lenient: malformed promptContext/vad are ignored instead of rejected.
+  const promptContext = parsePromptContext(value.settings.promptContext);
+  const vad = parseVad(value.settings.vad);
+
   return {
     audioPath: value.audioPath,
     source: value.source,
@@ -73,8 +81,27 @@ function parseRequest(value: unknown): LocalTranscribeBody | null {
       modelPath: value.settings.modelPath,
       language,
       ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
+      ...(promptContext ? { promptContext } : {}),
+      ...(vad ? { vad } : {}),
     },
   };
+}
+
+function parsePromptContext(value: unknown): { topic?: string; glossary?: string } | undefined {
+  if (!isRecord(value)) return undefined;
+  const topic = isString(value.topic) ? value.topic : undefined;
+  const glossary = isString(value.glossary) ? value.glossary : undefined;
+  if (topic === undefined && glossary === undefined) return undefined;
+  return {
+    ...(topic !== undefined ? { topic } : {}),
+    ...(glossary !== undefined ? { glossary } : {}),
+  };
+}
+
+function parseVad(value: unknown): { enabled: boolean; modelPath: string } | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.enabled !== "boolean" || !isString(value.modelPath) || !value.modelPath.trim()) return undefined;
+  return { enabled: value.enabled, modelPath: value.modelPath };
 }
 
 type LocalTranscribeResponse = {

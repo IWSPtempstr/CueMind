@@ -18,19 +18,16 @@ import {
 import type { Settings } from "@/types/settings";
 
 const STORAGE_KEY = "cuemind_settings";
-const LEGACY_GROQ_KEY = "groq_api_key";
 
-type SecretName = "groq" | "llamaCpp" | "remoteApi" | "search";
+type SecretName = "llamaCpp" | "remoteApi" | "search";
 
 const SECRET_KEYS: Record<SecretName, { local: string; session: string }> = {
-  groq: { local: "cuemind_groq_api_key", session: "cuemind_session_groq_api_key" },
   llamaCpp: { local: "cuemind_llama_cpp_api_key", session: "cuemind_session_llama_cpp_api_key" },
   remoteApi: { local: "cuemind_remote_api_api_key", session: "cuemind_session_remote_api_api_key" },
   search: { local: "cuemind_search_api_key", session: "cuemind_session_search_api_key" },
 };
 
 const memorySecrets: Record<SecretName, string> = {
-  groq: "",
   llamaCpp: "",
   remoteApi: "",
   search: "",
@@ -65,7 +62,6 @@ function clearSecret(name: SecretName): void {
 
 export function getDefaultSettings(): Settings {
   return {
-    groqApiKey: "",
     apiKeyStorage: "local",
     suggestionsPrompt: SUGGESTIONS_PROMPT,
     chatPrompt: CHAT_PROMPT,
@@ -79,6 +75,10 @@ export function getDefaultSettings(): Settings {
     localWhisperPath: "",
     localWhisperModelPath: "",
     localWhisperLanguage: "auto",
+    meetingTopic: "",
+    domainGlossary: "",
+    enableVad: true,
+    vadModelPath: "/home/work/asr/.runtime/models/ggml-silero-v5.1.2.bin",
     modelProvider: "llama.cpp",
     llamaCppBaseUrl: "http://127.0.0.1:8082",
     llamaCppModel: "/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
@@ -112,12 +112,8 @@ export function loadCueMindSettings(): Settings {
   }
 
   const mode = storageMode(o.apiKeyStorage);
-  const legacyRaw = localStorage.getItem(LEGACY_GROQ_KEY);
-  const embeddedLegacyKey = typeof o.groqApiKey === "string" ? o.groqApiKey : "";
-  const legacyKey = legacyRaw ?? embeddedLegacyKey;
 
   const settings: Settings = {
-    groqApiKey: readSecret("groq", mode) || legacyKey,
     apiKeyStorage: mode,
     suggestionsPrompt: typeof o.suggestionsPrompt === "string" ? o.suggestionsPrompt : defaults.suggestionsPrompt,
     chatPrompt: typeof o.chatPrompt === "string" ? o.chatPrompt : defaults.chatPrompt,
@@ -131,6 +127,10 @@ export function loadCueMindSettings(): Settings {
     localWhisperPath: typeof o.localWhisperPath === "string" ? o.localWhisperPath : defaults.localWhisperPath,
     localWhisperModelPath: typeof o.localWhisperModelPath === "string" ? o.localWhisperModelPath : defaults.localWhisperModelPath,
     localWhisperLanguage: o.localWhisperLanguage === "zh" || o.localWhisperLanguage === "en" ? o.localWhisperLanguage : "auto",
+    meetingTopic: typeof o.meetingTopic === "string" ? o.meetingTopic : defaults.meetingTopic,
+    domainGlossary: typeof o.domainGlossary === "string" ? o.domainGlossary : defaults.domainGlossary,
+    enableVad: o.enableVad !== false,
+    vadModelPath: typeof o.vadModelPath === "string" ? o.vadModelPath : defaults.vadModelPath,
     modelProvider: o.modelProvider === "remote-api" ? "remote-api" : "llama.cpp",
     llamaCppBaseUrl: typeof o.llamaCppBaseUrl === "string" ? o.llamaCppBaseUrl : defaults.llamaCppBaseUrl,
     llamaCppModel: typeof o.llamaCppModel === "string" ? o.llamaCppModel : defaults.llamaCppModel,
@@ -144,17 +144,13 @@ export function loadCueMindSettings(): Settings {
     contextCardCooldownSeconds: clampInt(o.contextCardCooldownSeconds, defaults.contextCardCooldownSeconds, 5, 300),
   };
 
-  // One-time migration only: fold a legacy or embedded Groq key into the chosen
+  // One-time migration only: fold a legacy embedded search key into the chosen
   // store and strip the secret from the preferences blob. Later reads touch
   // nothing unless a legacy field is still present.
-  if (legacyRaw !== null || "groqApiKey" in o || "searchApiKey" in o) {
-    if (!readSecret("groq", "local") && legacyKey.trim()) {
-      writeSecret("groq", "local", legacyKey);
-    }
+  if ("searchApiKey" in o) {
     if (!readSecret("search", "local") && settings.searchApiKey.trim()) {
       writeSecret("search", "local", settings.searchApiKey);
     }
-    localStorage.removeItem(LEGACY_GROQ_KEY);
     persistPreferences(settings);
   }
   return settings;
@@ -162,7 +158,6 @@ export function loadCueMindSettings(): Settings {
 
 function persistPreferences(settings: Settings): void {
   const preferences: Record<string, unknown> = { ...settings };
-  delete preferences.groqApiKey;
   delete preferences.llamaCppApiKey;
   delete preferences.remoteApiApiKey;
   delete preferences.searchApiKey;
@@ -170,23 +165,14 @@ function persistPreferences(settings: Settings): void {
 }
 
 function persistSettings(settings: Settings): void {
-  localStorage.removeItem(LEGACY_GROQ_KEY);
-  clearSecret("groq");
   clearSecret("llamaCpp");
   clearSecret("remoteApi");
   clearSecret("search");
 
-  writeSecret("groq", settings.apiKeyStorage, settings.groqApiKey);
   writeSecret("llamaCpp", settings.apiKeyStorage, settings.llamaCppApiKey);
   writeSecret("remoteApi", settings.apiKeyStorage, settings.remoteApiApiKey);
   writeSecret("search", settings.apiKeyStorage, settings.searchApiKey);
   persistPreferences(settings);
-}
-
-export function groqRequestHeaders(settings = loadCueMindSettings()): Record<string, string> {
-  return settings.groqApiKey.trim()
-    ? { "x-groq-api-key": settings.groqApiKey.trim() }
-    : {};
 }
 
 export default function useSettings(): {

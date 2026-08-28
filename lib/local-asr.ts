@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, constants as fsConstants, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { spawn } from "node:child_process";
@@ -11,6 +11,10 @@ export interface LocalAsrRequest {
   timeoutMs?: number;
   /** Aborting kills the whisper subprocess; the promise rejects with "Local ASR aborted". */
   signal?: AbortSignal;
+  /** Optional prompt-biasing context (meeting topic + comma separated domain glossary). */
+  promptContext?: { topic?: string; glossary?: string };
+  /** Optional Silero VAD configuration; missing VAD model silently degrades to no VAD. */
+  vad?: { enabled: boolean; modelPath: string };
 }
 
 export interface LocalAsrSegment {
@@ -39,8 +43,18 @@ export async function transcribeWithWhisperCpp(
     const args = ["-m", request.modelPath, "-f", request.audioPath, "-oj", "-otxt", "-of", outputBase, "-nt"];
     if (request.language !== "auto") args.push("-l", request.language);
 
+    // Hallucination suppression + decoding tuning (fixed values, no settings surface).
+    args.push("--suppress-nst", "--max-context", "128", "--entropy-thold", "2.8");
+
+    const prompt = buildInitialPrompt(request.promptContext);
+    if (prompt) {
+      args.push("--prompt", prompt, "--carry-initial-prompt");
+    }
+
+    args.push(...(await resolveVadArgs(request.vad)));
+
     const processOutput = await runProcess(request.whisperPath, args, request.timeoutMs ?? 60_000, request.signal);
-    const segments = await readJsonSegments(`${outputBase}.json`);
+    const segments = filterHallucinatedSegments(await readJsonSegments(`${outputBase}.json`));
     const text = segments.length > 0
       ? segments.map((segment) => segment.text).join(" ").trim()
       : await readTextOutput(`${outputBase}.txt`, processOutput);
@@ -58,6 +72,79 @@ export async function transcribeWithWhisperCpp(
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
+}
+
+/** Hard budget for the initial prompt (whisper caps it at n_text_ctx/2 tokens ≈ 200 chars). */
+const MAX_INITIAL_PROMPT_CHARS = 200;
+/** Chinese subtitle-site boilerplate and other hallucination patterns dropped outright. */
+const HALLUCINATION_BLOCKLIST = /字幕由|Amara\.org|字幕by|索兰娅|谢谢观看|请订阅|请点赞|关注频道/i;
+
+/**
+ * Builds the whisper initial prompt from the meeting topic and domain glossary:
+ * "以下是普通话的句子，这是一场关于<topic>的技术会议，可能提及：<terms>。"
+ * Returns null when neither topic nor glossary is provided.
+ */
+function buildInitialPrompt(promptContext?: LocalAsrRequest["promptContext"]): string | null {
+  const topic = promptContext?.topic?.trim() ?? "";
+  const glossary = promptContext?.glossary?.trim() ?? "";
+  if (!topic && !glossary) return null;
+
+  const glossaryTerms = glossary
+    .split(/[,，]/)
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0)
+    .join("、");
+  const prompt = glossaryTerms
+    ? `以下是普通话的句子，这是一场关于${topic || "技术讨论"}的技术会议，可能提及：${glossaryTerms}。`
+    : `以下是普通话的句子，这是一场关于${topic || "技术讨论"}的技术会议。`;
+  // Over-budget prompts are truncated from the end so the fixed template head
+  // and the earliest (most important) glossary terms survive.
+  return prompt.length > MAX_INITIAL_PROMPT_CHARS ? prompt.slice(0, MAX_INITIAL_PROMPT_CHARS) : prompt;
+}
+
+const warnedVadModelPaths = new Set<string>();
+
+/** Resolves `--vad --vad-model <path>` args; silently degrades when the model file is missing. */
+async function resolveVadArgs(vad?: LocalAsrRequest["vad"]): Promise<string[]> {
+  if (!vad?.enabled || !vad.modelPath.trim()) return [];
+  const modelPath = vad.modelPath.trim();
+  try {
+    await access(modelPath, fsConstants.F_OK);
+  } catch {
+    if (!warnedVadModelPaths.has(modelPath)) {
+      warnedVadModelPaths.add(modelPath);
+      console.warn(`[local-asr] VAD model not found at "${modelPath}"; continuing without VAD.`);
+    }
+    return [];
+  }
+  return ["--vad", "--vad-model", modelPath];
+}
+
+/**
+ * Post-processes whisper segments: drops subtitle-boilerplate hallucinations and
+ * empty texts, then collapses runs of >=3 consecutive identical segments
+ * (whitespace-normalized) down to the first occurrence.
+ */
+export function filterHallucinatedSegments(segments: LocalAsrSegment[]): LocalAsrSegment[] {
+  const ordered = segments
+    .filter((segment) => segment.text.trim().length > 0 && !HALLUCINATION_BLOCKLIST.test(segment.text.trim()))
+    .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+  const result: LocalAsrSegment[] = [];
+  const normalizedText = (segment: LocalAsrSegment): string => segment.text.replace(/\s+/g, "");
+  for (let index = 0; index < ordered.length; ) {
+    let runEnd = index + 1;
+    while (runEnd < ordered.length && normalizedText(ordered[runEnd]) === normalizedText(ordered[index])) {
+      runEnd += 1;
+    }
+    if (runEnd - index >= 3) {
+      result.push(ordered[index]);
+    } else {
+      for (let cursor = index; cursor < runEnd; cursor += 1) result.push(ordered[cursor]);
+    }
+    index = runEnd;
+  }
+  return result;
 }
 
 function runProcess(

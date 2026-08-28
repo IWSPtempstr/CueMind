@@ -2,7 +2,7 @@ import { chmod, mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { transcribeWithWhisperCpp } from "@/lib/local-asr";
+import { transcribeWithWhisperCpp, filterHallucinatedSegments } from "@/lib/local-asr";
 
 async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "cuemind-asr-test-"));
@@ -44,7 +44,46 @@ printf 'ignored progress output\\n'
 
   const output = await readFile(executable, "utf8");
   assert.match(output, /ignored progress output/);
-    console.log("local ASR adapter assertions passed");
+
+  // --- filterHallucinatedSegments: blocklist, consecutive duplicates, keep normal ---
+  const blocklisted = filterHallucinatedSegments([
+    { startMs: 0, endMs: 1000, text: "谢谢观看" },
+    { startMs: 1000, endMs: 2000, text: "字幕由Amara.org生成" },
+    { startMs: 2000, endMs: 3000, text: "字幕by索兰娅" },
+    { startMs: 3000, endMs: 4000, text: "请订阅 请点赞" },
+    { startMs: 4000, endMs: 5000, text: "关注频道" },
+    { startMs: 5000, endMs: 6000, text: "真实内容" },
+  ]);
+  assert.deepEqual(blocklisted, [{ startMs: 5000, endMs: 6000, text: "真实内容" }]);
+
+  const repeated = filterHallucinatedSegments([
+    { startMs: 0, endMs: 1000, text: "重复段" },
+    { startMs: 1000, endMs: 2000, text: "重 复 段" },
+    { startMs: 2000, endMs: 3000, text: "重复段" },
+    { startMs: 3000, endMs: 4000, text: "结尾" },
+  ]);
+  assert.deepEqual(repeated, [
+    { startMs: 0, endMs: 1000, text: "重复段" },
+    { startMs: 3000, endMs: 4000, text: "结尾" },
+  ]);
+
+  const twoRepeatsKept = filterHallucinatedSegments([
+    { startMs: 0, endMs: 1000, text: "短重复" },
+    { startMs: 1000, endMs: 2000, text: "短重复" },
+  ]);
+  assert.equal(twoRepeatsKept.length, 2);
+
+  const normal = filterHallucinatedSegments([
+    { startMs: 0, endMs: 1000, text: "大家好" },
+    { startMs: 1000, endMs: 2000, text: "今天讨论 Harness" },
+    { startMs: 2000, endMs: 2000, text: "   " },
+  ]);
+  assert.deepEqual(normal, [
+    { startMs: 0, endMs: 1000, text: "大家好" },
+    { startMs: 1000, endMs: 2000, text: "今天讨论 Harness" },
+  ]);
+
+  console.log("local ASR adapter assertions passed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
