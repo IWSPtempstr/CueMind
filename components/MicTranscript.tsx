@@ -46,9 +46,10 @@ export default function MicTranscript(props: Props): ReactElement {
   const [activeTab, setActiveTab] = useState<"mic" | "upload">("mic");
   const filtered = useMemo(() => transcriptChunks.filter((chunk) => chunk.text.toLowerCase().includes(search.trim().toLowerCase())), [search, transcriptChunks]);
 
+  // 列表底部自动跟随：confirmed 追加（length 变化）或 partial 出现/更新时滚到底。
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcriptChunks.length]);
+  }, [transcriptChunks.length, partialText]);
   const copyTranscript = async (): Promise<void> => {
     await navigator.clipboard.writeText(transcriptChunks.map((chunk) => `[${chunk.timestamp.toLocaleTimeString()}] ${chunk.text}`).join("\n\n"));
   };
@@ -116,9 +117,14 @@ export default function MicTranscript(props: Props): ReactElement {
               <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}{chunk.speaker ? <span className={`rounded border px-1.5 py-0.5 text-[9px] ${chunk.speaker === "you" ? "border-blue-800 text-blue-300" : "border-emerald-800 text-emerald-300"}`}>{SPEAKER_ROLE_LABELS[chunk.speaker]}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
             );
           })}
-          {isRecording && !isPaused && partialText ? (
+          {/* partial 行（决策 66）：仅 isRecording && partialText 非空渲染，不参与上方段落分组；
+              暂停/confirmed/停止时 hook 已置 partialText=null，本行自然消失。 */}
+          {isRecording && partialText ? (
             <article className="py-3 border-t border-neutral-800" aria-live="polite">
-              <p className="text-sm italic leading-relaxed text-neutral-500">{partialText}<span className="animate-pulse"> …</span></p>
+              <div className="mb-1 flex items-center gap-2">
+                <span className="rounded border border-neutral-500 px-1.5 py-0.5 text-[10px] text-neutral-500">partial</span>
+              </div>
+              <p className="text-sm italic leading-relaxed text-neutral-500">{partialText}<span className="animate-pulse" aria-hidden> …</span></p>
             </article>
           ) : null}
           {transcriptChunks.length === 0 && !partialText ? <p className="text-center text-sm text-neutral-600">还没有转写，点击麦克风开始。</p> : null}
