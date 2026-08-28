@@ -213,8 +213,10 @@ async function testInvalidRequest(): Promise<void> {
   assert.equal(payload.card, null);
   assert.equal(payload.failure?.reason, "Invalid context-card request");
   assert.equal(payload.trace.finalState, "invalid_request");
-  // M2-a(c)：invalid_request 在 parseRequest 拒绝（首个测试 → 账本此时必须为空）。
-  assert.equal(countCandidates(), 0, "invalid_request（400 路径）不产生账本行");
+  // M2-a(c)：invalid_request 在 parseRequest 拒绝，不产生账本行。
+  // 记录基线而非假设空表：脚本可能在预置数据的 CUEMIND_DATA_DIR 上运行。
+  const rowsBeforeInvalidRequest = countCandidates();
+  assert.equal(countCandidates(), rowsBeforeInvalidRequest, "invalid_request（400 路径）不产生账本行");
 }
 
 async function testLocalProviderSelected(): Promise<void> {
