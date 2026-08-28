@@ -1,8 +1,13 @@
-// search_cards：候选账本 term 子串检索（大小写不敏感）+ 归档卡片 keyword 二次匹配合并（去重）。
+// search_cards：候选账本 term 子串检索（大小写不敏感）+ 归档卡片 keyword 二次匹配合并（去重）
+// + vault 概念合流（M3-b，只读）。
 // 主路径：candidates.term LIKE '%query%'（与 lib/candidate-store.ts getByTerm 同款语义），
 // LEFT JOIN sessions 取 title（账本行可能早于/独立于会话快照，故必须 LEFT JOIN 而非 INNER JOIN）。
 // 二次路径：card_id 非空的候选，若其会话归档卡片（sessions.cards_json）中对应卡片的
 // keyword 命中 query，也并入结果（覆盖 term 为 NULL 或不匹配的行）。
+// M3-b 合流：SQLite 命中（origin:"sqlite"，向后兼容新增字段）∪ 只读 vault 概念命中
+// （origin:"vault"，另有 source:"vault" 标记；term/aliases/updated/relativePath/originMeetings
+// 透出，term 或 aliases 大小写不敏感 includes，同 term slug 同名去重），合并后统一 limit；
+// vault 目录不存在 → 静默跳过 vault 源（非错误）。
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -13,10 +18,12 @@ import {
   parseCardsJson,
 } from "../cards.js";
 import { openReadonlyDb, textResult, toolFailure } from "../db.js";
+import { resolveVaultRoot, searchConcepts } from "../vault.js";
 
 const DEFAULT_SEARCH_LIMIT = 10;
 
 interface SearchCardHit {
+  origin: "sqlite";
   candidateId: string;
   sessionId: string;
   sessionTitle: string | null;
@@ -24,6 +31,17 @@ interface SearchCardHit {
   finalState: string;
   cardId: string | null;
   createdAt: string;
+}
+
+/** vault 概念命中（M3-b）：与 SQLite 行字段结构不同，以 origin 区分。 */
+interface VaultConceptHit {
+  origin: "vault";
+  source: "vault";
+  term: string;
+  aliases: string[];
+  updated: string | null;
+  relativePath: string;
+  originMeetings: string[];
 }
 
 interface CandidateRowWithSessionTitle {
@@ -39,6 +57,7 @@ interface CandidateRowWithSessionTitle {
 
 function toHit(row: CandidateRowWithSessionTitle): SearchCardHit {
   return {
+    origin: "sqlite",
     candidateId: row.candidateId,
     sessionId: row.sessionId,
     sessionTitle: row.sessionTitle,
@@ -54,7 +73,7 @@ export const SearchCardsInputSchema = {
     .string()
     .min(1)
     .describe(
-      "Substring matched against candidate terms (SQL LIKE, ASCII case-insensitive) and archived card keywords",
+      "Substring matched against candidate terms (SQL LIKE, ASCII case-insensitive), archived card keywords, and vault concept terms/aliases (case-insensitive)",
     ),
   limit: z
     .number()
@@ -71,7 +90,12 @@ export function registerSearchCards(server: McpServer): void {
     {
       title: "Search CueMind context-card candidates",
       description:
-        "Search the candidate ledger by term substring, plus a secondary match against archived card keywords. Returns { candidateId, sessionId, sessionTitle, term, finalState, cardId, createdAt } rows; never returns trace payloads.",
+        "Search the candidate ledger by term substring, plus a secondary match against archived card keywords. " +
+        'Data sources (M3-b): SQLite candidates/sessions (rows carry origin:"sqlite") merged with the read-only ' +
+        "vault concept export <vaultRoot>/cuemind/concepts/*.md (hits carry origin:\"vault\" plus source:\"vault\", " +
+        "exposing term/aliases/updated/relativePath/originMeetings; matched by term or alias, case-insensitive; " +
+        "skipped silently when the vault directory is absent). Results are capped by limit after the merge. " +
+        "Never returns trace payloads.",
       inputSchema: SearchCardsInputSchema,
     },
     (input) => {
@@ -101,7 +125,24 @@ export function registerSearchCards(server: McpServer): void {
           if (typeof keyword !== "string" || !keyword.toLowerCase().includes(lowerNeedle)) continue;
           byKey.set(key, toHit(row));
         }
-        return textResult({ query: input.query, results: [...byKey.values()].slice(0, limit) });
+        // M3-b 合流：SQLite ∪ vault/concepts（只读）。vault root 缺失 → 静默跳过；
+        // vault 命中去重（同 term slug 同名）在 searchConcepts 内完成；合并后统一 limit。
+        const results: Array<SearchCardHit | VaultConceptHit> = [...byKey.values()];
+        const vaultRoot = resolveVaultRoot();
+        if (vaultRoot !== null) {
+          for (const concept of searchConcepts(vaultRoot, needle)) {
+            results.push({
+              origin: "vault",
+              source: "vault",
+              term: concept.term,
+              aliases: concept.aliases,
+              updated: concept.updated,
+              relativePath: concept.relativePath,
+              originMeetings: concept.originMeetings,
+            });
+          }
+        }
+        return textResult({ query: input.query, results: results.slice(0, limit) });
       } catch (error) {
         return toolFailure(error);
       }

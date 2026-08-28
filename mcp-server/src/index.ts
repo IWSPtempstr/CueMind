@@ -3,7 +3,7 @@
 // - stdout 专属 JSON-RPC，绝不向 stdout 打任何非协议内容（下方有 console.log 保险丝）
 // - 一切日志走 stderr（console.error）
 // - 零出站网络：本进程不发起任何 HTTP/网络请求
-// - 只读：SQLite readonly 打开，无任何写路径
+// - 只读：SQLite readonly 打开；vault（M3-b 读方向）仅 statSync/readdirSync/readFileSync，无任何写路径
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

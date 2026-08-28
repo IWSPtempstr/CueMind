@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -25,6 +26,19 @@ import path from "node:path";
 //      sessions 与 candidates 行数均不变
 //   m) 空结果路径：ledger 查不存在 session → 空数组 + total 0（非错误终态）
 //   g) db 缺失路径：CUEMIND_DATA_DIR=/tmp/nonexistent-mcp → 工具返回可解释 error 终态且 server 不崩
+// M3-b（vault 合流，只读）：
+//   n) 种子 vault：/tmp/m3-vault-mcp/cuemind/concepts 写 2 个合法概念（frontmatter+正文+变更小节）
+//      + 1 个坏 frontmatter 文件（应跳过不崩）
+//   o) search_cards 合流：SQLite 命中（origin:"sqlite"）与 vault 概念命中（origin:"vault"，
+//      aliases/updated/relativePath/originMeetings 透出）并存
+//   p) get_card：账本 term 与 vault 概念一致且正文未归档 → card 来自 vault（origin/updated/
+//      relativePath/aliases/keyPoints/sources）+ note "card body from vault concepts"
+//   q) CUEMIND_VAULT_DIR 指向不存在目录 → search_cards 仅 SQLite 结果不报错（静默跳过），
+//      get_card 维持既有诚实降级
+//   r) 只读断言：vault 目录文件内容+size+mtime 前后不变
+//   s) 坏 frontmatter 文件被跳过，其余概念仍可检索
+// a-m 不回退：CUEMIND_VAULT_DIR 未设（测试客户端显式 unset）→ 默认路径 <dataDir>/vault
+// 不存在即静默跳过，行为与 M2-b 完全一致。
 // 账本种子策略：优先用真实 .data（m2-smoke 的 card_shown 行已由主项目真机写入）；若缺失，
 // 复制 .data 到临时目录并灌 sessions+candidates 种子（绝不写开发 .data）。
 // 前置：cd CueMind && (cd mcp-server && npm install && npm run build)；dev server :3000 在跑且
@@ -48,6 +62,15 @@ const SEED_CANDIDATE_2_ID = "seed-candidate-ring-attention";
 const SEED_CARD_2_ID = "seed-card-ring-attention";
 const SEED_CREATED_AT = "2026-08-28T06:14:07.139Z";
 const SEED_M2_TITLE = "M2 冒烟：speculative decoding 讨论卡";
+
+// M3-b vault 合流夹具：独立 SQLite（term 与 vault 概念一致、正文未归档）+ 固定路径 vault 目录。
+const VAULT_DIR = path.join(tmpdir(), "m3-vault-mcp");
+const VAULT_FIXTURE_SESSION = "m3-vault-smoke";
+const VAULT_FIXTURE_CANDIDATE_ID = "seed-candidate-ring-attention-vault";
+const VAULT_FIXTURE_CARD_ID = "seed-card-ring-attention-vault";
+const VAULT_FIXTURE_TERM = "Ring Attention";
+const VAULT_FIXTURE_UPDATED = "2026-08-28T01:02:03.000Z";
+const VAULT_FIXTURE_ALIAS_CN = "环形注意力";
 
 interface JsonRpcResponse {
   jsonrpc: "2.0";
@@ -80,14 +103,22 @@ interface SearchPayload {
 
 interface SearchCardsPayload {
   query: string;
+  // M3-b 合流后的结果联合：SQLite 行（origin:"sqlite"，原字段齐全）与 vault 概念命中
+  // （origin:"vault"，term/aliases/updated/relativePath/originMeetings）。字段按 origin 取用。
   results: Array<{
-    candidateId: string;
-    sessionId: string;
-    sessionTitle: string | null;
-    term: string | null;
-    finalState: string;
-    cardId: string | null;
-    createdAt: string;
+    origin?: "sqlite" | "vault";
+    candidateId?: string;
+    sessionId?: string;
+    sessionTitle?: string | null;
+    term?: string | null;
+    finalState?: string;
+    cardId?: string | null;
+    createdAt?: string;
+    source?: "vault";
+    aliases?: string[];
+    updated?: string | null;
+    relativePath?: string;
+    originMeetings?: string[];
   }>;
 }
 
@@ -140,12 +171,20 @@ class McpStdioClient {
   private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   private nextId = 1;
 
-  constructor(private readonly dataDir: string) {}
+  constructor(
+    private readonly dataDir: string,
+    // M3-b：vaultDir 语义——undefined 继承外层 env；null 显式 unset（默认路径 <dataDir>/vault）；
+    // 字符串显式指向测试 vault 目录。
+    private readonly vaultDir?: string | null,
+  ) {}
 
   start(): void {
+    const env: NodeJS.ProcessEnv = { ...process.env, CUEMIND_DATA_DIR: this.dataDir };
+    if (this.vaultDir === null) delete env.CUEMIND_VAULT_DIR;
+    else if (typeof this.vaultDir === "string") env.CUEMIND_VAULT_DIR = this.vaultDir;
     this.child = spawn(process.execPath, [MCP_SERVER_ENTRY], {
       cwd: PROJECT_ROOT,
-      env: { ...process.env, CUEMIND_DATA_DIR: this.dataDir },
+      env,
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child.stdout.setEncoding("utf8");
@@ -492,7 +531,9 @@ async function assertNormalServer(fixture: CandidateFixture): Promise<void> {
   const beforeSnapshot = snapshotDataDir(fixture.dataDir);
   const sessionsBefore = tableRowCount(fixture.dataDir, "sessions");
   const candidatesBefore = tableRowCount(fixture.dataDir, "candidates");
-  const client = new McpStdioClient(fixture.dataDir);
+  // 显式 unset CUEMIND_VAULT_DIR：a-m 行为与 M2-b 完全一致（默认路径 <dataDir>/vault
+  // 不存在 → 静默跳过），不随外层环境漂移。
+  const client = new McpStdioClient(fixture.dataDir, null);
   client.start();
 
   // a) initialize → serverInfo
@@ -681,7 +722,7 @@ async function assertNormalServer(fixture: CandidateFixture): Promise<void> {
   );
   assert.equal(cardWhitespace.results.length, 0, "whitespace-only query yields []");
   console.log(
-    `[j] search_cards OK: query="Speculative" 命中 ${cardHit.candidateId.slice(0, 13)}…（finalState=card_shown），空结果与空白 query 路径正确`,
+    `[j] search_cards OK: query="Speculative" 命中 ${String(cardHit.candidateId).slice(0, 13)}…（finalState=card_shown），空结果与空白 query 路径正确`,
   );
 
   // k) get_card：账本完整；卡片正文按实际归档状态断言（不谎报）
@@ -753,7 +794,7 @@ async function assertMissingDbServer(): Promise<void> {
     absentDir = path.join(tmpdir(), `nonexistent-mcp-${suffix}`);
     suffix += 1;
   }
-  const client = new McpStdioClient(absentDir);
+  const client = new McpStdioClient(absentDir, null);
   client.start();
   const initialized = (await client.request("initialize", {
     protocolVersion: "2024-11-05",
@@ -788,17 +829,308 @@ function readdirSyncSafe(dir: string): boolean {
   }
 }
 
+// --- M3-b：vault 合流（只读）夹具与用例 ---
+
+async function initializeClient(client: McpStdioClient): Promise<void> {
+  const initialized = (await client.request("initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "cuemind-mcp-smoke", version: "0.0.1" },
+  })) as { serverInfo: { name: string } };
+  assert.equal(initialized.serverInfo.name, "cuemind");
+  client.notify("notifications/initialized");
+}
+
+/** n) 种子 vault：2 个合法概念（frontmatter + 正文 + 变更小节）+ 1 个坏 frontmatter 文件。 */
+function seedVaultConcepts(vaultDir: string): void {
+  rmSync(vaultDir, { recursive: true, force: true });
+  const conceptsDir = path.join(vaultDir, "cuemind", "concepts");
+  mkdirSync(conceptsDir, { recursive: true });
+  const ringAttention = [
+    "---",
+    `aliases: ["${VAULT_FIXTURE_TERM}", "${VAULT_FIXTURE_ALIAS_CN}"]`,
+    "source_types: [arxiv]",
+    `origin_meetings: [${VAULT_FIXTURE_SESSION}]`,
+    `updated: ${VAULT_FIXTURE_UPDATED}`,
+    "---",
+    "",
+    `# ${VAULT_FIXTURE_TERM}`,
+    "",
+    "## 解释",
+    "",
+    "- Blockwise computation of attention over long sequences.",
+    "- 长序列下注意力内存占用随序列长度近似线性增长。",
+    "",
+    "## 来源",
+    "",
+    "- [Ring Attention (arXiv)](https://arxiv.org/abs/2310.01889)",
+    "  > Blockwise computation of attention over long sequences.",
+    "",
+    "## 变更 2026-08-28",
+    "",
+    "- 重新沉淀：更新解释与来源",
+    "",
+    "- [Ring Attention (arXiv)](https://arxiv.org/abs/2310.01889)",
+    "",
+  ].join("\n");
+  const speculative = [
+    "---",
+    'aliases: ["speculative decoding", "投机解码"]',
+    "source_types: [arxiv, web]",
+    "origin_meetings: [m2-smoke]",
+    "updated: 2026-08-27T09:00:00.000Z",
+    "---",
+    "",
+    "# speculative decoding",
+    "",
+    "## 解释",
+    "",
+    "- Draft model proposes tokens; target model verifies them in parallel.",
+    "",
+    "## 来源",
+    "",
+    "- [Speculative Decoding (arXiv)](https://arxiv.org/abs/2211.17192)",
+    "  > Fast inference from transformers via speculative decoding.",
+    "",
+    "## 变更 2026-08-27",
+    "",
+    "- 重新沉淀：更新解释与来源",
+    "",
+  ].join("\n");
+  // 坏文件：`---` 围栏未闭合 → frontmatter 解析失败 → MCP 侧应跳过该文件且不崩。
+  const broken = `---\naliases: ["broken"\n# closing fence missing on purpose\n`;
+  writeFileSync(path.join(conceptsDir, "ring-attention.md"), ringAttention, "utf8");
+  writeFileSync(path.join(conceptsDir, "speculative-decoding.md"), speculative, "utf8");
+  writeFileSync(path.join(conceptsDir, "broken-frontmatter.md"), broken, "utf8");
+}
+
+/**
+ * M3-b 专用 SQLite 夹具（独立临时目录，绝不写开发 .data）：
+ * 账本行 term 与 vault 概念名一致、cards_json 为 NULL（正文未归档）→ 覆盖 get_card 的
+ * vault 回退路径与 search_cards 的 SQLite ∪ vault 并存路径。
+ */
+function prepareVaultFixture(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "cuemind-mcp-vault-"));
+  const Database = requireSqlite();
+  const db = new Database(path.join(dir, "cuemind.db"));
+  try {
+    // 与主项目 lib/session-store.ts / lib/candidate-store.ts 的 DDL 同款（测试灌种专用）。
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        duration_ms INTEGER,
+        input_source TEXT,
+        transcript_json TEXT NOT NULL,
+        cards_json TEXT,
+        metrics_json TEXT
+      );
+      CREATE TABLE IF NOT EXISTS candidates (
+        session_id TEXT NOT NULL,
+        candidate_id TEXT NOT NULL,
+        term TEXT,
+        final_state TEXT NOT NULL,
+        suppress_reason TEXT,
+        card_id TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (session_id, candidate_id)
+      );
+    `);
+    db.pragma("journal_mode = DELETE");
+    db.prepare(
+      "INSERT INTO sessions (id, title, created_at, updated_at, duration_ms, input_source, transcript_json, cards_json, metrics_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(VAULT_FIXTURE_SESSION, "M3 vault 合流冒烟", SEED_CREATED_AT, SEED_CREATED_AT, 15000, "mixed", "[]", null, null);
+    db.prepare(
+      "INSERT INTO candidates (session_id, candidate_id, term, final_state, suppress_reason, card_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(VAULT_FIXTURE_SESSION, VAULT_FIXTURE_CANDIDATE_ID, VAULT_FIXTURE_TERM, "card_shown", null, VAULT_FIXTURE_CARD_ID, SEED_CREATED_AT);
+  } finally {
+    db.close();
+  }
+  return dir;
+}
+
+/** 递归快照：相对路径 → "size/mtimeMs/sha256(内容)"（r 只读断言用）。 */
+function snapshotDirRecursive(root: string): Map<string, string> {
+  const snapshot = new Map<string, string>();
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const relative = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full, relative);
+        continue;
+      }
+      const stats = statSync(full);
+      const hash = createHash("sha256").update(readFileSync(full)).digest("hex");
+      snapshot.set(relative, `${stats.size}/${stats.mtimeMs}/${hash}`);
+    }
+  };
+  walk(root, "");
+  return snapshot;
+}
+
+async function assertVaultMergeServer(vaultDataDir: string, vaultDir: string): Promise<void> {
+  // n) 种子 vault（2 个合法概念 + 1 个坏 frontmatter 文件）
+  seedVaultConcepts(vaultDir);
+  const seededFiles = readdirSync(path.join(vaultDir, "cuemind", "concepts")).sort();
+  assert.deepEqual(
+    seededFiles,
+    ["broken-frontmatter.md", "ring-attention.md", "speculative-decoding.md"],
+    "vault fixture files seeded",
+  );
+  console.log(`[n] vault seeded: ${vaultDir}/cuemind/concepts → ${seededFiles.join(", ")}（含 1 个坏 frontmatter 文件）`);
+
+  // r 基线：种子完成后、MCP 启动前快照（MCP 只读 → 前后必须一致）。
+  const vaultBefore = snapshotDirRecursive(vaultDir);
+
+  const client = new McpStdioClient(vaultDataDir, vaultDir);
+  client.start();
+  await initializeClient(client);
+
+  // o) search_cards 合流：SQLite 命中与 vault 概念命中并存
+  const merged = toolPayload<SearchCardsPayload>(
+    await client.request("tools/call", { name: "search_cards", arguments: { query: "Ring Attention" } }),
+  );
+  const sqliteHit = merged.results.find((hit) => hit.origin === "sqlite");
+  const vaultHit = merged.results.find((hit) => hit.origin === "vault");
+  assert.ok(sqliteHit !== undefined, "SQLite hit must coexist with vault hits");
+  assert.equal(sqliteHit.origin, "sqlite");
+  assert.equal(sqliteHit.candidateId, VAULT_FIXTURE_CANDIDATE_ID);
+  assert.equal(sqliteHit.term, VAULT_FIXTURE_TERM);
+  assert.ok(vaultHit !== undefined, "vault concept hit must appear in merged results");
+  assert.equal(vaultHit.origin, "vault");
+  assert.equal(vaultHit.source, "vault");
+  assert.equal(vaultHit.term, VAULT_FIXTURE_TERM);
+  assert.equal(vaultHit.relativePath, "cuemind/concepts/ring-attention.md");
+  assert.equal(vaultHit.updated, VAULT_FIXTURE_UPDATED);
+  assert.ok(Array.isArray(vaultHit.aliases) && vaultHit.aliases.includes(VAULT_FIXTURE_ALIAS_CN), "aliases must be exposed");
+  assert.ok(Array.isArray(vaultHit.originMeetings) && vaultHit.originMeetings.includes(VAULT_FIXTURE_SESSION), "originMeetings must be exposed");
+  // alias 命中：中文 alias 只在 vault frontmatter 里，SQLite 账本 term 为英文不应命中。
+  const aliasOnly = toolPayload<SearchCardsPayload>(
+    await client.request("tools/call", { name: "search_cards", arguments: { query: VAULT_FIXTURE_ALIAS_CN } }),
+  );
+  assert.ok(
+    aliasOnly.results.some((hit) => hit.origin === "vault" && hit.term === VAULT_FIXTURE_TERM),
+    "vault alias match must hit",
+  );
+  assert.ok(!aliasOnly.results.some((hit) => hit.origin === "sqlite"), "Chinese alias must not hit the English ledger term");
+  console.log(
+    `[o] search_cards 合流 OK: origin=sqlite(${sqliteHit.candidateId}) 与 origin=vault(${vaultHit.relativePath}) 并存，aliases=${JSON.stringify(vaultHit.aliases)}，中文 alias 仅命中 vault`,
+  );
+
+  // s) 坏 frontmatter 文件跳过：不出现命中、不崩，其余概念仍可检索
+  const brokenProbe = toolPayload<SearchCardsPayload>(
+    await client.request("tools/call", { name: "search_cards", arguments: { query: "broken" } }),
+  );
+  assert.ok(
+    !brokenProbe.results.some((hit) => hit.origin === "vault" && hit.relativePath === "cuemind/concepts/broken-frontmatter.md"),
+    "broken frontmatter file must be skipped",
+  );
+  const otherConcept = toolPayload<SearchCardsPayload>(
+    await client.request("tools/call", { name: "search_cards", arguments: { query: "投机解码" } }),
+  );
+  const otherVaultHit = otherConcept.results.find((hit) => hit.origin === "vault");
+  assert.ok(
+    otherVaultHit !== undefined && otherVaultHit.relativePath === "cuemind/concepts/speculative-decoding.md",
+    "remaining concepts stay searchable after skipping the broken file",
+  );
+  console.log('[s] 坏 frontmatter 跳过 OK: query="broken" 无 vault 命中且不崩，"投机解码" 仍命中 speculative-decoding.md');
+
+  // p) get_card：账本 term 与 vault 概念一致 + 正文未归档 → vault 投影 + note
+  const cardResult = parseToolText(
+    await client.request("tools/call", { name: "get_card", arguments: { card_id: VAULT_FIXTURE_CARD_ID } }),
+  );
+  assert.ok(!cardResult.isError, "get_card vault fallback must not be an error terminal");
+  const cardPayload = JSON.parse(cardResult.content[0].text) as GetCardPayload;
+  assert.equal(cardPayload.ledger.candidateId, VAULT_FIXTURE_CANDIDATE_ID);
+  assert.equal(cardPayload.ledger.sessionId, VAULT_FIXTURE_SESSION);
+  assert.equal(cardPayload.ledger.term, VAULT_FIXTURE_TERM);
+  assert.equal(cardPayload.ledger.cardId, VAULT_FIXTURE_CARD_ID);
+  assert.ok(cardPayload.card !== null, "vault fallback must project a card");
+  const vaultCard = cardPayload.card as Record<string, unknown>;
+  assert.equal(vaultCard.origin, "vault");
+  assert.equal(vaultCard.keyword, VAULT_FIXTURE_TERM);
+  assert.equal(vaultCard.whyNow, null, "whyNow stays null (never fabricated)");
+  assert.equal(vaultCard.relativePath, "cuemind/concepts/ring-attention.md");
+  assert.equal(vaultCard.updated, VAULT_FIXTURE_UPDATED);
+  assert.ok(Array.isArray(vaultCard.aliases) && (vaultCard.aliases as string[]).includes(VAULT_FIXTURE_ALIAS_CN));
+  const keyPoints = vaultCard.keyPoints as string[];
+  assert.ok(
+    keyPoints.includes("Blockwise computation of attention over long sequences."),
+    "keyPoints parsed from body list lines",
+  );
+  assert.ok(
+    !keyPoints.some((point) => point.includes("](http")),
+    "source link lines must not leak into keyPoints",
+  );
+  const sources = vaultCard.sources as Array<{ title: string; url: string }>;
+  assert.ok(
+    sources.some((source) => source.title === "Ring Attention (arXiv)" && source.url === "https://arxiv.org/abs/2310.01889"),
+    "body source lines extracted as [title](url) pairs",
+  );
+  assert.equal(cardPayload.note, "card body from vault concepts");
+  console.log(
+    `[p] get_card vault 回退 OK: card.origin=vault，relativePath=${String(vaultCard.relativePath)}，updated=${String(vaultCard.updated)}，note="${cardPayload.note}"`,
+  );
+
+  await client.stop();
+
+  // q) CUEMIND_VAULT_DIR 指向不存在目录 → search_cards 仅 SQLite 结果不报错（静默跳过）
+  const absentVaultDir = path.join(tmpdir(), "nonexistent-m3-vault");
+  rmSync(absentVaultDir, { recursive: true, force: true });
+  const absentClient = new McpStdioClient(vaultDataDir, absentVaultDir);
+  absentClient.start();
+  await initializeClient(absentClient);
+  const sqliteOnly = parseToolText(
+    await absentClient.request("tools/call", { name: "search_cards", arguments: { query: VAULT_FIXTURE_TERM } }),
+  );
+  assert.ok(!sqliteOnly.isError, "missing vault must not turn search_cards into an error terminal");
+  const sqliteOnlyPayload = JSON.parse(sqliteOnly.content[0].text) as SearchCardsPayload;
+  assert.ok(sqliteOnlyPayload.results.length >= 1, "SQLite hit still present without vault");
+  assert.ok(
+    sqliteOnlyPayload.results.every((hit) => hit.origin === "sqlite"),
+    "vault hits silently skipped when CUEMIND_VAULT_DIR points nowhere",
+  );
+  const honestCard = parseToolText(
+    await absentClient.request("tools/call", { name: "get_card", arguments: { card_id: VAULT_FIXTURE_CARD_ID } }),
+  );
+  assert.ok(!honestCard.isError, "get_card without vault keeps the honest-degradation terminal");
+  const honestPayload = JSON.parse(honestCard.content[0].text) as GetCardPayload;
+  assert.equal(honestPayload.card, null, "no fabricated vault card when the vault is absent");
+  assert.ok(typeof honestPayload.note === "string" && honestPayload.note.includes("not archived"));
+  assert.ok(absentClient.isAlive(), "server must not crash when the vault dir is absent");
+  await absentClient.stop();
+  console.log(
+    `[q] vault 缺失静默跳过 OK: CUEMIND_VAULT_DIR=${absentVaultDir} → search_cards 仅 SQLite 结果、get_card 维持诚实降级、server 不崩`,
+  );
+
+  // r) 只读断言：vault 目录文件内容+size+mtime 前后不变（MCP 全程无写）
+  const vaultAfter = snapshotDirRecursive(vaultDir);
+  assert.deepEqual(
+    vaultAfter,
+    vaultBefore,
+    "只读断言失败：vault 目录被 MCP 修改（文件清单/内容/size/mtime 变化）",
+  );
+  console.log(`[r] vault 只读断言 OK: ${vaultAfter.size} 个文件内容/size/mtime 前后一致（含坏 frontmatter 文件）`);
+}
+
 async function main(): Promise<void> {
   statSync(MCP_SERVER_ENTRY);
   const fixture = prepareCandidateFixture();
+  const vaultDataDir = prepareVaultFixture();
   try {
     await assertNormalServer(fixture);
+    await assertVaultMergeServer(vaultDataDir, VAULT_DIR);
     await assertMissingDbServer();
   } finally {
-    // 灌种目录只存在于临时区，用后即清。
+    // 灌种目录与测试 vault 只存在于临时区，用后即清。
     if (fixture.seeded) rmSync(fixture.dataDir, { recursive: true, force: true });
+    rmSync(vaultDataDir, { recursive: true, force: true });
+    rmSync(VAULT_DIR, { recursive: true, force: true });
   }
-  console.log("test-mcp-server: all assertions passed (a-m)");
+  console.log("test-mcp-server: all assertions passed (a-s)");
 }
 
 main().catch((error: unknown) => {
