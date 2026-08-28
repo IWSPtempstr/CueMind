@@ -1,4 +1,6 @@
 // 双通道说话人归属（主线二 2.2-a）：零模型、纯 DSP 接口，无副作用。
+// 2.2-b 增量：attributeChunkSpeaker（hook 接线裁决，仅 mixed 双轨标注）与
+// speakerBadge（MicTranscript 行内徽标），均为纯函数、末段定义。
 // ① 裁决（2026-08-28）：接口就位 + 映射退化。AudioChunkReadyEvent 当前无 energy 字段，
 //    运行时能量恒为 undefined/null → 泄漏判定跳过，实际退化为通道确定性映射
 //    （microphone→you / system→remote）。
@@ -6,6 +8,9 @@
 //    调用侧无需改动（energy 为可选字段，事件与 overlapWith 透传即可生效）。
 // ③ pyannote 云端 diarization 明确不做（决策 58 / local-first 红线）；
 //    角色标签即终态（对齐 meetscribe 先例）。
+
+import type { AudioSourceMode } from "@/lib/audio-source-mode";
+import type { AudioSource } from "@/types/session";
 
 export type Speaker = "you" | "remote";
 
@@ -126,4 +131,33 @@ export function attributeSpeakers(
     ...window,
     speaker: resolveSpeakerRole(window, windows),
   }));
+}
+
+// ---- 2.2-b 接线层（useDesktopTranscript → chunk.speaker）与 UI 徽标（MicTranscript）----
+
+/**
+ * hook 接线裁决（纯函数，供单测）：仅 mixed 双轨模式标注说话人；
+ * 单轨（mic|system 模式）与上传轨（upload）不标（行为零变化红线）。
+ * mixed 下委托 resolveSpeakerRole：AudioChunkReadyEvent 无能量字段 → 纯通道映射退化路径。
+ */
+export function attributeChunkSpeaker(
+  mode: AudioSourceMode,
+  source: AudioSource,
+  startMs: number,
+  endMs: number,
+  otherTrack: SpeakerWindow[],
+): SpeakerRole | undefined {
+  if (mode !== "mixed") return undefined;
+  if (source !== "microphone" && source !== "system") return undefined;
+  return resolveSpeakerRole({ source, startMs, endMs }, otherTrack);
+}
+
+/**
+ * 转写行内说话人徽标（纯函数，供单测）：角色 → YOU/REMOTE 文案与角色色类名；
+ * 基础形 rounded border px-1.5 py-0.5 text-[10px] 在组件侧拼接。
+ */
+export function speakerBadge(speaker: SpeakerRole): { label: string; className: string } {
+  return speaker === "you"
+    ? { label: "YOU", className: "border-blue-800 text-blue-300" }
+    : { label: "REMOTE", className: "border-emerald-800 text-emerald-300" };
 }

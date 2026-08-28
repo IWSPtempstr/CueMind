@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { AudioSourceMode } from "@/lib/audio-source-mode";
 import { parseDesktopEvent, type AudioChunkReadyEvent } from "@/lib/desktop-events";
-import { resolveSpeakerRole } from "@/lib/speaker-attributes";
+import { attributeChunkSpeaker } from "@/lib/speaker-attributes";
 import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
 
@@ -95,15 +95,14 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
         { id: crypto.randomUUID(), stage: "capture", durationMs: Math.max(0, event.endMs - event.startMs), createdAt: new Date() },
         { id: crypto.randomUUID(), stage: "asr", durationMs: payload.latencyMs, createdAt: asrEndedAt },
       ]);
-      // 说话人归属（双轨纯 DSP）：对轨时间重叠 + 能量比较；事件无电平字段时
-      // 退化为"重叠即双方在场、各归各轨"（lib/speaker-attributes 语义）。
+      // 说话人归属（2.2-b 接线）：仅 mixed 双轨模式标注（attributeChunkSpeaker 内裁决），
+      // 单轨（mic|system 模式）chunk 不带 speaker（行为零变化红线）。事件无 energy/
+      // peakLevel 字段 → 纯通道映射退化路径；对轨时间重叠对比已接（recentEventsRef
+      // 近邻窗口），能量与重叠区数据待 C# 透出 energy 字段后接入（透传即可生效）。
       const otherTrack = recentEventsRef.current
         .filter((item) => item.id !== event.id && (item.source === "microphone" || item.source === "system") && item.source !== event.source)
         .map((item) => ({ source: item.source as "microphone" | "system", startMs: item.startMs, endMs: item.endMs }));
-      const speaker =
-        event.source === "microphone" || event.source === "system"
-          ? resolveSpeakerRole({ source: event.source, startMs: event.startMs, endMs: event.endMs }, otherTrack)
-          : undefined;
+      const speaker = attributeChunkSpeaker(audioSourceModeRef.current, event.source, event.startMs, event.endMs, otherTrack);
       setTranscriptState((previous) => [
         ...previous,
         {

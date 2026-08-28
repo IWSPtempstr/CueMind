@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  attributeChunkSpeaker,
   attributeSpeaker,
   attributeSpeakers,
   LEAK_ENERGY_RATIO,
   resolveSpeakerRole,
+  speakerBadge,
   SPEAKER_LEAKAGE_RATIO,
   SPEAKER_ROLE_LABELS,
   type TrackAttributionInput,
@@ -15,7 +17,8 @@ import {
 // C# capture_ready 未来透出 energy 后泄漏判定自动生效，调用侧无需改动。
 // a) 单轨通道映射  b) 能量无效退化  c) 泄漏跟随  d) 能量相当各归各
 // e) 泄漏边界（严格小于）  f) 区间不相交视为无重叠  g) 纯函数不改入参  h) 确定性
-// 末段附遗留窗口 API 回归（useDesktopTranscript 运行时路径）。
+// 末段附遗留窗口 API 回归（useDesktopTranscript 运行时路径）与 2.2-b 接线层/UI
+// 徽标纯函数回归（attributeChunkSpeaker / speakerBadge）。
 
 // a) 单轨：无对轨 chunk → 纯通道映射
 assert.equal(attributeSpeaker({ source: "microphone" }), "you");
@@ -208,5 +211,32 @@ assert.equal(attributed[2].peakLevel, 0.9);
 // 标签字典：角色可渲染
 assert.equal(SPEAKER_ROLE_LABELS.you, "我");
 assert.equal(SPEAKER_ROLE_LABELS.remote, "对方");
+
+// ---- 2.2-b 接线层回归：attributeChunkSpeaker（hook → chunk.speaker 的可测纯裁决）----
+// 仅 mixed 双轨模式标注；单轨（mic|system 模式）不标（行为零变化红线）
+assert.equal(attributeChunkSpeaker("mixed", "microphone", 0, 5000, []), "you");
+assert.equal(attributeChunkSpeaker("mixed", "system", 0, 5000, []), "remote");
+assert.equal(attributeChunkSpeaker("mic", "microphone", 0, 5000, []), undefined);
+assert.equal(attributeChunkSpeaker("system", "system", 0, 5000, []), undefined);
+// 单轨模式下即使 recentEventsRef 残留对轨窗口（模式切换前的旧事件）也不标
+assert.equal(
+  attributeChunkSpeaker("mic", "microphone", 0, 5000, [{ source: "system", startMs: 0, endMs: 5000 }]),
+  undefined,
+);
+// 上传轨不参与归属
+assert.equal(attributeChunkSpeaker("mixed", "upload", 0, 5000, []), undefined);
+// mixed 下委托 resolveSpeakerRole：无能量字段 → 时间重叠也各归各轨（纯映射退化路径）
+assert.equal(
+  attributeChunkSpeaker("mixed", "microphone", 0, 5000, [{ source: "system", startMs: 0, endMs: 5000 }]),
+  "you",
+);
+assert.equal(
+  attributeChunkSpeaker("mixed", "system", 0, 5000, [{ source: "microphone", startMs: 0, endMs: 5000 }]),
+  "remote",
+);
+
+// ---- 2.2-b UI 徽标回归：speakerBadge（MicTranscript 行内 YOU/REMOTE）----
+assert.deepEqual(speakerBadge("you"), { label: "YOU", className: "border-blue-800 text-blue-300" });
+assert.deepEqual(speakerBadge("remote"), { label: "REMOTE", className: "border-emerald-800 text-emerald-300" });
 
 console.log("test-speaker-attributes: all assertions passed");
