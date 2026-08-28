@@ -14,6 +14,7 @@ import useDesktopTranscript from "@/hooks/useDesktopTranscript";
 import useMediaUploader, { isUploadedRecordCompleted } from "@/hooks/useMediaUploader";
 import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
+import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { StoredChatMessage } from "@/lib/chat-store";
 import { isErrorResponseBody } from "@/lib/api-response";
 import { AUDIO_SOURCE_MODE_LABELS } from "@/lib/audio-source-mode";
@@ -23,11 +24,25 @@ import { loadSessions, storeSession } from "@/lib/session-storage";
 import { summarizeLatency } from "@/lib/telemetry";
 import type { ChatMessage } from "@/types/chat";
 import type { MeetingReport, SessionSnapshot } from "@/types/session";
-import type { Suggestion } from "@/types/suggestions";
+import type { ContextCard, Suggestion } from "@/types/suggestions";
 
 function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptChunks">): string {
   const firstWords = snapshot.transcriptChunks[0]?.text.trim().slice(0, 44);
   return firstWords || `会议 · ${snapshot.createdAt.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+}
+
+// M3-a：卡片沉淀去重记录（本地持久化，避免重复导出同一 candidateId）。
+const DEPOSITED_CARDS_STORAGE_KEY = "cuemind_deposited_cards";
+
+function loadDepositedCardIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DEPOSITED_CARDS_STORAGE_KEY);
+    const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return new Set();
+  }
 }
 
 function formatSessionDate(date: Date): string {
@@ -116,6 +131,18 @@ export default function Home(): ReactElement {
   const contextCards = useContextCards({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive, sessionId: activeSessionId });
   const transcriptRef = useRef(recorder.transcriptChunks);
   useEffect(() => { transcriptRef.current = recorder.transcriptChunks; }, [recorder.transcriptChunks]);
+  // M3-a：导出链路用 ref 读取最新会话上下文（回调闭包不随渲染刷新也不会读到过期值）。
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => { activeSessionIdRef.current = activeSessionId; }, [activeSessionId]);
+  const topicSummaryRef = useRef(topicSummary);
+  useEffect(() => { topicSummaryRef.current = topicSummary; }, [topicSummary]);
+  const createdAtRef = useRef(createdAt);
+  useEffect(() => { createdAtRef.current = createdAt; }, [createdAt]);
+  const contextCardsRef = useRef(contextCards.cards);
+  useEffect(() => { contextCardsRef.current = contextCards.cards; }, [contextCards.cards]);
+  // M3-a：已沉淀卡片去重集合（localStorage cuemind_deposited_cards）。
+  const [depositedCardIds, setDepositedCardIds] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => { setDepositedCardIds(loadDepositedCardIds()); }, []);
   // 已处理过"上传完成"事件的 uploadId 去重集合（主题摘要只生成一次）。
   const handledUploadIdsRef = useRef(new Set<string>());
   // P2 chat 服务端同步：代 token 使在途合并失效（restore/new 切换会话时不串数据）。
@@ -138,6 +165,72 @@ export default function Home(): ReactElement {
       if (typeof topic === "string" && topic.trim().length > 0) setTopicSummary(topic.trim());
     }).catch(() => undefined);
   }, []);
+
+  // M3-a：会议总结生成成功后的旁路 vault 导出（fire-and-forget，失败静默）。
+  // 门槛：meetingReport 非空且转写非空才导；meetings 落盘后不可变（幂等键 = snapshot.id）。
+  const exportMeetingSnapshotToVault = useCallback((reportContent: string): void => {
+    const chunks = transcriptRef.current;
+    if (reportContent.trim().length === 0 || chunks.length === 0) return;
+    const settings = loadCueMindSettings();
+    void fetch("/api/vault-export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "meeting",
+        exportTranscript: settings.exportTranscript,
+        vaultPath: settings.vaultPath,
+        asrModel: settings.localWhisperModelPath,
+        snapshot: {
+          id: activeSessionIdRef.current ?? "unsaved-session",
+          title: topicSummaryRef.current ?? sessionTitle({ createdAt: createdAtRef.current, transcriptChunks: chunks }),
+          ...(topicSummaryRef.current ? { topicSummary: topicSummaryRef.current } : {}),
+          createdAt: createdAtRef.current.toISOString(),
+          transcriptChunks: chunks.map((chunk) => ({
+            id: chunk.id,
+            text: chunk.text,
+            startMs: chunk.startMs,
+            endMs: chunk.endMs,
+            source: chunk.source,
+          })),
+          meetingReport: { content: reportContent },
+        },
+        cards: contextCardsRef.current.map((card) => ({ keyword: card.keyword, candidateId: card.candidateId })),
+      }),
+    }).catch(() => undefined);
+  }, []);
+
+  // M3-a：卡片「✨ 沉淀」→ 导出 cuemind/concepts/<term>.md（幂等键 = candidateId，
+  // 服务端追加语义绝不覆盖）。fire-and-forget，不影响卡片链路。
+  const handleCardDeposit = useCallback((card: ContextCard): void => {
+    if (!card.candidateId || depositedCardIds.has(card.candidateId)) return;
+    const next = new Set(depositedCardIds);
+    next.add(card.candidateId);
+    setDepositedCardIds(next);
+    try {
+      localStorage.setItem(DEPOSITED_CARDS_STORAGE_KEY, JSON.stringify([...next]));
+    } catch {
+      // 存储溢出等：去重记录失败不影响本次导出。
+    }
+    const settings = loadCueMindSettings();
+    void fetch("/api/vault-export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "concept",
+        candidateId: card.candidateId,
+        sessionId: activeSessionIdRef.current,
+        vaultPath: settings.vaultPath,
+        card: {
+          id: card.id,
+          candidateId: card.candidateId,
+          keyword: card.keyword,
+          keyPoints: card.keyPoints,
+          explanation: card.explanation,
+          sources: card.sources,
+        },
+      }),
+    }).catch(() => undefined);
+  }, [depositedCardIds]);
 
   useEffect(() => {
     const saved = loadSessions();
@@ -307,11 +400,14 @@ export default function Home(): ReactElement {
         const payload: unknown = await response.json();
         if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Could not build the meeting report");
         if (typeof payload !== "object" || payload === null || !("summary" in payload) || typeof (payload as { summary: unknown }).summary !== "string") throw new Error("Invalid meeting report response");
-        setMeetingReport({ content: (payload as { summary: string }).summary, generatedAt: new Date() });
+        const summary = (payload as { summary: string }).summary;
+        setMeetingReport({ content: summary, generatedAt: new Date() });
+        // M3-a：总结是导出门槛——meetingReport 非空才触发旁路 vault 导出（fire-and-forget）。
+        exportMeetingSnapshotToVault(summary);
       }).catch((caught: unknown) => setPersistenceError(caught instanceof Error ? caught.message : "Could not build the meeting report")).finally(() => setIsReportLoading(false));
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [generateTopicSummary, recorder.isRecording, recorder.transcriptChunks, reportRequested]);
+  }, [generateTopicSummary, recorder.isRecording, recorder.transcriptChunks, reportRequested, exportMeetingSnapshotToVault]);
 
   // 触发点 2：上传完成（completed 记录按 uploadId 去重），转写内容足够时补生成主题摘要。
   useEffect(() => {
@@ -475,6 +571,8 @@ export default function Home(): ReactElement {
           contextCardFailures={contextCards.failures}
           contextCardsLoading={contextCards.isLoading}
           contextCardsError={contextCards.error}
+          onCardDeposit={handleCardDeposit}
+          depositedCardIds={depositedCardIds}
         />
         <HealthPanel
           asrStatus={asrStatus}

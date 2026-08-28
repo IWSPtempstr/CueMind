@@ -15,6 +15,9 @@ interface SuggestionCardProps {
 
 interface ContextCardProps {
   card: ContextCard;
+  /** M3-a：沉淀到 vault（fire-and-forget 导出 cuemind/concepts/<term>.md）。 */
+  onDeposit?: (card: ContextCard) => void;
+  isDeposited?: boolean;
 }
 
 function typeBadgeClasses(type: Suggestion["type"]): string {
@@ -98,7 +101,7 @@ export default function SuggestionCard({
   );
 }
 
-export function ContextCardView({ card }: ContextCardProps): ReactElement {
+export function ContextCardView({ card, onDeposit, isDeposited }: ContextCardProps): ReactElement {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
 
   const toggleSource = (url: string): void => {
@@ -159,6 +162,19 @@ export function ContextCardView({ card }: ContextCardProps): ReactElement {
           </div>
         ))}
       </div>
+      {onDeposit ? (
+        <div className="mt-3 border-t border-blue-900/60 pt-3">
+          <button
+            type="button"
+            disabled={isDeposited}
+            aria-label={isDeposited ? "已沉淀到 vault" : "沉淀概念卡片到 vault"}
+            onClick={() => onDeposit(card)}
+            className={`rounded border border-blue-800 px-2 py-1 text-[10px] text-blue-300 transition-colors hover:bg-blue-950 disabled:opacity-50 disabled:hover:bg-transparent ${isDeposited ? "text-blue-400" : ""}`}
+          >
+            {isDeposited ? "✓ 已沉淀" : "✨ 沉淀"}
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }

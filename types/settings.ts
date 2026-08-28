@@ -29,4 +29,7 @@ export interface Settings {
   searchApiKey: string;
   enableAgentReachFallback: boolean;
   contextCardCooldownSeconds: number;
+  exportTranscript: "none" | "folded" | "full";
+  /** vault 导出根目录绝对路径；空字符串 = 服务端默认 <CUEMIND_DATA_DIR>/vault（M3-a）。 */
+  vaultPath: string;
 }

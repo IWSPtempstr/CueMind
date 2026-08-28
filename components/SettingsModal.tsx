@@ -10,6 +10,7 @@ import {
   type ReactElement,
 } from "react";
 import useSettings from "@/hooks/useSettings";
+import type { Settings } from "@/types/settings";
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   const selector =
@@ -482,6 +483,66 @@ export default function SettingsModal({
                   }}
                   className="w-full resize-y rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs leading-relaxed text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
                 />
+              </div>
+            </section>
+
+            <section className="flex flex-col gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-neutral-200">
+                Vault 导出
+                </h3>
+                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                  会议笔记与概念卡片导出为本地 Markdown 文件（兼容 Obsidian 等工具）。
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="settings-vault-path"
+                  className="text-xs font-medium text-neutral-400"
+                >
+                  Vault 路径
+                </label>
+                <input
+                  id="settings-vault-path"
+                  type="text"
+                  value={settings.vaultPath}
+                  placeholder="留空使用服务端默认（数据目录/vault）"
+                  onChange={(event) => {
+                    updateSetting("vaultPath", event.target.value);
+                  }}
+                  className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                />
+                <p className="text-xs text-neutral-600">
+                  导出根目录（绝对路径），笔记写入其下的 cuemind/meetings/ 与 cuemind/concepts/；留空使用服务端默认。
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="settings-export-transcript"
+                  className="text-xs font-medium text-neutral-400"
+                >
+                  完整转写导出
+                </label>
+                <select
+                  id="settings-export-transcript"
+                  value={settings.exportTranscript}
+                  onChange={(event) => {
+                    updateSetting(
+                      "exportTranscript",
+                      event.target.value as Settings["exportTranscript"],
+                    );
+                  }}
+                  className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                >
+                  <option value="folded">折叠（默认，可展开）</option>
+                  <option value="none">不导出（隐私最小化）</option>
+                  <option value="full">完整平铺</option>
+                </select>
+                <p className="text-xs text-neutral-600">
+                  仅作用于会议笔记的转写正文；概念卡片始终完整导出。
+                </p>
               </div>
             </section>
           </div>

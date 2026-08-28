@@ -18,6 +18,8 @@ import {
 import type { Settings } from "@/types/settings";
 
 const STORAGE_KEY = "cuemind_settings";
+// M3-a：转写导出三档开关使用独立 localStorage 键（需求指定），读取时优先于 cuemind_settings blob。
+export const EXPORT_TRANSCRIPT_STORAGE_KEY = "cuemind_export_transcript";
 
 type SecretName = "llamaCpp" | "remoteApi" | "search";
 
@@ -40,6 +42,18 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
 
 function storageMode(value: unknown): Settings["apiKeyStorage"] {
   return value === "session" || value === "memory" ? value : "local";
+}
+
+/**
+ * 转写导出三档：独立键 cuemind_export_transcript 优先，缺省回退 cuemind_settings blob
+ * 内的旧值（迁移），最终缺省 "folded"。
+ */
+function readExportTranscriptPreference(blob: Record<string, unknown>): Settings["exportTranscript"] {
+  if (typeof window !== "undefined") {
+    const standalone = localStorage.getItem(EXPORT_TRANSCRIPT_STORAGE_KEY);
+    if (standalone === "none" || standalone === "folded" || standalone === "full") return standalone;
+  }
+  return blob.exportTranscript === "none" || blob.exportTranscript === "full" ? blob.exportTranscript : "folded";
 }
 
 function readSecret(name: SecretName, mode: Settings["apiKeyStorage"]): string {
@@ -90,6 +104,8 @@ export function getDefaultSettings(): Settings {
     searchApiKey: "",
     enableAgentReachFallback: true,
     contextCardCooldownSeconds: 20,
+    exportTranscript: "folded",
+    vaultPath: "",
   };
 }
 
@@ -142,6 +158,8 @@ export function loadCueMindSettings(): Settings {
     searchApiKey: readSecret("search", mode) || (typeof o.searchApiKey === "string" ? o.searchApiKey : defaults.searchApiKey),
     enableAgentReachFallback: o.enableAgentReachFallback !== false,
     contextCardCooldownSeconds: clampInt(o.contextCardCooldownSeconds, defaults.contextCardCooldownSeconds, 5, 300),
+    exportTranscript: readExportTranscriptPreference(o),
+    vaultPath: typeof o.vaultPath === "string" ? o.vaultPath : defaults.vaultPath,
   };
 
   // One-time migration only: fold a legacy embedded search key into the chosen
@@ -162,6 +180,8 @@ function persistPreferences(settings: Settings): void {
   delete preferences.remoteApiApiKey;
   delete preferences.searchApiKey;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+  // 需求契约：三档值同步到独立键，导出链路读取该键。
+  localStorage.setItem(EXPORT_TRANSCRIPT_STORAGE_KEY, settings.exportTranscript);
 }
 
 function persistSettings(settings: Settings): void {

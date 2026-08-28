@@ -20,10 +20,13 @@ interface Props {
   contextCardFailures: ContextCardFailure[];
   contextCardsLoading: boolean;
   contextCardsError: string | null;
+  /** M3-a：卡片沉淀到 vault（fire-and-forget）。 */
+  onCardDeposit?: (card: ContextCard) => void;
+  depositedCardIds?: ReadonlySet<string>;
 }
 
 export default function LiveSuggestions(props: Props): ReactElement {
-  const { batches, isLoading, isRecording, nextRefreshAt, onManualRefresh, error, onSuggestionSelect, dismissedIds, pinnedIds, onFeedback, contextCards, contextCardFailures, contextCardsLoading, contextCardsError } = props;
+  const { batches, isLoading, isRecording, nextRefreshAt, onManualRefresh, error, onSuggestionSelect, dismissedIds, pinnedIds, onFeedback, contextCards, contextCardFailures, contextCardsLoading, contextCardsError, onCardDeposit, depositedCardIds } = props;
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!isRecording || nextRefreshAt === null) return;
@@ -60,12 +63,12 @@ export default function LiveSuggestions(props: Props): ReactElement {
             </div>
             <div>
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-200">当前背景</p>
-              <ContextCardView card={contextCards[0]} />
+              <ContextCardView card={contextCards[0]} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(contextCards[0].candidateId) ?? false} />
             </div>
             {contextCards.length > 1 ? (
               <div className="max-h-96 min-w-0 space-y-3 overflow-y-auto pr-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">此前背景 · {contextCards.length - 1}</p>
-                {contextCards.slice(1).map((card) => <ContextCardView key={card.id} card={card} />)}
+                {contextCards.slice(1).map((card) => <ContextCardView key={card.id} card={card} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(card.candidateId) ?? false} />)}
               </div>
             ) : null}
             <p className="text-[10px] text-neutral-500">来源：每张卡片均附带检索来源。</p>
