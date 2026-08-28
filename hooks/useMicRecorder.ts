@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
+import { PARTIAL_INTERVAL_MS, shouldRunPartialTranscription } from "@/lib/partial-transcription";
 import type { TranscriptChunk } from "@/types/session";
 
 const MIN_TRANSCRIBE_BYTES = 1000;
@@ -10,6 +11,10 @@ const AUDIO_WEBM_FALLBACK_MIME = "audio/webm";
 const RECORDER_OVERLAP_MS = 1000;
 const SILENCE_RMS_THRESHOLD = 0.012;
 const MAX_RETRY_ATTEMPTS = 4;
+// timeslice 让 ondataavailable 每 1s 落一个 webm cluster——partial 转写才有
+// "进行中"的音频可读（无 timeslice 时 parts 直到 stop 才有数据）。
+// 多 cluster webm 拼接对 ffmpeg/whisper 仍是合法输入，confirmed 路径不受影响。
+const RECORDER_TIMESLICE_MS = 1000;
 
 interface Segment {
   recorder: MediaRecorder;
@@ -28,6 +33,8 @@ interface UseMicRecorderResult {
   micLevel: number;
   retryCount: number;
   transcriptChunks: TranscriptChunk[];
+  /** 进行中 segment 的临时转写（决策 66 partial 态）；confirmed 到达后被清除。 */
+  partialText: string | null;
   setTranscriptChunks: (chunks: TranscriptChunk[]) => void;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
@@ -58,6 +65,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
   const [micLevel, setMicLevel] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [transcriptChunks, setTranscriptState] = useState<TranscriptChunk[]>([]);
+  const [partialText, setPartialText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -72,6 +80,10 @@ export default function useMicRecorder(): UseMicRecorderResult {
   const audioContextRef = useRef<AudioContext | null>(null);
   const meterFrameRef = useRef<number | null>(null);
   const retryTimersRef = useRef(new Set<number>());
+  // partial 转写通道（决策 66）：单飞 + 节流 + 主 segment 守卫。
+  const partialTimerRef = useRef<number | null>(null);
+  const partialInFlightRef = useRef(false);
+  const lastPartialAttemptRef = useRef<number | null>(null);
 
   const setTranscriptChunks = useCallback((chunks: TranscriptChunk[]): void => {
     setTranscriptState(chunks);
@@ -82,6 +94,11 @@ export default function useMicRecorder(): UseMicRecorderResult {
     if (overlapTimerRef.current !== null) window.clearTimeout(overlapTimerRef.current);
     rotationTimerRef.current = null;
     overlapTimerRef.current = null;
+  }, []);
+
+  const clearPartialTimer = useCallback((): void => {
+    if (partialTimerRef.current !== null) window.clearTimeout(partialTimerRef.current);
+    partialTimerRef.current = null;
   }, []);
 
   const cleanupMeter = useCallback((): void => {
@@ -103,7 +120,8 @@ export default function useMicRecorder(): UseMicRecorderResult {
     segmentsRef.current.clear();
   }, [clearRotationTimers, cleanupMeter]);
 
-  const transcribeBlob = useCallback(async (blob: Blob, timestamp: Date, attempt = 1): Promise<void> => {
+  /** 单次转写请求（confirmed 与 partial 共用）；抛错由调用方决定重试或静默。 */
+  const transcribeBlobOnce = useCallback(async (blob: Blob): Promise<string> => {
     const settings = loadCueMindSettings();
     const formData = new FormData();
     formData.append("media", blob, TRANSCRIBE_UPLOAD_FILENAME);
@@ -112,22 +130,28 @@ export default function useMicRecorder(): UseMicRecorderResult {
     formData.append("whisperModelPath", settings.localWhisperModelPath);
     formData.append("uploadId", crypto.randomUUID());
 
+    const response = await fetch("/api/upload-media", {
+      method: "POST",
+      body: formData,
+    });
+    const payload: unknown = await response.json();
+    if (!response.ok) throw new Error(isTranscribeError(payload) ? payload.error : "Transcription failed");
+    return isTranscribeSuccess(payload)
+      ? payload.chunks.map((chunk) => (typeof chunk.text === "string" ? chunk.text : "")).join(" ").trim()
+      : "";
+  }, []);
+
+  const transcribeBlob = useCallback(async (blob: Blob, timestamp: Date, attempt = 1): Promise<void> => {
     try {
-      const response = await fetch("/api/upload-media", {
-        method: "POST",
-        body: formData,
-      });
-      const payload: unknown = await response.json();
-      if (!response.ok) throw new Error(isTranscribeError(payload) ? payload.error : "Transcription failed");
-      const text = isTranscribeSuccess(payload)
-        ? payload.chunks.map((chunk) => (typeof chunk.text === "string" ? chunk.text : "")).join(" ").trim()
-        : "";
+      const text = await transcribeBlobOnce(blob);
       if (text) {
         setTranscriptState((previous) => [
           ...previous,
           { id: crypto.randomUUID(), text, timestamp },
         ].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()));
       }
+      // confirmed 文本已落账：清掉同 segment 的 partial 展示（决策 66 替换语义）。
+      setPartialText(null);
       setError(null);
     } catch (caught) {
       if (attempt >= MAX_RETRY_ATTEMPTS) {
@@ -144,7 +168,50 @@ export default function useMicRecorder(): UseMicRecorderResult {
       retryTimersRef.current.add(timer);
       setError(`Transcription paused by a hiccup — retry ${attempt} queued.`);
     }
-  }, []);
+  }, [transcribeBlobOnce]);
+
+  /** partial 转写：进行中 segment 的临时文本（决策 66）；单飞 + 节流 + 主 segment 守卫，失败静默。 */
+  const runPartialTranscription = useCallback(async (segment: Segment): Promise<void> => {
+    if (isStoppingRef.current || partialInFlightRef.current) return;
+    const blob = new Blob(segment.parts, { type: mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME });
+    const nowMs = Date.now();
+    if (!shouldRunPartialTranscription({
+      inFlight: partialInFlightRef.current,
+      segmentState: segment.recorder.state,
+      blobSize: blob.size,
+      peakLevel: segment.peakLevel,
+      nowMs,
+      lastAttemptMs: lastPartialAttemptRef.current,
+      silenceThreshold: SILENCE_RMS_THRESHOLD,
+    })) return;
+    lastPartialAttemptRef.current = nowMs;
+    partialInFlightRef.current = true;
+    try {
+      const text = await transcribeBlobOnce(blob);
+      // 只有时序仍一致的当前主 segment 才允许更新 partial（旧 segment/已停止则丢弃）。
+      if (!isStoppingRef.current && segment.recorder.state === "recording" && primarySegmentRef.current === segment) {
+        setPartialText(text && text.trim() ? text.trim() : null);
+      }
+    } catch {
+      // partial 是尽力而为的展示层：失败保持上一帧，不进 error 状态。
+    } finally {
+      partialInFlightRef.current = false;
+    }
+  }, [transcribeBlobOnce]);
+
+  const schedulePartialRef = useRef<(segment: Segment) => void>(() => undefined);
+  schedulePartialRef.current = (segment: Segment): void => {
+    if (partialTimerRef.current !== null) window.clearTimeout(partialTimerRef.current);
+    const tick = (): void => {
+      partialTimerRef.current = null;
+      void runPartialTranscription(segment).finally(() => {
+        if (!isStoppingRef.current && segment.recorder.state === "recording") {
+          partialTimerRef.current = window.setTimeout(tick, PARTIAL_INTERVAL_MS);
+        }
+      });
+    };
+    partialTimerRef.current = window.setTimeout(tick, PARTIAL_INTERVAL_MS);
+  };
 
   const finalizeSegment = useCallback((segment: Segment): void => {
     segmentsRef.current.delete(segment);
@@ -165,7 +232,9 @@ export default function useMicRecorder(): UseMicRecorderResult {
       recorder.onerror = () => setError("Recording error.");
       recorder.onstop = () => finalizeSegment(segment);
       segmentsRef.current.add(segment);
-      recorder.start();
+      // timeslice 落 cluster 供 partial 读取（见 RECORDER_TIMESLICE_MS 注释）。
+      recorder.start(RECORDER_TIMESLICE_MS);
+      schedulePartialRef.current(segment);
       return segment;
     } catch {
       setError("Could not create MediaRecorder for this device.");
@@ -253,17 +322,21 @@ export default function useMicRecorder(): UseMicRecorderResult {
 
   const stopRecording = useCallback((): void => {
     clearRotationTimers();
+    clearPartialTimer();
     isStoppingRef.current = true;
     setIsRecording(false);
     setIsPaused(false);
+    setPartialText(null);
     const segments = [...segmentsRef.current];
     if (segments.length === 0) cleanupStream();
     for (const segment of segments) if (segment.recorder.state !== "inactive") segment.recorder.stop();
-  }, [cleanupStream, clearRotationTimers]);
+  }, [cleanupStream, clearPartialTimer, clearRotationTimers]);
 
   const pauseRecording = useCallback((): void => {
     if (!isRecording || isPaused) return;
     clearRotationTimers();
+    clearPartialTimer();
+    setPartialText(null);
     const primary = primarySegmentRef.current;
     for (const segment of [...segmentsRef.current]) {
       if (segment !== primary && segment.recorder.state !== "inactive") segment.recorder.stop();
@@ -271,13 +344,14 @@ export default function useMicRecorder(): UseMicRecorderResult {
     if (primary?.recorder.state === "recording") primary.recorder.pause();
     setIsPaused(true);
     setMicLevel(0);
-  }, [clearRotationTimers, isPaused, isRecording]);
+  }, [clearPartialTimer, clearRotationTimers, isPaused, isRecording]);
 
   const resumeRecording = useCallback((): void => {
     const primary = primarySegmentRef.current;
     if (!isRecording || !isPaused || !primary) return;
     if (primary.recorder.state === "paused") primary.recorder.resume();
     scheduleRotationRef.current(primary);
+    schedulePartialRef.current(primary);
     setIsPaused(false);
   }, [isPaused, isRecording]);
 
@@ -300,10 +374,11 @@ export default function useMicRecorder(): UseMicRecorderResult {
 
   useEffect(() => () => {
     clearRotationTimers();
+    clearPartialTimer();
     cleanupMeter();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     for (const timer of retryTimersRef.current) window.clearTimeout(timer);
-  }, [clearRotationTimers, cleanupMeter]);
+  }, [clearRotationTimers, clearPartialTimer, cleanupMeter]);
 
-  return { isRecording, isPaused, micLevel, retryCount, transcriptChunks, setTranscriptChunks, startRecording, stopRecording, pauseRecording, resumeRecording, flushCurrentChunk, error };
+  return { isRecording, isPaused, micLevel, retryCount, transcriptChunks, partialText, setTranscriptChunks, startRecording, stopRecording, pauseRecording, resumeRecording, flushCurrentChunk, error };
 }
