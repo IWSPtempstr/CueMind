@@ -682,7 +682,7 @@ batch 256 -> 128
 
 ## 14. 最终基线命令
 
-完成安装和测试后，正式基线使用：
+完成安装和测试后，正式基线使用（2026-08-28 修订：上下文 4096 → 8192，为会中询问预留上下文；真机全卸载）：
 
 ```bash
 /home/work/llama.cpp/build/bin/llama-server \
@@ -693,8 +693,8 @@ batch 256 -> 128
   --api-key cuemind-local \
   --jinja \
   --reasoning off \
-  -ngl all \
-  -c 4096 \
+  -ngl 99 \
+  -c 8192 \
   -b 256 \
   -ub 128 \
   -np 1 \
@@ -702,6 +702,8 @@ batch 256 -> 128
   --metrics \
   --no-webui
 ```
+
+> 应用连接契约：CueMind 默认 `llamaCppBaseUrl=http://127.0.0.1:8082` 且不带 api-key。若使用上述 8080 + api-key 基线，须在设置中同步修改 baseUrl 与密钥；无 CUDA 的环境（如沙箱）会自动忽略 `-ngl` 回退 CPU，参数无需改动。
 
 验收顺序：
 
@@ -749,3 +751,42 @@ total_latency_p50
 total_latency_p95
 unsupported_claim_rate
 ```
+
+## 16. Qwen3-8B 升级路径（可选，真机专属）
+
+RTX 4060 Ti 8GB 真机的质量升级档：Qwen3-8B Q4_K_M 全卸载约 5-6GB VRAM（含 8192 KV），速度 60-90 tok/s，中文解释与 JSON 纪律优于 4B。**无 CUDA 环境不启用**（CPU 上 8B 打爆延迟预算）。
+
+### 16.1 下载
+
+```bash
+mkdir -p /home/work/models/cuemind
+
+# 官方仓库优先；HF 直连失败用镜像
+/home/work/.venvs/hf/bin/hf download Qwen/Qwen3-8B-GGUF \
+  --include 'qwen3-8b-q4_k_m.gguf' \
+  --local-dir /home/work/models/cuemind
+# 镜像回退：
+# curl -L -o /home/work/models/cuemind/qwen3-8b-q4_k_m.gguf \
+#   https://hf-mirror.com/Qwen/Qwen3-8B-GGUF/resolve/main/qwen3-8b-q4_k_m.gguf
+
+sha256sum /home/work/models/cuemind/qwen3-8b-q4_k_m.gguf \
+  | tee /home/work/models/cuemind/qwen3-8b-q4_k_m.sha256
+```
+
+### 16.2 启动（替换 4B 实例，端口与契约不变）
+
+```bash
+/home/work/llama.cpp/build/bin/llama-server \
+  -m /home/work/models/cuemind/qwen3-8b-q4_k_m.gguf \
+  --host 127.0.0.1 --port 8082 \
+  -c 8192 -ngl 99 -fa on --jinja --reasoning off
+```
+
+`--reasoning off` 必须：Qwen3 默认 thinking 模式会先输出思维链，打爆卡片 P95 与询问首字节预算。
+
+### 16.3 切换与回退
+
+- 切换：设置 → 本地模型路径改为 8B 文件（或直接换启动命令，应用侧零改动）
+- 回退：换回 4B 路径重启，配置层天然支持
+- 验收门槛（决策 57/65 口径）：冻结评估集对比 4B 基线——触发 F1、schema 合法率、卡片 P95、询问首字节；任一回退即不切换
+- 显存核查：`nvidia-smi` 确认占用 ≤7.5GB 且无 swap-to-RAM（`-ngl 99` 下若 OOM 降 `-c 4096`）
