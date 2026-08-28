@@ -1,12 +1,10 @@
 // 双通道说话人归属（主线二 2.2-a）：零模型、纯 DSP 接口，无副作用。
 // 2.2-b 增量：attributeChunkSpeaker（hook 接线裁决，仅 mixed 双轨标注）与
 // speakerBadge（MicTranscript 行内徽标），均为纯函数、末段定义。
-// ① 裁决（2026-08-28）：接口就位 + 映射退化。AudioChunkReadyEvent 当前无 energy 字段，
-//    运行时能量恒为 undefined/null → 泄漏判定跳过，实际退化为通道确定性映射
-//    （microphone→you / system→remote）。
-// ② C# capture_ready 未来透出 energy 字段后，本函数自动升级为能量泄漏跟随判定，
-//    调用侧无需改动（energy 为可选字段，事件与 overlapWith 透传即可生效）。
-// ③ pyannote 云端 diarization 明确不做（决策 58 / local-first 红线）；
+// ① energy 已激活（2026-08-28）：C# audio_chunk_ready 透出窗口峰值 RMS（energy），
+//    hook 透传为 peakLevel → 时间重叠区能量比较 + 泄漏跟随（<30%）全链路生效；
+//    旧版 helper 无 energy → 自动退化为通道确定性映射（microphone→you / system→remote）。
+// ② pyannote 云端 diarization 明确不做（决策 58 / local-first 红线）；
 //    角色标签即终态（对齐 meetscribe 先例）。
 
 import type { AudioSourceMode } from "@/lib/audio-source-mode";
@@ -79,11 +77,6 @@ export type SpeakerRole = Speaker;
 
 /** 遗留别名，等价 LEAK_ENERGY_RATIO。 */
 export const SPEAKER_LEAKAGE_RATIO = LEAK_ENERGY_RATIO;
-
-export const SPEAKER_ROLE_LABELS: Record<SpeakerRole, string> = {
-  you: "我",
-  remote: "对方",
-};
 
 export interface SpeakerWindow {
   source: AttributionSource;

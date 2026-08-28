@@ -7,14 +7,13 @@ import {
   resolveSpeakerRole,
   speakerBadge,
   SPEAKER_LEAKAGE_RATIO,
-  SPEAKER_ROLE_LABELS,
   type TrackAttributionInput,
 } from "@/lib/speaker-attributes";
 
 // 主线二 2.2-a 说话人归属回归（node:assert 风格，纯函数、无 IO、零模型）：
-// 裁决（2026-08-28）= 接口就位 + 映射退化：AudioChunkReadyEvent 无 energy 字段，
-// 运行时能量恒 undefined/null → 泄漏判定跳过、纯通道映射（mic→you / system→remote）；
-// C# capture_ready 未来透出 energy 后泄漏判定自动生效，调用侧无需改动。
+// energy 已激活（2026-08-28）：C# 透出窗口峰值 RMS → 泄漏跟随（<30%）生效；
+// 旧版 helper 无 energy 字段 → 自动退化为通道确定性映射（microphone→you /
+// system→remote）。
 // a) 单轨通道映射  b) 能量无效退化  c) 泄漏跟随  d) 能量相当各归各
 // e) 泄漏边界（严格小于）  f) 区间不相交视为无重叠  g) 纯函数不改入参  h) 确定性
 // 末段附遗留窗口 API 回归（useDesktopTranscript 运行时路径）与 2.2-b 接线层/UI
@@ -208,9 +207,6 @@ const attributed = attributeSpeakers([
 assert.deepEqual(attributed.map((item) => item.speaker), ["you", "you", "remote"]);
 assert.equal(attributed[1].startMs, 1000);
 assert.equal(attributed[2].peakLevel, 0.9);
-// 标签字典：角色可渲染
-assert.equal(SPEAKER_ROLE_LABELS.you, "我");
-assert.equal(SPEAKER_ROLE_LABELS.remote, "对方");
 
 // ---- 2.2-b 接线层回归：attributeChunkSpeaker（hook → chunk.speaker 的可测纯裁决）----
 // 仅 mixed 双轨模式标注；单轨（mic|system 模式）不标（行为零变化红线）
