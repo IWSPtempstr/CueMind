@@ -1,9 +1,7 @@
 // One tappable suggestion tile: type chip, preview line, dimmed when not in the newest batch.
 
-import type {
-  KeyboardEvent as ReactKeyboardEvent,
-  ReactElement,
-} from "react";
+import { useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from "react";
+import ReactMarkdown from "react-markdown";
 import type { ContextCard, Suggestion } from "@/types/suggestions";
 import type { SuggestionFeedback } from "@/hooks/useSuggestions";
 
@@ -101,6 +99,17 @@ export default function SuggestionCard({
 }
 
 export function ContextCardView({ card }: ContextCardProps): ReactElement {
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+
+  const toggleSource = (url: string): void => {
+    setExpandedSources((previous) => {
+      const next = new Set(previous);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+
   return (
     <article className="rounded-lg border border-blue-800/70 bg-blue-950/20 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -109,25 +118,45 @@ export function ContextCardView({ card }: ContextCardProps): ReactElement {
           {card.latencyMs.total}ms
         </span>
       </div>
-      <p className="mt-2 text-sm leading-relaxed text-neutral-200">{card.explanation}</p>
+      {card.keyPoints && card.keyPoints.length > 0 ? (
+        <div className="prose prose-sm prose-invert mt-2 max-w-none text-sm text-neutral-200">
+          <ReactMarkdown>{card.keyPoints.map((point) => `- ${point}`).join("\n")}</ReactMarkdown>
+        </div>
+      ) : card.explanation ? (
+        <p className="mt-2 text-sm leading-relaxed text-neutral-200">{card.explanation}</p>
+      ) : null}
       <div className="mt-3 border-t border-blue-900/60 pt-3">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-300">为什么现在相关</p>
         <p className="mt-1 text-xs leading-relaxed text-neutral-400">{card.whyNow}</p>
       </div>
       <div className="mt-3 flex flex-col gap-1.5 border-t border-blue-900/60 pt-3">
         {card.sources.map((source) => (
-          <a
-            key={source.url}
-            href={source.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 truncate text-xs text-blue-300 underline decoration-blue-900 underline-offset-2 hover:text-blue-200"
-          >
-            <span className="shrink-0 rounded border border-blue-800 px-1 py-0.5 text-[10px] text-blue-300">
-              {sourceBadge(source.sourceType)}
-            </span>
-            <span className="truncate">{source.title}</span>
-          </a>
+          <div key={source.url} className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-xs text-blue-300 underline decoration-blue-900 underline-offset-2 hover:text-blue-200"
+              >
+                <span className="shrink-0 rounded border border-blue-800 px-1 py-0.5 text-[10px] text-blue-300">
+                  {sourceBadge(source.sourceType)}
+                </span>
+                <span className="truncate">{source.title}</span>
+              </a>
+              <button
+                type="button"
+                aria-expanded={expandedSources.has(source.url)}
+                onClick={() => toggleSource(source.url)}
+                className="shrink-0 rounded border border-blue-900 px-1.5 py-0.5 text-[10px] text-blue-300 hover:bg-blue-950"
+              >
+                {expandedSources.has(source.url) ? "▾ 收起" : "▸ 证据"}
+              </button>
+            </div>
+            {expandedSources.has(source.url) && source.snippet ? (
+              <p className="line-clamp-4 text-[11px] leading-relaxed text-neutral-400">{source.snippet}</p>
+            ) : null}
+          </div>
         ))}
       </div>
     </article>

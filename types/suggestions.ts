@@ -45,7 +45,10 @@ export interface ContextCard {
   contextStartMs: number;
   contextEndMs: number;
   keyword: string;
-  explanation: string;
+  /** 新格式：2-4 条简短要点（keyPoints 渲染为 markdown 列表）。 */
+  keyPoints?: string[];
+  /** 旧格式兼容字段：历史卡片快照只有纯文本 explanation，新卡片不再产出。 */
+  explanation?: string;
   whyNow: string;
   sources: [ContextCardSource, ContextCardSource];
   createdAt: Date;

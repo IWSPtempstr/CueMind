@@ -293,7 +293,7 @@ export default function Home(): ReactElement {
       void fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ earlierTranscript: transcriptRef.current.map((chunk) => chunk.text).join("\n"), summarizationPrompt: END_OF_MEETING_PROMPT }),
+        body: JSON.stringify({ earlierTranscript: transcriptRef.current.map((chunk) => chunk.text).join("\n"), summarizationPrompt: END_OF_MEETING_PROMPT, polish: true }),
       }).then(async (response) => {
         const payload: unknown = await response.json();
         if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Could not build the meeting report");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
+import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { TranscriptChunk } from "@/types/session";
 
 const MIN_TRANSCRIBE_BYTES = 1000;
@@ -18,7 +18,8 @@ interface Segment {
   peakLevel: number;
 }
 
-interface TranscribeSuccessResponse { text: string }
+interface UploadMediaChunkResponse { text: string }
+interface UploadMediaSuccessResponse { chunks: UploadMediaChunkResponse[] }
 interface TranscribeErrorResponse { error: string }
 
 interface UseMicRecorderResult {
@@ -36,8 +37,8 @@ interface UseMicRecorderResult {
   error: string | null;
 }
 
-function isTranscribeSuccess(value: unknown): value is TranscribeSuccessResponse {
-  return typeof value === "object" && value !== null && "text" in value && typeof (value as TranscribeSuccessResponse).text === "string";
+function isTranscribeSuccess(value: unknown): value is UploadMediaSuccessResponse {
+  return typeof value === "object" && value !== null && "chunks" in value && Array.isArray((value as UploadMediaSuccessResponse).chunks);
 }
 
 function isTranscribeError(value: unknown): value is TranscribeErrorResponse {
@@ -105,21 +106,26 @@ export default function useMicRecorder(): UseMicRecorderResult {
   const transcribeBlob = useCallback(async (blob: Blob, timestamp: Date, attempt = 1): Promise<void> => {
     const settings = loadCueMindSettings();
     const formData = new FormData();
-    formData.append("audio", blob, TRANSCRIBE_UPLOAD_FILENAME);
-    if (settings.transcriptionLanguage !== "auto") formData.append("language", settings.transcriptionLanguage);
+    formData.append("media", blob, TRANSCRIBE_UPLOAD_FILENAME);
+    if (settings.localWhisperLanguage !== "auto") formData.append("language", settings.localWhisperLanguage);
+    formData.append("whisperPath", settings.localWhisperPath);
+    formData.append("whisperModelPath", settings.localWhisperModelPath);
+    formData.append("uploadId", crypto.randomUUID());
 
     try {
-      const response = await fetch("/api/transcribe", {
+      const response = await fetch("/api/upload-media", {
         method: "POST",
         body: formData,
-        headers: groqRequestHeaders(settings),
       });
       const payload: unknown = await response.json();
       if (!response.ok) throw new Error(isTranscribeError(payload) ? payload.error : "Transcription failed");
-      if (isTranscribeSuccess(payload) && payload.text.trim()) {
+      const text = isTranscribeSuccess(payload)
+        ? payload.chunks.map((chunk) => (typeof chunk.text === "string" ? chunk.text : "")).join(" ").trim()
+        : "";
+      if (text) {
         setTranscriptState((previous) => [
           ...previous,
-          { id: crypto.randomUUID(), text: payload.text.trim(), timestamp },
+          { id: crypto.randomUUID(), text, timestamp },
         ].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()));
       }
       setError(null);
@@ -210,6 +216,11 @@ export default function useMicRecorder(): UseMicRecorderResult {
 
   const startRecording = useCallback(async (): Promise<void> => {
     setError(null);
+    const settings = loadCueMindSettings();
+    if (!settings.localWhisperPath.trim() || !settings.localWhisperModelPath.trim()) {
+      setError("浏览器麦克风实时转写需要先在设置中填写 whisper.cpp 可执行文件和模型路径");
+      return;
+    }
     if (typeof MediaRecorder === "undefined") {
       setError("MediaRecorder is not supported in this browser.");
       return;
@@ -224,7 +235,6 @@ export default function useMicRecorder(): UseMicRecorderResult {
       return;
     }
 
-    const settings = loadCueMindSettings();
     cadenceMsRef.current = settings.chunkIntervalSeconds * 1000;
     streamRef.current = stream;
     mimeTypeRef.current = pickMimeType();

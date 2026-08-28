@@ -91,7 +91,17 @@ export default function MicTranscript(props: Props): ReactElement {
         </div>
 
         <div className="flex flex-col">
-          {filtered.map((chunk, index) => <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>)}
+          {filtered.map((chunk, index) => {
+            const previous = index > 0 ? filtered[index - 1] : undefined;
+            // 相邻两条都有时间戳且间隔 >800ms 时视为话题边界，加大间距分段（老数据无时间戳不触发）。
+            const isTopicBreak = previous !== undefined
+              && typeof previous.endMs === "number"
+              && typeof chunk.startMs === "number"
+              && chunk.startMs - previous.endMs > 800;
+            return (
+              <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
+            );
+          })}
           {transcriptChunks.length === 0 ? <p className="text-center text-sm text-neutral-600">还没有转写，点击麦克风开始。</p> : null}
           {transcriptChunks.length > 0 && filtered.length === 0 ? <p className="text-center text-sm text-neutral-600">没有匹配的转写内容。</p> : null}
           <div ref={endRef} aria-hidden />
