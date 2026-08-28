@@ -1,13 +1,79 @@
-// 双通道说话人归属（决策 58 边界下的纯 DSP 能量标注）：
-// Windows 双轨采集天然分离 mic/system 两轨——按通道归属角色（YOU/REMOTE），
-// 零模型成本。时间重叠区能量高者为主；本轨能量低于主轨 30% 判为串音泄漏，
-// 跟随主轨标签。不做 pyannote 云端 diarization（local-first 红线），
-// 不做真实说话人姓名（角色标签即终态，对齐 meetscribe 先例）。
+// 双通道说话人归属（主线二 2.2-a）：零模型、纯 DSP 接口，无副作用。
+// ① 裁决（2026-08-28）：接口就位 + 映射退化。AudioChunkReadyEvent 当前无 energy 字段，
+//    运行时能量恒为 undefined/null → 泄漏判定跳过，实际退化为通道确定性映射
+//    （microphone→you / system→remote）。
+// ② C# capture_ready 未来透出 energy 字段后，本函数自动升级为能量泄漏跟随判定，
+//    调用侧无需改动（energy 为可选字段，事件与 overlapWith 透传即可生效）。
+// ③ pyannote 云端 diarization 明确不做（决策 58 / local-first 红线）；
+//    角色标签即终态（对齐 meetscribe 先例）。
 
-export type SpeakerRole = "you" | "remote";
+export type Speaker = "you" | "remote";
 
-/** 泄漏判定比例：本轨能量 < 主轨能量 × 0.3 视为串音。 */
-export const SPEAKER_LEAKAGE_RATIO = 0.3;
+/** 桌面双轨采集源（types/session.ts AudioSource 的桌面取值；upload 不参与双轨归属）。 */
+export type AttributionSource = "microphone" | "system";
+
+/** 泄漏判定比例：本轨能量 < 主轨能量 × 0.3（30%）视为串音泄漏，跟随主轨标签。 */
+export const LEAK_ENERGY_RATIO = 0.3;
+
+export interface TrackAttributionInput {
+  /** 采集轨道：microphone（本机）→ you；system（远端播放）→ remote。 */
+  source: AttributionSource;
+  /** 0..1 RMS 能量；当前 C# 事件无此字段 → undefined，泄漏判定跳过。 */
+  energy?: number | null;
+  /** 时间重叠的对轨 chunk；startMs/endMs 供函数复核区间是否真实相交。 */
+  overlapWith?: {
+    source: AttributionSource;
+    energy?: number | null;
+    startMs: number;
+    endMs: number;
+  } | null;
+  /** 本轨 chunk 时间区间；缺省时信任 overlapWith 的时间重叠声明。 */
+  startMs?: number;
+  endMs?: number;
+}
+
+function baseSpeaker(source: AttributionSource): Speaker {
+  return source === "microphone" ? "you" : "remote";
+}
+
+/** 能量有效性：有限非负数字；undefined/null/NaN/负数/Infinity 均无效。 */
+function isValidEnergy(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function hasTimeOverlap(
+  input: TrackAttributionInput,
+  overlap: NonNullable<TrackAttributionInput["overlapWith"]>,
+): boolean {
+  // 本轨区间未知（startMs/endMs 缺省）→ 信任调用方的时间重叠声明；
+  // 区间已知则复核（半开区间相交，贴边不算重叠）。
+  if (typeof input.startMs !== "number" || typeof input.endMs !== "number") return true;
+  return input.startMs < overlap.endMs && overlap.startMs < input.endMs;
+}
+
+/**
+ * 单 chunk 说话人裁决（纯函数）：
+ * - 基础映射：microphone → "you"；system → "remote"。
+ * - 存在时间重叠的对轨 chunk 且双方能量均为有效数字时：能量高者为主轨，
+ *   本轨能量 < 主轨 × LEAK_ENERGY_RATIO 判为串音泄漏、跟随主轨标签；
+ *   能量相当（或本轨更高）→ 各归各通道（同时说话）。
+ * - 任一能量无效（undefined/null/NaN/负数）→ 纯通道映射（当前运行时路径）。
+ */
+export function attributeSpeaker(input: TrackAttributionInput): Speaker {
+  const own = baseSpeaker(input.source);
+  const overlap = input.overlapWith;
+  if (!overlap || !hasTimeOverlap(input, overlap)) return own;
+  if (!isValidEnergy(input.energy) || !isValidEnergy(overlap.energy)) return own;
+  if (input.energy >= overlap.energy) return own;
+  return input.energy < overlap.energy * LEAK_ENERGY_RATIO ? baseSpeaker(overlap.source) : own;
+}
+
+// ---- 遗留窗口 API（useDesktopTranscript 运行时路径仍在用；语义并入 attributeSpeaker 核心）----
+
+export type SpeakerRole = Speaker;
+
+/** 遗留别名，等价 LEAK_ENERGY_RATIO。 */
+export const SPEAKER_LEAKAGE_RATIO = LEAK_ENERGY_RATIO;
 
 export const SPEAKER_ROLE_LABELS: Record<SpeakerRole, string> = {
   you: "我",
@@ -15,46 +81,44 @@ export const SPEAKER_ROLE_LABELS: Record<SpeakerRole, string> = {
 };
 
 export interface SpeakerWindow {
-  /** 采集轨道：microphone（本机）或 system（远端播放）。 */
-  source: "microphone" | "system";
+  source: AttributionSource;
   startMs: number;
   endMs: number;
-  /** 窗口峰值电平 0..1；缺失按 1 处理（仅剩时间重叠语义）。 */
+  /** 窗口峰值电平 0..1；缺失按 1 处理（等价能量未知 → 纯通道映射语义）。 */
   peakLevel?: number;
 }
 
-function baseRole(source: SpeakerWindow["source"]): SpeakerRole {
-  return source === "microphone" ? "you" : "remote";
-}
-
-function level(window: SpeakerWindow): number {
-  return window.peakLevel ?? 1;
-}
-
-function overlaps(a: SpeakerWindow, b: SpeakerWindow): boolean {
+function windowsOverlap(a: SpeakerWindow, b: SpeakerWindow): boolean {
   return a.startMs < b.endMs && b.startMs < a.endMs;
 }
 
 /**
- * 单窗口角色裁决：otherTrack 传对轨（mic↔system）窗口序列（可含本窗口之外的任意集合，
- * 函数内部按 source 与时间重叠过滤）。无重叠 → 本轨角色；有重叠 → 能量高者为主，
- * 本轨能量低于主轨 SPEAKER_LEAKAGE_RATIO 倍判为泄漏、跟随主轨。
+ * 遗留单窗口裁决：otherTrack 传对轨（mic↔system）窗口序列，内部按 source 与
+ * 时间重叠过滤、取能量最强者为主轨，再交由 attributeSpeaker 核心裁决。
  */
 export function resolveSpeakerRole(window: SpeakerWindow, otherTrack: SpeakerWindow[]): SpeakerRole {
   let strongest: SpeakerWindow | null = null;
   for (const other of otherTrack) {
     if (other.source === window.source) continue;
-    if (!overlaps(window, other)) continue;
-    if (strongest === null || level(other) > level(strongest)) strongest = other;
+    if (!windowsOverlap(window, other)) continue;
+    if (strongest === null || (other.peakLevel ?? 1) > (strongest.peakLevel ?? 1)) strongest = other;
   }
-  if (strongest === null) return baseRole(window.source);
-  if (level(window) < level(strongest) * SPEAKER_LEAKAGE_RATIO) {
-    return baseRole(strongest.source);
-  }
-  return baseRole(window.source);
+  if (strongest === null) return baseSpeaker(window.source);
+  return attributeSpeaker({
+    source: window.source,
+    energy: window.peakLevel ?? 1,
+    overlapWith: {
+      source: strongest.source,
+      energy: strongest.peakLevel ?? 1,
+      startMs: strongest.startMs,
+      endMs: strongest.endMs,
+    },
+    startMs: window.startMs,
+    endMs: window.endMs,
+  });
 }
 
-/** 批量版：对序列内每个窗口按其余窗口做对轨裁决，返回带 speaker 的副本。 */
+/** 遗留批量版：对序列内每个窗口按其余窗口做对轨裁决，返回带 speaker 的副本。 */
 export function attributeSpeakers(
   windows: SpeakerWindow[],
 ): Array<SpeakerWindow & { speaker: SpeakerRole }> {
