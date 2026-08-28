@@ -21,6 +21,8 @@ interface Props {
   isDesktop?: boolean;
   audioSourceMode?: AudioSourceMode;
   onAudioSourceModeChange?: (mode: AudioSourceMode) => void;
+  /** 进行中 segment 的临时转写（决策 66 partial 态，仅麦克风链路）；confirmed 到达后置 null。 */
+  partialText?: string | null;
 }
 
 function Highlight({ text, query }: { text: string; query: string }): ReactElement {
@@ -37,7 +39,7 @@ function windowIndexOf(id: string): number | null {
 }
 
 export default function MicTranscript(props: Props): ReactElement {
-  const { transcriptChunks, isRecording, isPaused, micLevel, retryCount, onRecordingChange, onPauseToggle, recordingError, meetingReport, isReportLoading, isUploadProcessing = false, uploaderSlot, isDesktop = false, audioSourceMode = "mixed", onAudioSourceModeChange } = props;
+  const { transcriptChunks, isRecording, isPaused, micLevel, retryCount, onRecordingChange, onPauseToggle, recordingError, meetingReport, isReportLoading, isUploadProcessing = false, uploaderSlot, isDesktop = false, audioSourceMode = "mixed", onAudioSourceModeChange, partialText = null } = props;
   const endRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"mic" | "upload">("mic");
@@ -113,7 +115,12 @@ export default function MicTranscript(props: Props): ReactElement {
               <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
             );
           })}
-          {transcriptChunks.length === 0 ? <p className="text-center text-sm text-neutral-600">还没有转写，点击麦克风开始。</p> : null}
+          {isRecording && !isPaused && partialText ? (
+            <article className="py-3 border-t border-neutral-800" aria-live="polite">
+              <p className="text-sm italic leading-relaxed text-neutral-500">{partialText}<span className="animate-pulse"> …</span></p>
+            </article>
+          ) : null}
+          {transcriptChunks.length === 0 && !partialText ? <p className="text-center text-sm text-neutral-600">还没有转写，点击麦克风开始。</p> : null}
           {transcriptChunks.length > 0 && filtered.length === 0 ? <p className="text-center text-sm text-neutral-600">没有匹配的转写内容。</p> : null}
           <div ref={endRef} aria-hidden />
         </div>

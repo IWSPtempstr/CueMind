@@ -528,6 +528,7 @@ export default function Home(): ReactElement {
           transcriptChunks={recorder.transcriptChunks}
           isRecording={recorder.isRecording}
           isPaused={recorder.isPaused}
+          partialText={recorder === browserRecorder ? browserRecorder.partialText : null}
           micLevel={recorder.micLevel}
           retryCount={recorder.retryCount}
           onRecordingChange={handleRecordingChange}
