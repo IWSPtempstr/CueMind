@@ -1,9 +1,9 @@
 "use client";
 
-// Manages chat messages, Groq SSE streaming via /api/chat, and bridging suggestion preview/detail into the thread.
+// Manages chat messages, local llama-server SSE streaming via /api/chat, and bridging suggestion preview/detail into the thread.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
+import { loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
 import { CHAT_HISTORY_MAX_MESSAGES } from "@/lib/prompts";
 import type { TranscriptChunk } from "@/types/session";
@@ -241,7 +241,6 @@ export default function useChat({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...groqRequestHeaders(settings),
           },
           body: JSON.stringify({
             message: trimmed,

@@ -41,7 +41,7 @@ interface RouteTrace {
 }
 
 interface RoutePayload {
-  card: { keyword: string; explanation: string; whyNow: string } | null;
+  card: { keyword: string; keyPoints: string[]; whyNow: string } | null;
   failure?: { reason: string };
   trace: RouteTrace;
 }
@@ -207,7 +207,7 @@ async function testLocalProviderSelected(): Promise<void> {
     } else {
       writeJson(res, 200, chatCompletion({
         keyword: "KV Cache",
-        explanation: "缓存键值对以加速大模型推理。",
+        keyPoints: ["缓存键值对，加速大模型推理。", "KV Cache 命中率直接影响吞吐。", "会议正讨论推理优化。"],
         whyNow: "会议正在讨论吞吐优化。",
       }));
     }
@@ -228,6 +228,11 @@ async function testLocalProviderSelected(): Promise<void> {
     assert.equal(payload.trace.decisionSource, "model");
     assert.equal(payload.trace.finalState, "card_shown");
     assert.equal(payload.card.keyword, "KV Cache");
+    assert.deepEqual(
+      payload.card.keyPoints,
+      ["缓存键值对，加速大模型推理。", "KV Cache 命中率直接影响吞吐。", "会议正讨论推理优化。"],
+      "card must carry the new keyPoints array",
+    );
     assert.equal(calls, 2);
   } finally {
     await stopMockServer(server);
@@ -243,7 +248,7 @@ async function testRemoteProviderSelected(): Promise<void> {
     } else {
       writeJson(res, 200, chatCompletion({
         keyword: "KV Cache",
-        explanation: "缓存键值对以加速大模型推理。",
+        keyPoints: ["缓存键值对，加速大模型推理。", "KV Cache 命中率直接影响吞吐。", "会议正讨论推理优化。"],
         whyNow: "会议正在讨论吞吐优化。",
       }));
     }
@@ -306,7 +311,7 @@ async function testInvalidCardSchema(): Promise<void> {
     if (calls === 1) {
       writeJson(res, 200, chatCompletion({ keyword: "KV Cache" }));
     } else {
-      writeJson(res, 200, chatCompletion({ keyword: "KV Cache", explanation: "缺少 whyNow 字段" }));
+      writeJson(res, 200, chatCompletion({ keyword: "KV Cache", whyNow: "缺少 keyPoints 字段" }));
     }
   });
   try {
@@ -410,7 +415,7 @@ async function testDistinctNormalizedKeywordIsNotSuppressed(): Promise<void> {
     } else {
       writeJson(res, 200, chatCompletion({
         keyword: "KV Cache",
-        explanation: "缓存键值对以加速大模型推理。",
+        keyPoints: ["缓存键值对，加速大模型推理。", "KV Cache 命中率直接影响吞吐。", "会议正讨论推理优化。"],
         whyNow: "会议正在讨论吞吐优化。",
       }));
     }
@@ -461,7 +466,7 @@ async function testLiveSimpleBodyWithoutMetadataGeneratesCard(): Promise<void> {
     } else {
       writeJson(res, 200, chatCompletion({
         keyword: "KV Cache",
-        explanation: "缓存键值对以加速大模型推理。",
+        keyPoints: ["缓存键值对，加速大模型推理。", "KV Cache 命中率直接影响吞吐。", "会议正讨论推理优化。"],
         whyNow: "会议正在讨论吞吐优化。",
       }));
     }
@@ -509,7 +514,7 @@ async function testTavilyFallsBackToAgentReachWhenKeyMissing(): Promise<void> {
     } else {
       writeJson(res, 200, chatCompletion({
         keyword: "Agent Harness",
-        explanation: "用于组织模型、工具与执行循环的代理运行框架。",
+        keyPoints: ["组织模型、工具与执行循环的代理框架。", "Harness 决定 Agent 的运行方式。", "会议正讨论其设计。"],
         whyNow: "会议正在讨论 Agent Harness 的设计与实现。",
       }));
     }
@@ -605,7 +610,7 @@ async function testServerTavilyKeyTakesPrecedence(): Promise<void> {
     return originalFetch(input, init);
   }) as typeof fetch;
   const { server, baseUrl } = await startMockServer((_req, res) => {
-    writeJson(res, 200, chatCompletion({ keyword: "Agent Harness", explanation: "解释", whyNow: "现在相关" }));
+    writeJson(res, 200, chatCompletion({ keyword: "Agent Harness", keyPoints: ["解释要点"], whyNow: "现在相关" }));
   });
   try {
     const response = await POST(makeRequest(baseBody({

@@ -1,6 +1,5 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { GROQ_API_KEY_HEADER } from "@/lib/prompts";
 
 interface RateWindow {
   count: number;
@@ -61,14 +60,6 @@ export function enforceRateLimit(
       },
     },
   );
-}
-
-export function resolveGroqApiKey(request: NextRequest): string | null {
-  // The custom header intentionally keeps BYO-key browser requests non-simple,
-  // so cross-origin callers cannot silently send a user's key without preflight.
-  const supplied = request.headers.get(GROQ_API_KEY_HEADER)?.trim();
-  const fallback = process.env.GROQ_API_KEY?.trim();
-  return supplied || fallback || null;
 }
 
 export function cappedText(value: unknown, maxChars: number): string {

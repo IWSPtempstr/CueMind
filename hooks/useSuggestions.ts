@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { groqRequestHeaders, loadCueMindSettings } from "@/hooks/useSettings";
+import { loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
 import type { TranscriptChunk } from "@/types/session";
 import type { Suggestion, SuggestionBatch } from "@/types/suggestions";
@@ -78,7 +78,7 @@ export default function useSuggestions({ transcriptChunks, isRecording }: UseSug
       if (earlierText) {
         const response = await fetch("/api/summarize", {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...groqRequestHeaders(settings) },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ earlierTranscript: earlierText, summarizationPrompt: settings.summarizationPrompt }),
         });
         const payload: unknown = await response.json();
@@ -91,7 +91,7 @@ export default function useSuggestions({ transcriptChunks, isRecording }: UseSug
       const previousSuggestions = [...latestPreviews, ...dismissedPreviewsRef.current.slice(-12)].join("\n");
       const response = await fetch("/api/suggestions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...groqRequestHeaders(settings) },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recentTranscript: recentText, earlierSummary, previousSuggestions, suggestionsPrompt: settings.suggestionsPrompt }),
       });
       const payload: unknown = await response.json();

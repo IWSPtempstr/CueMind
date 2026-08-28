@@ -1,13 +1,4 @@
-// Model IDs, prompts, Groq request constants (header name, token/temperature limits), and transcript context sizes.
-
-export const GROQ_API_KEY_HEADER = "x-groq-api-key";
-
-export const MODELS = {
-  transcription: "whisper-large-v3",
-  suggestions: "openai/gpt-oss-120b",
-  chat: "openai/gpt-oss-120b",
-  summarization: "openai/gpt-oss-120b",
-} as const;
+// Prompt templates and transcript context sizes.
 
 export const RECENT_CONTEXT_CHARS = 3000;
 export const EARLIER_CONTEXT_CHARS = 4000;
