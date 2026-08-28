@@ -142,6 +142,16 @@ export function sliceWavToWindowBuffers(buffer: Buffer, windowMs: number): Buffe
   return windows;
 }
 
+// ---------------------------------------------------------------------------
+// 长会话内存语义（master plan 2.3-a，核实日期 2026-08-28）：
+// 切窗全程流式，内存驻留与媒体时长/窗口总数无关——
+//   1. parseWavLayoutFromFile 只逐块读取 chunk 头并 seek 跳过载荷，PCM 永不进内存；
+//   2. 窗口拷贝复用单个 4MiB 块（STREAM_COPY_CHUNK_BYTES），每个源字节只读一次。
+// 窗口文件写入调用方的 mkdtemp 临时目录，由 lib/upload-media.ts 的 finally 整目录
+// 清理；跨请求状态只保留文本 + 时间戳元数据。
+// 结论：P0-R6 已覆盖，无需额外交付。
+// ---------------------------------------------------------------------------
+
 /**
  * File-level wrapper used by lib/upload-media.ts: streams the converted WAV
  * from disk in fixed-size chunks instead of buffering it whole, then either

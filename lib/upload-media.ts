@@ -325,6 +325,17 @@ function fail(message: string): ParseOutcome {
 // incrementally. The legacy handleUploadMedia above stays untouched for
 // old clients / existing regression tests.
 // ---------------------------------------------------------------------------
+//
+// 长会话内存语义（master plan 2.3-a，核实日期 2026-08-28）：
+// 流式管线不存在整文件 PCM 常驻。单次请求的内存驻留仅两部分——
+//   1. 4MiB 复用拷贝块（lib/wav-slice.ts 的 STREAM_COPY_CHUNK_BYTES，切窗流式复制）；
+//   2. 当前正在转写的那个窗口文件（其余窗口只是磁盘上的临时文件）。
+// 原始 media 字节仅短暂驻留：下方 Buffer.from(await file.arrayBuffer()) 是一次性
+// 临时表达式，writeFile 落盘完成后该 Buffer 引用即出作用域、可被 GC 回收（File
+// 对象本身随请求处理结束一并释放）。已转写窗口随 mkdtemp 临时目录在 finally 中
+// 整目录删除；跨请求状态只保留文本 + 时间戳元数据（chunks/segments），不累积
+// 任何音频字节。
+// 结论：P0-R6（切片流式化）已覆盖，无需额外交付。
 
 /** Transcription window length for the streaming pipeline. */
 export const STREAM_WINDOW_MS = 60_000;
@@ -418,6 +429,9 @@ export async function* processUploadStreaming(
   try {
     const extension = getFileExtension(fields.file.name);
     const inputPath = join(tempDir, `${randomUUID()}${extension ? `.${extension}` : ""}`);
+    // One-shot temporary Buffer: the reference leaves scope right after this
+    // write completes and is GC-recyclable — no whole-file PCM stays resident
+    // (see the 长会话内存语义 note in the streaming-pipeline header above).
     await writeFile(inputPath, Buffer.from(await fields.file.arrayBuffer()));
 
     const wavOutputPath = join(tempDir, "media-16k.wav");
