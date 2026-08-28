@@ -174,8 +174,15 @@ export default function Home(): ReactElement {
     if (!activeSessionId || !hasContent) return;
     const id = window.setTimeout(() => {
       try {
-        setSessions(storeSession({ ...snapshot, id: activeSessionId, updatedAt: new Date() }));
+        const snapshotToSave = { ...snapshot, id: activeSessionId, updatedAt: new Date() };
+        setSessions(storeSession(snapshotToSave));
         setPersistenceError(null);
+        // M1 服务端会话持久化：fire-and-forget，失败静默，绝不阻塞自动保存主流程。
+        void fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshotToSave),
+        }).catch(() => undefined);
       } catch {
         setPersistenceError("Session autosave ran out of browser storage. Export this meeting to keep it safe.");
       }
