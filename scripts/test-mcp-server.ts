@@ -1,23 +1,32 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
-import { readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// mcp-server（M1-b，本地只读 stdio MCP）spawn 自测。
+// mcp-server（M1-b + M2-b，本地只读 stdio MCP）spawn 自测。
 // 不依赖 MCP SDK 客户端：child_process.spawn 直接起 node mcp-server/dist/index.js，
 // 按 MCP stdio 约定（换行分隔 JSON-RPC，stdout 上不得出现任何非 JSON-RPC 内容）收发。
 // 断言：
 //   a) initialize 返回 serverInfo
-//   b) tools/list 含三个工具
+//   b) tools/list 含 M1 三工具
 //   c) list_sessions 返回元数据数组（无 transcriptJson/cardsJson/metricsJson 载荷）
 //   d) get_session offset/limit 分页正确（total/hasMore），不存在 id → 可解释错误终态，
 //      chunk 白名单剥离 latency（trace payload）
 //   e) search_transcripts 中文 query 命中（2-gram），含 matchedExcerpt
-//   f) 只读断言：调用前后 .data 文件清单一致、无新增文件、cuemind.db 主文件 size+mtime
-//      不变（-shm/-wal mtime 允许因读触碰）、sessions 行数不变
+//   h) tools/list 含 6 个工具（新增 search_cards / get_card / get_session_ledger）
+//   i) get_session_ledger：m2-smoke 会话的 card_shown 账本行 + finalStateSummary 自洽
+//   j) search_cards：term 子串命中（大小写不敏感）+ sessionTitle（LEFT JOIN 语义）；
+//      keyword 二次匹配与空白/无命中路径
+//   k) get_card：账本部分完整；卡片正文按实际归档状态断言（未归档 → note 存在且不谎报）；
+//      不存在的 card_id → error 终态
+//   l) 只读断言（M1 f 模式扩展）：文件清单一致、cuemind.db 主文件 size+mtime 不变，
+//      sessions 与 candidates 行数均不变
+//   m) 空结果路径：ledger 查不存在 session → 空数组 + total 0（非错误终态）
 //   g) db 缺失路径：CUEMIND_DATA_DIR=/tmp/nonexistent-mcp → 工具返回可解释 error 终态且 server 不崩
+// 账本种子策略：优先用真实 .data（m2-smoke 的 card_shown 行已由主项目真机写入）；若缺失，
+// 复制 .data 到临时目录并灌 sessions+candidates 种子（绝不写开发 .data）。
 // 前置：cd CueMind && (cd mcp-server && npm install && npm run build)；dev server :3000 在跑且
 // .data 已有种子数据（mcp-seed-a=7 chunks / mcp-seed-b=5 chunks，见仓库 README 或灌数脚本）。
 
@@ -29,6 +38,16 @@ const REQUEST_TIMEOUT_MS = 20_000;
 
 const SEED_A = "mcp-seed-a";
 const SEED_B = "mcp-seed-b";
+const SEED_M2 = "m2-smoke";
+
+// 隔离灌种时的确定种子（只写临时目录副本；卡片正文归档进 sessions.cards_json 以覆盖
+// get_card 的归档命中路径与 search_cards 的 keyword 二次匹配路径）。
+const SEED_CANDIDATE_ID = "seed-candidate-spec-decode";
+const SEED_CARD_ID = "seed-card-spec-decode";
+const SEED_CANDIDATE_2_ID = "seed-candidate-ring-attention";
+const SEED_CARD_2_ID = "seed-card-ring-attention";
+const SEED_CREATED_AT = "2026-08-28T06:14:07.139Z";
+const SEED_M2_TITLE = "M2 冒烟：speculative decoding 讨论卡";
 
 interface JsonRpcResponse {
   jsonrpc: "2.0";
@@ -57,6 +76,61 @@ interface GetSessionPayload {
 
 interface SearchPayload {
   results: Array<{ sessionId: string; title: string; updatedAt: string; matchedExcerpt: string }>;
+}
+
+interface SearchCardsPayload {
+  query: string;
+  results: Array<{
+    candidateId: string;
+    sessionId: string;
+    sessionTitle: string | null;
+    term: string | null;
+    finalState: string;
+    cardId: string | null;
+    createdAt: string;
+  }>;
+}
+
+interface GetCardPayload {
+  ledger: {
+    sessionId: string;
+    sessionTitle: string | null;
+    candidateId: string;
+    term: string | null;
+    finalState: string;
+    suppressReason: string | null;
+    cardId: string | null;
+    createdAt: string;
+  };
+  card: Record<string, unknown> | null;
+  note?: string;
+}
+
+interface GetSessionLedgerPayload {
+  sessionId: string;
+  candidates: Array<{
+    candidateId: string;
+    term: string | null;
+    finalState: string;
+    suppressReason: string | null;
+    cardId: string | null;
+    createdAt: string;
+  }>;
+  total: number;
+  finalStateSummary: Record<string, number>;
+}
+
+/** 账本夹具：优先真实 .data 的 card_shown 行；不可用时降级为临时目录灌种。 */
+interface CandidateFixture {
+  dataDir: string;
+  sessionId: string;
+  candidateId: string;
+  term: string | null;
+  finalState: string;
+  cardId: string;
+  createdAt: string;
+  /** true = 用的是临时目录灌种（此时卡片正文归档可断言）。 */
+  seeded: boolean;
 }
 
 /** 极简 MCP stdio 客户端：换行分隔 JSON-RPC，按 id 匹配响应。 */
@@ -159,27 +233,210 @@ function toolPayload<T>(result: unknown): T {
   return JSON.parse(parseToolText(result).content[0].text) as T;
 }
 
-function snapshotDataDir(): Map<string, string> {
+function snapshotDataDir(dataDir: string): Map<string, string> {
   const snapshot = new Map<string, string>();
-  for (const name of readdirSync(DATA_DIR).sort()) {
-    const stats = statSync(path.join(DATA_DIR, name));
+  for (const name of readdirSync(dataDir).sort()) {
+    const stats = statSync(path.join(dataDir, name));
     snapshot.set(name, `${stats.size}/${stats.mtimeMs}`);
   }
   return snapshot;
 }
 
-function sessionsRowCount(): number {
+type SqliteDatabase = {
+  prepare: (sql: string) => {
+    get: (...params: unknown[]) => unknown;
+    all: (...params: unknown[]) => unknown[];
+    run: (...params: unknown[]) => unknown;
+  };
+  exec: (sql: string) => void;
+  pragma: (source: string) => unknown;
+  close: () => void;
+};
+
+type SqliteDatabaseConstructor = new (
+  file: string,
+  options?: { readonly?: boolean; fileMustExist?: boolean },
+) => SqliteDatabase;
+
+function requireSqlite(): SqliteDatabaseConstructor {
   const requireFromProject = createRequire(path.join(PROJECT_ROOT, "package.json"));
-  const Database = requireFromProject("better-sqlite3") as new (
-    file: string,
-    options?: { readonly?: boolean; fileMustExist?: boolean },
-  ) => { prepare: (sql: string) => { get: () => { n: number } }; close: () => void };
-  const db = new Database(DB_FILE, { readonly: true, fileMustExist: true });
+  return requireFromProject("better-sqlite3") as SqliteDatabaseConstructor;
+}
+
+function tableRowCount(dataDir: string, table: string): number {
+  const Database = requireSqlite();
+  const db = new Database(path.join(dataDir, "cuemind.db"), { readonly: true, fileMustExist: true });
   try {
-    return db.prepare("SELECT COUNT(*) AS n FROM sessions").get().n;
+    return (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
   } finally {
     db.close();
   }
+}
+
+// 隔离灌种的归档卡片（ContextCard 形状，含 trace/调试字段以验证白名单投影剥离）。
+const ARCHIVED_SEED_CARDS = [
+  {
+    id: SEED_CARD_ID,
+    candidateId: SEED_CANDIDATE_ID,
+    datasetVersion: "demo-v1",
+    windowingVersion: "window-v1",
+    coreStartMs: 12000,
+    coreEndMs: 18000,
+    contextStartMs: 9000,
+    contextEndMs: 21000,
+    keyword: "speculative decoding",
+    keyPoints: [
+      "Draft model proposes tokens; target model verifies them in parallel.",
+      "Acceptance rate drives the end-to-end speedup.",
+    ],
+    whyNow: "讨论推理延迟优化时该术语首次出现。",
+    sources: [
+      {
+        title: "Speculative Decoding (arXiv)",
+        url: "https://arxiv.org/abs/2211.17192",
+        snippet: "Fast inference from transformers via speculative decoding.",
+        sourceType: "arxiv",
+      },
+      {
+        title: "Hacker News discussion",
+        url: "https://news.ycombinator.com/item?id=1",
+        snippet: "Community thread on speculative decoding speedups.",
+        sourceType: "hackernews",
+      },
+    ],
+    createdAt: "2026-08-28T06:14:07.000Z",
+    transcriptChunkIds: ["a1"],
+    latencyMs: { keyword: 10, search: 20, generation: 30, total: 60 },
+  },
+  {
+    id: SEED_CARD_2_ID,
+    candidateId: SEED_CANDIDATE_2_ID,
+    datasetVersion: "demo-v1",
+    windowingVersion: "window-v1",
+    coreStartMs: 30000,
+    coreEndMs: 35000,
+    contextStartMs: 28000,
+    contextEndMs: 37000,
+    keyword: "Ring Attention",
+    whyNow: "讨论长上下文内存优化时提到。",
+    sources: [
+      {
+        title: "Ring Attention (arXiv)",
+        url: "https://arxiv.org/abs/2310.01889",
+        snippet: "Blockwise computation of attention over long sequences.",
+        sourceType: "arxiv",
+      },
+      {
+        title: "Reference implementation",
+        url: "https://github.com/example/ring-attention",
+        snippet: "Community implementation.",
+        sourceType: "github",
+      },
+    ],
+    createdAt: "2026-08-28T06:14:07.050Z",
+    transcriptChunkIds: [],
+    latencyMs: { keyword: 5, search: 15, generation: 25, total: 45 },
+  },
+];
+
+/**
+ * 账本夹具（h-m 的数据保障）：
+ * 1) 真实 .data 已有 card_shown 且带 card_id 的行 → 直接用（任务书：优先真实数据）；
+ * 2) 否则复制 .data 到临时目录（保证 a-g 所需会话种子仍在）并灌 sessions+candidates
+ *    种子——只写临时目录，绝不写开发 .data。副本转 DELETE journal 模式，避免 readonly
+ *    打开 WAL 数据库时对 -shm/-wal 的创建依赖。
+ */
+function prepareCandidateFixture(): CandidateFixture {
+  // CUEMIND_MCP_TEST_FORCE_SEED=1：强制走灌种路径（验证降级分支与卡片归档断言本身）。
+  const forceSeed = process.env.CUEMIND_MCP_TEST_FORCE_SEED === "1";
+  if (existsSync(DB_FILE) && !forceSeed) {
+    try {
+      const Database = requireSqlite();
+      const db = new Database(DB_FILE, { readonly: true, fileMustExist: true });
+      let row:
+        | { session_id: string; candidate_id: string; term: string | null; final_state: string; card_id: string; created_at: string }
+        | undefined;
+      try {
+        row = db
+          .prepare(
+            "SELECT session_id, candidate_id, term, final_state, card_id, created_at FROM candidates WHERE final_state = 'card_shown' AND card_id IS NOT NULL AND card_id != '' ORDER BY created_at DESC LIMIT 1",
+          )
+          .get() as typeof row;
+      } finally {
+        db.close();
+      }
+      if (row !== undefined) {
+        return {
+          dataDir: DATA_DIR,
+          sessionId: row.session_id,
+          candidateId: row.candidate_id,
+          term: row.term,
+          finalState: row.final_state,
+          cardId: row.card_id,
+          createdAt: row.created_at,
+          seeded: false,
+        };
+      }
+    } catch {
+      // .data 打不开/损坏 → 走灌种路径。
+    }
+  }
+  const seededDir = mkdtempSync(path.join(tmpdir(), "cuemind-mcp-candidates-"));
+  for (const suffix of ["", "-wal", "-shm"]) {
+    const source = `${DB_FILE}${suffix}`;
+    if (existsSync(source)) copyFileSync(source, path.join(seededDir, `cuemind.db${suffix}`));
+  }
+  const Database = requireSqlite();
+  const seededDbFile = path.join(seededDir, "cuemind.db");
+  const db = new Database(seededDbFile, { fileMustExist: existsSync(seededDbFile) });
+  try {
+    // 与主项目 lib/session-store.ts / lib/candidate-store.ts 的 DDL 同款（测试灌种专用）。
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        duration_ms INTEGER,
+        input_source TEXT,
+        transcript_json TEXT NOT NULL,
+        cards_json TEXT,
+        metrics_json TEXT
+      );
+      CREATE TABLE IF NOT EXISTS candidates (
+        session_id TEXT NOT NULL,
+        candidate_id TEXT NOT NULL,
+        term TEXT,
+        final_state TEXT NOT NULL,
+        suppress_reason TEXT,
+        card_id TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (session_id, candidate_id)
+      );
+    `);
+    db.pragma("journal_mode = DELETE");
+    db.prepare(
+      "INSERT OR REPLACE INTO sessions (id, title, created_at, updated_at, duration_ms, input_source, transcript_json, cards_json, metrics_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(SEED_M2, SEED_M2_TITLE, SEED_CREATED_AT, SEED_CREATED_AT, 30000, "mixed", "[]", JSON.stringify(ARCHIVED_SEED_CARDS), null);
+    const insertCandidate = db.prepare(
+      "INSERT OR REPLACE INTO candidates (session_id, candidate_id, term, final_state, suppress_reason, card_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
+    insertCandidate.run(SEED_M2, SEED_CANDIDATE_ID, "speculative decoding", "card_shown", null, SEED_CARD_ID, SEED_CREATED_AT);
+    // term 为 NULL 的第二候选：只能被归档卡片 keyword 二次匹配命中（覆盖 search_cards 合并路径）。
+    insertCandidate.run(SEED_M2, SEED_CANDIDATE_2_ID, null, "card_shown", null, SEED_CARD_2_ID, "2026-08-28T06:14:07.500Z");
+  } finally {
+    db.close();
+  }
+  return {
+    dataDir: seededDir,
+    sessionId: SEED_M2,
+    candidateId: SEED_CANDIDATE_ID,
+    term: "speculative decoding",
+    finalState: "card_shown",
+    cardId: SEED_CARD_ID,
+    createdAt: SEED_CREATED_AT,
+    seeded: true,
+  };
 }
 
 function printSnapshotDiff(before: Map<string, string>, after: Map<string, string>): void {
@@ -195,9 +452,15 @@ function printSnapshotDiff(before: Map<string, string>, after: Map<string, strin
   }
 }
 
-function assertReadOnly(before: Map<string, string>, rowCountBefore: number): void {
-  const after = snapshotDataDir();
-  const rowCountAfter = sessionsRowCount();
+function assertReadOnly(
+  before: Map<string, string>,
+  dataDir: string,
+  sessionsBefore: number,
+  candidatesBefore: number,
+): void {
+  const after = snapshotDataDir(dataDir);
+  const sessionsAfter = tableRowCount(dataDir, "sessions");
+  const candidatesAfter = tableRowCount(dataDir, "candidates");
   printSnapshotDiff(before, after);
   assert.deepEqual(
     [...after.keys()],
@@ -209,8 +472,11 @@ function assertReadOnly(before: Map<string, string>, rowCountBefore: number): vo
     before.get("cuemind.db"),
     "只读断言失败：cuemind.db 主文件 size/mtime 发生变化",
   );
-  assert.equal(rowCountAfter, rowCountBefore, "只读断言失败：sessions 行数变化");
-  console.log(`  sessions 行数: before=${rowCountBefore} after=${rowCountAfter}（一致）`);
+  assert.equal(sessionsAfter, sessionsBefore, "只读断言失败：sessions 行数变化");
+  assert.equal(candidatesAfter, candidatesBefore, "只读断言失败：candidates 行数变化");
+  console.log(
+    `  sessions 行数: before=${sessionsBefore} after=${sessionsAfter}（一致）；candidates 行数: before=${candidatesBefore} after=${candidatesAfter}（一致）`,
+  );
 }
 
 function assertSessionSummary(item: Record<string, unknown>): void {
@@ -222,10 +488,11 @@ function assertSessionSummary(item: Record<string, unknown>): void {
   }
 }
 
-async function assertNormalServer(): Promise<void> {
-  const beforeSnapshot = snapshotDataDir();
-  const rowCountBefore = sessionsRowCount();
-  const client = new McpStdioClient(DATA_DIR);
+async function assertNormalServer(fixture: CandidateFixture): Promise<void> {
+  const beforeSnapshot = snapshotDataDir(fixture.dataDir);
+  const sessionsBefore = tableRowCount(fixture.dataDir, "sessions");
+  const candidatesBefore = tableRowCount(fixture.dataDir, "candidates");
+  const client = new McpStdioClient(fixture.dataDir);
   client.start();
 
   // a) initialize → serverInfo
@@ -336,11 +603,147 @@ async function assertNormalServer(): Promise<void> {
   assert.equal(punctuation.results.length, 0, "punctuation-only query yields no hits");
   console.log(`[e] search_transcripts OK: “知识沉淀”命中 ${SEED_B}，excerpt=“${seedBHit.matchedExcerpt.slice(0, 24)}…”，标题命中与空结果正确`);
 
+  // h) tools/list 现在共 6 个工具（M1 三工具 + M2-b 三工具）
+  const fullToolList = (await client.request("tools/list", {})) as { tools: Array<{ name: string }> };
+  const fullToolNames = fullToolList.tools.map((tool) => tool.name).sort();
+  assert.deepEqual(fullToolNames, [
+    "get_card",
+    "get_session",
+    "get_session_ledger",
+    "list_sessions",
+    "search_cards",
+    "search_transcripts",
+  ]);
+  console.log(`[h] tools/list OK: 共 ${fullToolNames.length} 个工具（含新增 search_cards/get_card/get_session_ledger）`);
+
+  // i) get_session_ledger：card_shown 账本行 + finalStateSummary 自洽
+  const ledger = toolPayload<GetSessionLedgerPayload>(
+    await client.request("tools/call", {
+      name: "get_session_ledger",
+      arguments: { session_id: fixture.sessionId },
+    }),
+  );
+  assert.equal(ledger.sessionId, fixture.sessionId);
+  assert.equal(ledger.total, ledger.candidates.length, "total matches candidates length");
+  assert.ok(ledger.total >= 1, `expected >=1 ledger rows, got ${ledger.total}`);
+  const ledgerHit = ledger.candidates.find((entry) => entry.candidateId === fixture.candidateId);
+  assert.ok(ledgerHit !== undefined, "fixture candidate must be in the ledger");
+  assert.equal(ledgerHit.term, fixture.term);
+  assert.equal(ledgerHit.finalState, fixture.finalState);
+  assert.equal(ledgerHit.cardId, fixture.cardId);
+  assert.equal(ledgerHit.createdAt, fixture.createdAt);
+  assert.ok((ledger.finalStateSummary[fixture.finalState] ?? 0) >= 1, "finalStateSummary counts card_shown");
+  const summarized = Object.values(ledger.finalStateSummary).reduce((left, right) => left + right, 0);
+  assert.equal(summarized, ledger.total, "finalStateSummary sums up to total");
+  if (fixture.seeded) {
+    // 副本可能还带着 .data 原有行，只断言两个种子候选必然在账本中。
+    assert.ok(ledger.total >= 2, `seeded m2-smoke must have >=2 candidates, got ${ledger.total}`);
+    assert.ok(
+      ledger.candidates.some((entry) => entry.candidateId === SEED_CANDIDATE_2_ID),
+      "second seeded candidate must be in the ledger",
+    );
+  }
+  console.log(
+    `[i] get_session_ledger OK: session=${fixture.sessionId} total=${ledger.total} summary=${JSON.stringify(ledger.finalStateSummary)}`,
+  );
+
+  // j) search_cards：term 子串命中（大小写不敏感）+ 合并路径
+  const cardSearch = toolPayload<SearchCardsPayload>(
+    await client.request("tools/call", { name: "search_cards", arguments: { query: "Speculative" } }),
+  );
+  const cardHit = cardSearch.results.find((hit) => hit.candidateId === fixture.candidateId);
+  assert.ok(cardHit !== undefined, "search_cards must hit the card_shown candidate");
+  assert.equal(cardHit.sessionId, fixture.sessionId);
+  assert.equal(cardHit.term, fixture.term);
+  assert.equal(cardHit.finalState, "card_shown");
+  assert.equal(cardHit.cardId, fixture.cardId);
+  assert.equal(cardHit.createdAt, fixture.createdAt);
+  if (fixture.seeded) {
+    assert.equal(cardHit.sessionTitle, SEED_M2_TITLE, "session title joined from sessions table");
+    // keyword 二次匹配：该候选 term 为 NULL，只有归档卡片 keyword 命中这一条路能找到它。
+    const keywordOnly = toolPayload<SearchCardsPayload>(
+      await client.request("tools/call", { name: "search_cards", arguments: { query: "ring attention" } }),
+    );
+    assert.ok(
+      keywordOnly.results.some((hit) => hit.candidateId === SEED_CANDIDATE_2_ID),
+      "archived card keyword match must surface a term-NULL candidate",
+    );
+  } else {
+    // 真实数据现实：m2-smoke 的会话快照未落库 → sessionTitle 为 null（LEFT JOIN 不丢行）。
+    assert.equal(cardHit.sessionTitle, null, "ledger rows without a session row expose null title");
+  }
+  const cardNoHit = toolPayload<SearchCardsPayload>(
+    await client.request("tools/call", { name: "search_cards", arguments: { query: "zzz-no-such-term-xyz" } }),
+  );
+  assert.equal(cardNoHit.results.length, 0, "unknown term yields []");
+  const cardWhitespace = toolPayload<SearchCardsPayload>(
+    await client.request("tools/call", { name: "search_cards", arguments: { query: "   " } }),
+  );
+  assert.equal(cardWhitespace.results.length, 0, "whitespace-only query yields []");
+  console.log(
+    `[j] search_cards OK: query="Speculative" 命中 ${cardHit.candidateId.slice(0, 13)}…（finalState=card_shown），空结果与空白 query 路径正确`,
+  );
+
+  // k) get_card：账本完整；卡片正文按实际归档状态断言（不谎报）
+  const cardResult = parseToolText(
+    await client.request("tools/call", { name: "get_card", arguments: { card_id: fixture.cardId } }),
+  );
+  assert.ok(!cardResult.isError, "existing card_id must not be an error terminal");
+  const cardPayload = JSON.parse(cardResult.content[0].text) as GetCardPayload;
+  assert.equal(cardPayload.ledger.candidateId, fixture.candidateId);
+  assert.equal(cardPayload.ledger.sessionId, fixture.sessionId);
+  assert.equal(cardPayload.ledger.term, fixture.term);
+  assert.equal(cardPayload.ledger.finalState, "card_shown");
+  assert.equal(cardPayload.ledger.cardId, fixture.cardId);
+  assert.equal(cardPayload.ledger.createdAt, fixture.createdAt);
+  if (fixture.seeded) {
+    assert.ok(cardPayload.card !== null, "seeded session archives the card body");
+    assert.equal(cardPayload.card.keyword, "speculative decoding");
+    assert.ok(Array.isArray(cardPayload.card.sources) && cardPayload.card.sources.length === 2);
+    const evidence = cardPayload.card.evidenceWindow as Record<string, number> | undefined;
+    assert.equal(evidence?.coreStartMs, 12000);
+    assert.equal(evidence?.contextEndMs, 21000);
+    for (const forbidden of ["demoTrace", "datasetVersion", "windowingVersion", "transcriptChunkIds", "candidateId"]) {
+      assert.ok(!(forbidden in cardPayload.card), `card projection must strip ${forbidden}`);
+    }
+    assert.ok(cardPayload.note === undefined, "no note when the card body is archived");
+  } else {
+    // 当前真实数据：sessions.cards_json 恒为 null → 卡片正文未归档，诚实降级。
+    assert.equal(cardPayload.card, null, "card body not archived in current snapshots");
+    assert.ok(typeof cardPayload.note === "string" && cardPayload.note.length > 0, "honest note must be present");
+    assert.ok(cardPayload.note.includes("not archived"), "note explains the missing card body");
+    assert.ok(cardPayload.note.includes("search_transcripts"), "note gives the term vertical-retrieval hint");
+    assert.ok(!("keyword" in (cardPayload.card ?? {})), "no fabricated card fields");
+  }
+  const missingCard = parseToolText(
+    await client.request("tools/call", { name: "get_card", arguments: { card_id: "no-such-card-id" } }),
+  );
+  assert.equal(missingCard.isError, true, "unknown card_id must be an error terminal");
+  const missingCardPayload = JSON.parse(missingCard.content[0].text) as { error: string };
+  assert.ok(missingCardPayload.error.includes("Card not found"), "explainable not-found error");
+  console.log(
+    `[k] get_card OK: 账本完整（session=${cardPayload.ledger.sessionId}），card=${cardPayload.card === null ? "未归档 + note 降级" : "归档正文 + trace 字段剥离"}，未知 card_id → error 终态`,
+  );
+
+  // m) 空结果路径：不存在的 session → 空数组 + total 0（非错误终态）
+  const emptyLedger = parseToolText(
+    await client.request("tools/call", {
+      name: "get_session_ledger",
+      arguments: { session_id: "no-such-session" },
+    }),
+  );
+  assert.ok(!emptyLedger.isError, "empty ledger must not be an error terminal");
+  const emptyLedgerPayload = JSON.parse(emptyLedger.content[0].text) as GetSessionLedgerPayload;
+  assert.deepEqual(emptyLedgerPayload.candidates, [], "empty candidates array");
+  assert.equal(emptyLedgerPayload.total, 0);
+  assert.deepEqual(emptyLedgerPayload.finalStateSummary, {});
+  console.log("[m] 空结果路径 OK: 不存在的 session → 空数组 + total 0（非错误）");
+
   await client.stop();
 
-  // f) 只读断言（调用后与调用前对比）
-  console.log("[f] read-only assertions:");
-  assertReadOnly(beforeSnapshot, rowCountBefore);
+  // l) 只读断言（M1 f 模式扩展：文件清单 + sessions/candidates 行数）
+  console.log("[l] read-only assertions:");
+  assertReadOnly(beforeSnapshot, fixture.dataDir, sessionsBefore, candidatesBefore);
 }
 
 async function assertMissingDbServer(): Promise<void> {
@@ -370,7 +773,7 @@ async function assertMissingDbServer(): Promise<void> {
     `explainable missing-db error, got: ${payload.error}`,
   );
   const stillResponsive = (await client.request("tools/list", {})) as { tools: unknown[] };
-  assert.equal(stillResponsive.tools.length, 3, "server stays responsive after db-missing error");
+  assert.equal(stillResponsive.tools.length, 6, "server stays responsive after db-missing error");
   assert.ok(client.isAlive(), "server process must not crash");
   await client.stop();
   console.log(`[g] db-missing path OK (CUEMIND_DATA_DIR=${absentDir}): error 终态可解释，server 不崩`);
@@ -387,9 +790,15 @@ function readdirSyncSafe(dir: string): boolean {
 
 async function main(): Promise<void> {
   statSync(MCP_SERVER_ENTRY);
-  await assertNormalServer();
-  await assertMissingDbServer();
-  console.log("test-mcp-server: all assertions passed (a-g)");
+  const fixture = prepareCandidateFixture();
+  try {
+    await assertNormalServer(fixture);
+    await assertMissingDbServer();
+  } finally {
+    // 灌种目录只存在于临时区，用后即清。
+    if (fixture.seeded) rmSync(fixture.dataDir, { recursive: true, force: true });
+  }
+  console.log("test-mcp-server: all assertions passed (a-m)");
 }
 
 main().catch((error: unknown) => {

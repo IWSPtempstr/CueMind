@@ -7,8 +7,11 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { registerGetCard } from "./tools/get-card.js";
 import { registerGetSession } from "./tools/get-session.js";
+import { registerGetSessionLedger } from "./tools/get-session-ledger.js";
 import { registerListSessions } from "./tools/list-sessions.js";
+import { registerSearchCards } from "./tools/search-cards.js";
 import { registerSearchTranscripts } from "./tools/search-transcripts.js";
 
 const SERVER_NAME = "cuemind";
@@ -24,6 +27,9 @@ async function main(): Promise<void> {
   registerListSessions(server);
   registerGetSession(server);
   registerSearchTranscripts(server);
+  registerSearchCards(server);
+  registerGetCard(server);
+  registerGetSessionLedger(server);
 
   const shutdown = (signal: string): void => {
     console.error(`[cuemind-mcp] received ${signal}, shutting down`);
