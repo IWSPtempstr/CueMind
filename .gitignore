@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Electron compiled entrypoint
 /desktop/electron/dist/
+
+# Server-side chat persistence (SQLite / JSONL)
+/.data/

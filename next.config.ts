@@ -27,6 +27,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // better-sqlite3 is a native addon: keep it out of the server bundle.
+  serverExternalPackages: ["better-sqlite3"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

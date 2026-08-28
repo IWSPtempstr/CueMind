@@ -14,11 +14,13 @@ import useDesktopTranscript from "@/hooks/useDesktopTranscript";
 import useMediaUploader, { isUploadedRecordCompleted } from "@/hooks/useMediaUploader";
 import useMicRecorder from "@/hooks/useMicRecorder";
 import useSuggestions from "@/hooks/useSuggestions";
+import type { StoredChatMessage } from "@/lib/chat-store";
 import { isErrorResponseBody } from "@/lib/api-response";
 import { exportSession } from "@/lib/export";
 import { END_OF_MEETING_PROMPT } from "@/lib/prompts";
 import { loadSessions, storeSession } from "@/lib/session-storage";
 import { summarizeLatency } from "@/lib/telemetry";
+import type { ChatMessage } from "@/types/chat";
 import type { MeetingReport, SessionSnapshot } from "@/types/session";
 import type { Suggestion } from "@/types/suggestions";
 
@@ -29,6 +31,59 @@ function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptC
 
 function formatSessionDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+// --- P2 服务端 chat 持久化辅助：序列化 / 解析 / 合并 ---
+
+function toStoredChatMessages(sessionId: string, messages: ChatMessage[]): StoredChatMessage[] {
+  return messages
+    .filter((message) => !message.isStreaming)
+    .map((message) => ({
+      id: message.id,
+      sessionId,
+      role: message.role,
+      content: message.content,
+      isDetail: message.isDetail === true,
+      createdAt: message.timestamp.toISOString(),
+    }));
+}
+
+function parseStoredChatMessages(raw: unknown): StoredChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+  const messages: StoredChatMessage[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const record = item as Record<string, unknown>;
+    if (typeof record.id !== "string" || record.id.length === 0) continue;
+    if (record.role !== "user" && record.role !== "assistant") continue;
+    if (typeof record.content !== "string") continue;
+    if (typeof record.createdAt !== "string" || record.createdAt.length === 0) continue;
+    messages.push({
+      id: record.id,
+      sessionId: typeof record.sessionId === "string" ? record.sessionId : "",
+      role: record.role,
+      content: record.content,
+      isDetail: record.isDetail === true,
+      createdAt: record.createdAt,
+    });
+  }
+  return messages;
+}
+
+function mergeChatMessages(local: ChatMessage[], server: StoredChatMessage[]): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>();
+  for (const message of local) byId.set(message.id, message);
+  // 服务端数据为准（同 id 覆盖本地），统一按 createdAt 升序。
+  for (const message of server) {
+    byId.set(message.id, {
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      isDetail: message.isDetail,
+      timestamp: new Date(message.createdAt),
+    });
+  }
+  return [...byId.values()].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 }
 
 export default function Home(): ReactElement {
@@ -60,6 +115,9 @@ export default function Home(): ReactElement {
   useEffect(() => { transcriptRef.current = recorder.transcriptChunks; }, [recorder.transcriptChunks]);
   // 已处理过"上传完成"事件的 uploadId 去重集合（主题摘要只生成一次）。
   const handledUploadIdsRef = useRef(new Set<string>());
+  // P2 chat 服务端同步：代 token 使在途合并失效（restore/new 切换会话时不串数据）。
+  const chatSyncTokenRef = useRef(0);
+  const wasChatOpenRef = useRef(false);
 
   const generateTopicSummary = useCallback((transcriptText: string): void => {
     const trimmed = transcriptText.trim();
@@ -100,7 +158,8 @@ export default function Home(): ReactElement {
       updatedAt: new Date(),
       transcriptChunks: recorder.transcriptChunks,
       suggestionBatches: suggestions.batches,
-      chatMessages: chat.messages,
+      // P2: chat 消息只持久化到服务端；保留字段以兼容旧 localStorage 快照的读取。
+      chatMessages: [] as ChatMessage[],
       meetingReport,
     };
     return {
@@ -108,7 +167,7 @@ export default function Home(): ReactElement {
       title: topicSummary ?? sessionTitle(base),
       ...(topicSummary ? { topicSummary } : {}),
     };
-  }, [activeSessionId, chat.messages, createdAt, meetingReport, recorder.transcriptChunks, suggestions.batches, topicSummary]);
+  }, [activeSessionId, createdAt, meetingReport, recorder.transcriptChunks, suggestions.batches, topicSummary]);
 
   useEffect(() => {
     if (!activeSessionId || !hasContent) return;
@@ -123,6 +182,65 @@ export default function Home(): ReactElement {
     return () => window.clearTimeout(id);
   }, [activeSessionId, hasContent, snapshot]);
 
+  const postChatMessages = useCallback((sessionId: string, messages: ChatMessage[]): void => {
+    const payload = toStoredChatMessages(sessionId, messages);
+    if (payload.length === 0) return;
+    // fire-and-forget：失败静默，不影响主流程。
+    void fetch("/api/chat-messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, messages: payload }),
+    }).catch(() => undefined);
+  }, []);
+
+  const fetchServerChatMessages = useCallback(
+    async (sessionId: string): Promise<StoredChatMessage[]> => {
+      try {
+        const response = await fetch(`/api/chat-messages?sessionId=${encodeURIComponent(sessionId)}`);
+        if (!response.ok) return [];
+        const payload: unknown = await response.json();
+        if (typeof payload !== "object" || payload === null || !("messages" in payload)) return [];
+        return parseStoredChatMessages((payload as { messages: unknown }).messages);
+      } catch {
+        return [];
+      }
+    },
+    [],
+  );
+
+  // P2: 消息落定后持久化到服务端——debounce 800ms；流式 delta 会持续重置计时器，
+  // 因此流式中途不会触发 POST，仅在 isStreaming 结束后 800ms 落库。
+  useEffect(() => {
+    if (!activeSessionId || chat.messages.length === 0) return;
+    if (chat.messages.some((message) => message.isStreaming)) return;
+    const timer = window.setTimeout(() => {
+      postChatMessages(activeSessionId, chat.messages);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [activeSessionId, chat.messages, postChatMessages]);
+
+  // P2: 抽屉打开（true 边沿）时按 activeSessionId 同步服务端历史——
+  // 服务端无数据且内存有旧 localStorage 消息 → 懒迁移 POST；有数据 → 合并刷新。
+  useEffect(() => {
+    if (!isChatOpen) {
+      wasChatOpenRef.current = false;
+      return;
+    }
+    if (wasChatOpenRef.current) return;
+    wasChatOpenRef.current = true;
+    if (!activeSessionId) return;
+    const sessionId = activeSessionId;
+    const syncToken = chatSyncTokenRef.current;
+    void fetchServerChatMessages(sessionId).then((serverMessages) => {
+      if (chatSyncTokenRef.current !== syncToken) return;
+      if (serverMessages.length === 0) {
+        postChatMessages(sessionId, chat.messages);
+        return;
+      }
+      chat.setMessages(mergeChatMessages(chat.messages, serverMessages));
+    });
+  }, [activeSessionId, chat, fetchServerChatMessages, isChatOpen, postChatMessages]);
+
   const restoreSession = useCallback((session: SessionSnapshot): void => {
     if (recorder.isRecording) recorder.stopRecording();
     recorder.setTranscriptChunks(session.transcriptChunks);
@@ -133,9 +251,16 @@ export default function Home(): ReactElement {
     setActiveSessionId(session.id);
     setCreatedAt(session.createdAt);
     setResumeCandidate(null);
-  }, [chat, recorder, suggestions]);
+    // P2: localStorage 快照先行渲染，再异步拉服务端历史——有数据则以服务端为准合并（按 createdAt 排序）。
+    const syncToken = ++chatSyncTokenRef.current;
+    void fetchServerChatMessages(session.id).then((serverMessages) => {
+      if (chatSyncTokenRef.current !== syncToken || serverMessages.length === 0) return;
+      chat.setMessages(mergeChatMessages(session.chatMessages, serverMessages));
+    });
+  }, [chat, fetchServerChatMessages, recorder, suggestions]);
 
   const newSession = useCallback((): void => {
+    chatSyncTokenRef.current += 1; // 使在途的服务端合并失效，避免旧会话消息混入新会话
     if (recorder.isRecording) recorder.stopRecording();
     recorder.setTranscriptChunks([]);
     suggestions.setBatches([]);
