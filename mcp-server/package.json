@@ -1,0 +1,24 @@
+{
+  "name": "cuemind-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CueMind local read-only stdio MCP server (knowledge export, M1-b). stdout is JSON-RPC only; all logs go to stderr; no outbound network.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node dist/test/smoke.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^13.0.3",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22",
+    "typescript": "^5"
+  }
+}

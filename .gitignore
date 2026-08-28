@@ -48,3 +48,7 @@ next-env.d.ts
 
 # Server-side chat persistence (SQLite / JSONL)
 /.data/
+
+# MCP server (independent package)
+/mcp-server/node_modules/
+/mcp-server/dist/
