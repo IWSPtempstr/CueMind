@@ -324,6 +324,11 @@ export default function useMediaUploader({
       formData.append("whisperModelPath", settings.localWhisperModelPath.trim());
       formData.append("uploadId", uploadId);
       formData.append("stream", "1");
+      // 会议上下文 + VAD 配置透传给服务端，组装成 whisper initial prompt / --vad 参数。
+      formData.append("meetingTopic", settings.meetingTopic.trim());
+      formData.append("domainGlossary", settings.domainGlossary.trim());
+      formData.append("enableVad", settings.enableVad ? "1" : "0");
+      formData.append("vadModelPath", settings.vadModelPath.trim());
 
       asrStartedAtRef.current = new Date();
       const outcome = await requestStreamingUpload(formData, uploadId, file.name);

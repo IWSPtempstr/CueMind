@@ -74,6 +74,12 @@ interface ParsedUploadFields {
   whisperModelPath: string;
   uploadId: string;
   ffmpegPath?: string;
+  /** Optional meeting context, assembled into the whisper initial prompt. */
+  meetingTopic?: string;
+  domainGlossary?: string;
+  /** Optional Silero VAD switch + model path; absent/false keeps legacy no-VAD behavior. */
+  enableVad: boolean;
+  vadModelPath?: string;
 }
 
 type ParseOutcome =
@@ -198,9 +204,28 @@ function parseUploadFields(formData: FormData): ParseOutcome {
       ? rawFfmpegPath.trim()
       : undefined;
 
+  // Optional meeting context / VAD fields: absent or blank keeps legacy behavior
+  // (no prompt bias, no VAD), so old clients stay unaffected.
+  const meetingTopic = optionalTrimmedString(formData.get("meetingTopic"));
+  const domainGlossary = optionalTrimmedString(formData.get("domainGlossary"));
+  const rawEnableVad = formData.get("enableVad");
+  const enableVad = rawEnableVad === "1" || rawEnableVad === "true";
+  const vadModelPath = optionalTrimmedString(formData.get("vadModelPath"));
+
   return {
     ok: true,
-    fields: { file: media, language, whisperPath, whisperModelPath, uploadId, ffmpegPath },
+    fields: {
+      file: media,
+      language,
+      whisperPath,
+      whisperModelPath,
+      uploadId,
+      ffmpegPath,
+      ...(meetingTopic ? { meetingTopic } : {}),
+      ...(domainGlossary ? { domainGlossary } : {}),
+      enableVad,
+      ...(vadModelPath ? { vadModelPath } : {}),
+    },
   };
 }
 
@@ -229,6 +254,13 @@ function trimmedString(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Trimmed string field or undefined when absent/blank — keeps optional fields out of the parsed shape. */
+function optionalTrimmedString(value: FormDataEntryValue | null): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 async function defaultProcessAudio(
   inputPath: string,
   outputWavPath: string,
@@ -242,6 +274,12 @@ function defaultTranscribe(
   fields: ParsedUploadFields,
   signal?: AbortSignal,
 ): (wavPath: string) => Promise<{ segments: LocalAsrSegment[] }> {
+  // Assemble the flat form fields into the whisper prompt/VAD options, mirroring
+  // the /api/local-transcribe contract. Empty topic/glossary → no prompt bias;
+  // VAD disabled or missing model path → no VAD args (silent degradation).
+  const topic = fields.meetingTopic?.trim() ?? "";
+  const glossary = fields.domainGlossary?.trim() ?? "";
+  const vadModelPath = fields.vadModelPath?.trim() ?? "";
   return (wavPath) =>
     transcribeWithWhisperCpp({
       audioPath: wavPath,
@@ -249,6 +287,10 @@ function defaultTranscribe(
       modelPath: fields.whisperModelPath,
       language: fields.language,
       timeoutMs: WHISPER_TIMEOUT_MS,
+      ...(topic || glossary
+        ? { promptContext: { ...(topic ? { topic } : {}), ...(glossary ? { glossary } : {}) } }
+        : {}),
+      ...(fields.enableVad && vadModelPath ? { vad: { enabled: true, modelPath: vadModelPath } } : {}),
       // Client disconnects kill the running whisper subprocess (runProcess
       // listens on this signal); the route's SSE wrapper then closes silently.
       signal,

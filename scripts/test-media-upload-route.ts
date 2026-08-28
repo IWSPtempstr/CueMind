@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -19,6 +19,7 @@ import {
 import type {
   StreamDoneEvent,
   UploadMediaErrorPayload,
+  UploadMediaOverrides,
   UploadMediaSuccessPayload,
   UploadStreamEvent,
   WindowResultEvent,
@@ -482,6 +483,89 @@ async function testSliceRejectsInvalidStructure(): Promise<void> {
   assert.equal(roundTrip.durationMs, 62); // 2000 / 32 ≈ 62ms
 }
 
+// ---------------------------------------------------------------------------
+// Optional meeting-context fields (meetingTopic/domainGlossary/enableVad/
+// vadModelPath) must reach the REAL transcribeWithWhisperCpp as promptContext/
+// vad on both the legacy and the streaming path.
+// ---------------------------------------------------------------------------
+
+type UploadRunner = (
+  form: FormData,
+  processAudio: NonNullable<UploadMediaOverrides["processAudio"]>,
+) => Promise<void>;
+
+/**
+ * Runs an upload through the DEFAULT transcribe seam (no transcribe override)
+ * against a fake whisper binary that logs its argv, asserting the assembled
+ * --prompt/--carry-initial-prompt/--vad/--vad-model args; then re-runs without
+ * the optional fields to pin the legacy no-prompt/no-VAD behavior.
+ */
+async function testContextFieldsAssembledToWhisperArgs(runUpload: UploadRunner, label: string): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), "cuemind-upload-ctx-"));
+  try {
+    const argvLogPath = join(root, "whisper-argv.log");
+    const fakeWhisper = join(root, "fake-whisper.sh");
+    await writeFile(fakeWhisper, `#!/bin/sh
+printf '%s\\n' "$@" > '${argvLogPath}'
+output=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-of" ]; then output="$2"; shift 2; continue; fi
+  shift
+done
+cat > "$output.json" <<'JSON'
+{"transcription":[{"offsets":{"from":0,"to":1200},"text":" 上下文透传 "}]}
+JSON
+`, "utf8");
+    await chmod(fakeWhisper, 0o755);
+    // resolveVadArgs keeps --vad only when the model file exists; content is irrelevant here.
+    const vadModelPath = join(root, "silero.bin");
+    await writeFile(vadModelPath, "placeholder-vad-model");
+
+    const passthroughProcessAudio = async (_inputPath: string, outputWavPath: string) => {
+      await writeFile(outputWavPath, buildWavBuffer(2000));
+      return { wavPath: outputWavPath, originalDurationMs: 2000 };
+    };
+
+    const form = new FormData();
+    form.append("media", createTestFile(64, "clip.mp4", "video/mp4"));
+    form.append("whisperPath", fakeWhisper);
+    form.append("whisperModelPath", join(root, "model.bin"));
+    form.append("uploadId", `ctx-upload-${label}`);
+    form.append("meetingTopic", "AI Agent 技术会议");
+    form.append("domainGlossary", "Harness, Speculative Decoding");
+    form.append("enableVad", "true");
+    form.append("vadModelPath", vadModelPath);
+
+    await runUpload(form, passthroughProcessAudio);
+
+    const argv = (await readFile(argvLogPath, "utf8")).split("\n").filter((line) => line.length > 0);
+    const promptIndex = argv.indexOf("--prompt");
+    assert.notEqual(promptIndex, -1, `${label}: default transcribe must pass the assembled initial prompt`);
+    const prompt = argv[promptIndex + 1] ?? "";
+    assert.match(prompt, /AI Agent 技术会议/, `${label}: prompt must carry the meeting topic`);
+    assert.match(prompt, /Harness、Speculative Decoding/, `${label}: prompt must carry the glossary`);
+    assert.notEqual(argv.indexOf("--carry-initial-prompt"), -1, `${label}: prompt must be carried across segments`);
+    const vadIndex = argv.indexOf("--vad");
+    assert.notEqual(vadIndex, -1, `${label}: enableVad=true must enable VAD`);
+    assert.equal(argv[vadIndex + 1], "--vad-model");
+    assert.equal(argv[vadIndex + 2], vadModelPath);
+
+    // Legacy behavior: without the optional fields there must be no prompt/VAD args.
+    const legacyForm = new FormData();
+    legacyForm.append("media", createTestFile(64, "clip.mp4", "video/mp4"));
+    legacyForm.append("whisperPath", fakeWhisper);
+    legacyForm.append("whisperModelPath", join(root, "model.bin"));
+    legacyForm.append("uploadId", `legacy-upload-${label}`);
+
+    await runUpload(legacyForm, passthroughProcessAudio);
+    const legacyArgv = (await readFile(argvLogPath, "utf8")).split("\n").filter((line) => line.length > 0);
+    assert.equal(legacyArgv.indexOf("--prompt"), -1, `${label}: absent context fields must not add --prompt`);
+    assert.equal(legacyArgv.indexOf("--vad"), -1, `${label}: absent context fields must not add --vad`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 
 async function runCase(name: string, action: () => Promise<void>): Promise<void> {
   try {
@@ -508,6 +592,17 @@ async function main(): Promise<void> {
   await runCase("wav file slicing writes valid standalone window files", () => testSliceFilesRoundTrip());
   await runCase("streamed file slicing is byte-identical to buffer slicing", () => testSliceFilesMatchBufferSlicing());
   await runCase("wav parser rejects invalid structures", () => testSliceRejectsInvalidStructure());
+  await runCase("default transcribe assembles prompt/VAD args from context fields (legacy path)", () =>
+    testContextFieldsAssembledToWhisperArgs(async (form, processAudio) => {
+      const response = await handleUploadMedia(form, { processAudio });
+      assert.equal(response.status, 200);
+      await response.json();
+    }, "legacy"));
+  await runCase("default transcribe assembles prompt/VAD args from context fields (streaming path)", () =>
+    testContextFieldsAssembledToWhisperArgs(async (form, processAudio) => {
+      const events = await collectStreamEvents(form, { processAudio });
+      assert.equal(filterDone(events).length, 1);
+    }, "streaming"));
   console.log("media upload route regression tests passed");
 }
 

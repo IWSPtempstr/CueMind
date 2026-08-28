@@ -30,6 +30,12 @@ function Highlight({ text, query }: { text: string; query: string }): ReactEleme
   return <>{pieces.map((piece, index) => piece.toLowerCase() === query.toLowerCase() ? <mark key={index} className="bg-yellow-500/40 text-inherit">{piece}</mark> : piece)}</>;
 }
 
+/** 上传流式 chunk id 形如 "<uploadId>-w<windowIndex>-<index>"；提取窗索引，非该格式（如麦克风老数据）返回 null。 */
+function windowIndexOf(id: string): number | null {
+  const match = /-w(\d+)-\d+$/.exec(id);
+  return match ? Number(match[1]) : null;
+}
+
 export default function MicTranscript(props: Props): ReactElement {
   const { transcriptChunks, isRecording, isPaused, micLevel, retryCount, onRecordingChange, onPauseToggle, recordingError, meetingReport, isReportLoading, isUploadProcessing = false, uploaderSlot, isDesktop = false, audioSourceMode = "mixed", onAudioSourceModeChange } = props;
   const endRef = useRef<HTMLDivElement>(null);
@@ -93,11 +99,16 @@ export default function MicTranscript(props: Props): ReactElement {
         <div className="flex flex-col">
           {filtered.map((chunk, index) => {
             const previous = index > 0 ? filtered[index - 1] : undefined;
-            // 相邻两条都有时间戳且间隔 >800ms 时视为话题边界，加大间距分段（老数据无时间戳不触发）。
-            const isTopicBreak = previous !== undefined
+            const timeGapBreak = previous !== undefined
               && typeof previous.endMs === "number"
               && typeof chunk.startMs === "number"
               && chunk.startMs - previous.endMs > 800;
+            // whisper 相邻段的时间戳常首尾相接（endMs[i-1] == startMs[i]，时间差条件探不到窗边界），
+            // 因此窗标记（audioChunkId 的 w 索引）变化也视为话题边界；老数据（麦克风）无标记不触发。
+            const previousWindow = previous !== undefined ? windowIndexOf(previous.id) : null;
+            const currentWindow = windowIndexOf(chunk.id);
+            const windowChangeBreak = previousWindow !== null && currentWindow !== null && previousWindow !== currentWindow;
+            const isTopicBreak = timeGapBreak || windowChangeBreak;
             return (
               <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
             );
