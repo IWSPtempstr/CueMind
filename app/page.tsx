@@ -203,6 +203,7 @@ export default function Home(): ReactElement {
           meetingReport: { content: reportContent },
         },
         cards: contextCardsRef.current.map((card) => ({ keyword: card.keyword, candidateId: card.candidateId })),
+        asks: extractAskExchanges(askMessagesRef.current),
       }),
     }).catch(() => undefined);
   }, []);

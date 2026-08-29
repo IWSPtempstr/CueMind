@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import type { AskExchange } from "@/lib/ask-history";
 
 export type VaultTranscriptMode = "none" | "folded" | "full";
 
@@ -26,6 +27,8 @@ const SIDECAR_FILE = ".cuemind-export.json";
 const SLUG_MAX_CHARS = 60;
 const NAME_CONFLICT_MAX = 99;
 const SUMMARY_FALLBACK_CHARS = 200;
+const ASK_QUESTION_CHARS = 500;
+const ASK_ANSWER_CHARS = 2_000;
 
 export interface VaultMeetingChunk {
   id?: string;
@@ -51,6 +54,8 @@ export interface MeetingMarkdownArgs {
   /** settings.localWhisperModelPath 的 basename（前端传）；空 → "unknown"。 */
   asrModel?: string | null;
   exportTranscript?: VaultTranscriptMode;
+  /** 会中询问问答对（可选）；exportTranscript === "none" 时不渲染该小节。 */
+  asks?: AskExchange[];
 }
 
 export interface VaultConceptSource {
@@ -206,6 +211,32 @@ function safeIso(value: string): string {
 
 // --- meeting markdown ---
 
+function flattenInline(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+/** 会中询问小节（问题 + 答案摘要 + 来源链接）；无问答对时返回空数组。 */
+function buildAskSection(asks: readonly AskExchange[]): string[] {
+  if (asks.length === 0) return [];
+  const lines = ["## 会中询问", ""];
+  for (const exchange of asks) {
+    const question = flattenInline(exchange.question).slice(0, ASK_QUESTION_CHARS);
+    const answer = flattenInline(exchange.answer).slice(0, ASK_ANSWER_CHARS);
+    if (question.length === 0 || answer.length === 0) continue;
+    lines.push(`**问**：${question}`, "", `**答**：${answer}`);
+    const sources = exchange.sources ?? [];
+    if (sources.length > 0) {
+      const links = sources.map((source) => {
+        const title = flattenInline(source.title).slice(0, 200) || "来源";
+        return `[${title}](${source.url})`;
+      });
+      lines.push("", `来源：${links.join("、")}`);
+    }
+    lines.push("");
+  }
+  return lines;
+}
+
 /** 会议笔记 markdown：frontmatter 契约 date/duration/input_source/asr_model/audio_hash/transcript/topic。 */
 export function buildMeetingMarkdown(args: MeetingMarkdownArgs): MarkdownPiece {
   const mode: VaultTranscriptMode = args.exportTranscript === "none" || args.exportTranscript === "full" ? args.exportTranscript : "folded";
@@ -251,6 +282,12 @@ export function buildMeetingMarkdown(args: MeetingMarkdownArgs): MarkdownPiece {
   const cards = (args.cards ?? []).filter((card) => typeof card?.keyword === "string" && card.keyword.trim().length > 0);
   if (cards.length > 0) {
     lines.push("## 卡片链接", "", ...cards.map((card) => `- [[${slugifyTerm(card.keyword)}]] ${card.keyword}`), "");
+  }
+
+  // 会中询问小节：受决策 64 三档开关约束——none 档不导（隐私最小化），
+  // folded/full 档才渲染；frontmatter 契约不变。
+  if (mode !== "none") {
+    lines.push(...buildAskSection(args.asks ?? []));
   }
 
   if (mode === "folded") {

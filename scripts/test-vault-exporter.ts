@@ -45,6 +45,20 @@ const BASE_MEETING = {
   asrModel: "/home/work/models/ggml-base.bin",
 };
 
+// B 阶段：会中询问问答对（问题 + 答案摘要 + 来源链接）。
+const ASK_HISTORY = [
+  {
+    question: "KV cache 为什么能加速？",
+    answer: "复用已计算的键值对避免重复前向 [1]。",
+    sources: [{ title: "KV Cache 论文", url: "https://arxiv.org/abs/2401.00001" }],
+  },
+  {
+    question: "有什么前置条件？",
+    answer: "序列足够长时收益才明显。",
+    sources: [],
+  },
+];
+
 function runSuite(): void {
   // --- markdown 构建 ---
   // a) folded：frontmatter transcript: folded + callout 折叠块 + "> " 前缀
@@ -199,6 +213,39 @@ function runSuite(): void {
   assert.ok(contentL.includes("## 主题摘要"));
   assert.ok(contentL.includes("- [[推理优化]] 推理优化"));
   assert.ok(!contentL.includes("[00:00]"), "none 档不写转写正文");
+
+  // m) 会中询问小节（B 阶段）：folded 档含问答对时渲染（问题 + 答案 + 来源链接），frontmatter 不变
+  const foldedAsk = buildMeetingMarkdown({ ...BASE_MEETING, exportTranscript: "folded", asks: ASK_HISTORY });
+  assert.ok(foldedAsk.body.includes("## 会中询问"), "folded 档应渲染会中询问小节");
+  assert.ok(foldedAsk.body.includes("**问**：KV cache 为什么能加速？"), "小节含问题");
+  assert.ok(foldedAsk.body.includes("**答**：复用已计算的键值对避免重复前向 [1]。"), "小节含答案摘要");
+  assert.ok(foldedAsk.body.includes("来源：[KV Cache 论文](https://arxiv.org/abs/2401.00001)"), "小节含来源链接");
+  assert.ok(foldedAsk.body.includes("**问**：有什么前置条件？"), "第二组问答同样渲染");
+  assert.ok(!foldedAsk.frontmatter.includes("asks"), "frontmatter 契约不变（无新键）");
+  assert.match(foldedAsk.frontmatter, /\ntranscript: folded\n/, "transcript 档位如实保留");
+
+  // n) full 档同样渲染会中询问小节
+  const fullAsk = buildMeetingMarkdown({ ...BASE_MEETING, exportTranscript: "full", asks: ASK_HISTORY });
+  assert.ok(fullAsk.body.includes("## 会中询问"), "full 档应渲染会中询问小节");
+  assert.ok(fullAsk.body.includes("**问**：KV cache 为什么能加速？"));
+
+  // o) none 档不导该小节（决策 64 三档开关约束），frontmatter 无新键且 transcript: none
+  const noneAsk = buildMeetingMarkdown({ ...BASE_MEETING, exportTranscript: "none", asks: ASK_HISTORY });
+  assert.ok(!noneAsk.body.includes("## 会中询问"), "none 档不渲染会中询问小节");
+  assert.ok(!noneAsk.body.includes("**问**："), "none 档不写任何问答内容");
+  assert.match(noneAsk.frontmatter, /\ntranscript: none\n/);
+
+  // p) 无问答对时 folded 档也不渲染该小节
+  const foldedNoAsk = buildMeetingMarkdown({ ...BASE_MEETING, exportTranscript: "folded", asks: [] });
+  assert.ok(!foldedNoAsk.body.includes("## 会中询问"), "无问答对时不渲染会中询问小节");
+
+  // q) 落盘：asks 随会议文件写入
+  const rootQ = newRoot("ask-section");
+  const savedQ = exportMeetingToVault(rootQ, { ...BASE_MEETING, id: "meeting-ask", exportTranscript: "folded", asks: ASK_HISTORY });
+  assert.equal(savedQ.outcome, "saved");
+  const contentQ = readFileSync(path.join(rootQ, savedQ.file), "utf8");
+  assert.ok(contentQ.includes("## 会中询问"), "会中询问小节应写入会议文件");
+  assert.ok(contentQ.includes("[KV Cache 论文](https://arxiv.org/abs/2401.00001)"));
 
   // resolveVaultRoot：显式参数 > 默认 CUEMIND_DATA_DIR/vault
   assert.equal(resolveVaultRoot("/tmp/m3-vault-test"), path.resolve("/tmp/m3-vault-test"));
