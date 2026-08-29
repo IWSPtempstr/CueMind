@@ -786,7 +786,20 @@ sha256sum /home/work/models/cuemind/qwen3-8b-q4_k_m.gguf \
 
 ### 16.3 切换与回退
 
-- 切换：设置 → 本地模型路径改为 8B 文件（或直接换启动命令，应用侧零改动）
+- 切换：改 `cuemind-llama.service` 的 `-m` 路径 → `systemctl daemon-reload && systemctl restart cuemind-llama`（应用零改动，仍连 `127.0.0.1:8082`）
 - 回退：换回 4B 路径重启，配置层天然支持
 - 验收门槛（决策 57/65 口径）：冻结评估集对比 4B 基线——触发 F1、schema 合法率、卡片 P95、询问首字节；任一回退即不切换
 - 显存核查：`nvidia-smi` 确认占用 ≤7.5GB 且无 swap-to-RAM（`-ngl 99` 下若 OOM 降 `-c 4096`）
+
+### 16.4 A/B 验证计划（2026-08-29 锁定）
+
+```text
+基线：Qwen3-4B（现 systemd 实例）
+挑战者 1：Qwen3-8B Q4_K_M   → 下载约 5GB
+挑战者 2：GLM-4-9B Q4_K_M   → 仅当挑战者 1 schema 违规率不达标时再拉
+指标：触发 F1 / schema 合法率 / 卡片 P95 / 询问首字节 / 显存峰值
+门槛：任一指标回退即不切换；显存 >7.5GB 降 -c 4096 复测
+切换方式：改 cuemind-llama.service 的 -m 路径 → daemon-reload + restart（应用零改动）
+```
+
+执行顺序：先跑挑战者 1 的冻结集对比并记录五项指标；达标即切换并更新基线记录；不达标再拉挑战者 2 复测。结果写入 `/home/work/reports/cuemind/` 评估报告（含 model_sha256 与 llama.cpp commit，沿用第 15 节模板）。
