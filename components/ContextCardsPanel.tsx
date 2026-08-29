@@ -15,6 +15,8 @@ interface ContextCardsPanelProps {
   /** M3-a：卡片沉淀到 vault（fire-and-forget）。 */
   onCardDeposit?: (card: ContextCard) => void;
   depositedCardIds?: ReadonlySet<string>;
+  /** B 阶段：卡片「问更多」→ termHint 预填右栏询问框。 */
+  onAskMore?: (term: string) => void;
 }
 
 export default function ContextCardsPanel({
@@ -24,6 +26,7 @@ export default function ContextCardsPanel({
   error,
   onCardDeposit,
   depositedCardIds,
+  onAskMore,
 }: ContextCardsPanelProps): ReactElement {
   return (
     <section className="flex h-[50vh] min-h-0 w-full shrink-0 flex-col border-r border-neutral-800 lg:h-auto lg:min-w-0 lg:flex-1 lg:shrink">
@@ -44,12 +47,12 @@ export default function ContextCardsPanel({
             </div>
             <div>
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-200">当前背景</p>
-              <ContextCardView card={cards[0]} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(cards[0].candidateId) ?? false} />
+              <ContextCardView card={cards[0]} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(cards[0].candidateId) ?? false} onAskMore={onAskMore} />
             </div>
             {cards.length > 1 ? (
               <div className="max-h-96 min-w-0 space-y-3 overflow-y-auto pr-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">此前背景 · {cards.length - 1}</p>
-                {cards.slice(1).map((card) => <ContextCardView key={card.id} card={card} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(card.candidateId) ?? false} />)}
+                {cards.slice(1).map((card) => <ContextCardView key={card.id} card={card} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(card.candidateId) ?? false} onAskMore={onAskMore} />)}
               </div>
             ) : null}
             <p className="text-[10px] text-neutral-500">来源：每张卡片均附带检索来源。</p>

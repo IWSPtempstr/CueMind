@@ -11,6 +11,8 @@ interface ContextCardProps {
   /** M3-a：沉淀到 vault（fire-and-forget 导出 cuemind/concepts/<term>.md）。 */
   onDeposit?: (card: ContextCard) => void;
   isDeposited?: boolean;
+  /** B 阶段：卡片「问更多」——术语经 termHint 预填右栏询问框并聚焦。 */
+  onAskMore?: (term: string) => void;
 }
 
 /** 建议类别色板（批次三：左栏转写内联徽标沿用；五类全映射）。 */
@@ -53,7 +55,7 @@ export function sourceBadge(sourceType: ContextCard["sources"][number]["sourceTy
   }
 }
 
-export default function ContextCardView({ card, onDeposit, isDeposited }: ContextCardProps): ReactElement {
+export default function ContextCardView({ card, onDeposit, isDeposited, onAskMore }: ContextCardProps): ReactElement {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
 
   const toggleSource = (url: string): void => {
@@ -114,17 +116,29 @@ export default function ContextCardView({ card, onDeposit, isDeposited }: Contex
           </div>
         ))}
       </div>
-      {onDeposit ? (
-        <div className="mt-3 border-t border-blue-900/60 pt-3">
-          <button
-            type="button"
-            disabled={isDeposited}
-            aria-label={isDeposited ? "已沉淀到 vault" : "沉淀概念卡片到 vault"}
-            onClick={() => onDeposit(card)}
-            className={`rounded border border-blue-800 px-2 py-1 text-[10px] text-blue-300 transition-colors hover:bg-blue-950 disabled:opacity-50 disabled:hover:bg-transparent ${isDeposited ? "text-blue-400" : ""}`}
-          >
-            {isDeposited ? "✓ 已沉淀" : "✨ 沉淀"}
-          </button>
+      {onAskMore || onDeposit ? (
+        <div className="mt-3 flex items-center gap-2 border-t border-blue-900/60 pt-3">
+          {onAskMore ? (
+            <button
+              type="button"
+              aria-label={`对「${card.keyword}」进一步询问`}
+              onClick={() => onAskMore(card.keyword)}
+              className="rounded border border-blue-800 px-2 py-1 text-[10px] text-blue-300 transition-colors hover:bg-blue-950"
+            >
+              💬 问更多
+            </button>
+          ) : null}
+          {onDeposit ? (
+            <button
+              type="button"
+              disabled={isDeposited}
+              aria-label={isDeposited ? "已沉淀到 vault" : "沉淀概念卡片到 vault"}
+              onClick={() => onDeposit(card)}
+              className={`rounded border border-blue-800 px-2 py-1 text-[10px] text-blue-300 transition-colors hover:bg-blue-950 disabled:opacity-50 disabled:hover:bg-transparent ${isDeposited ? "text-blue-400" : ""}`}
+            >
+              {isDeposited ? "✓ 已沉淀" : "✨ 沉淀"}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </article>

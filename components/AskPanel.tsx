@@ -152,13 +152,15 @@ interface AskPanelProps {
   messages: ChatMessage[];
   phase: AskPhase;
   busy: boolean;
-  sendQuestion: (question: string) => Promise<void>;
+  sendQuestion: (question: string, options?: { termHint?: string }) => Promise<void>;
   error: string | null;
   stopGenerating: () => void;
   retryLastFailed: () => void;
   canRetry: boolean;
   /** 外部预填（批次三：转写标注点击）。变化时填入输入框，不自动发送。 */
   draftQuestion?: string;
+  /** B 阶段：卡片「问更多」带入的术语提示——预填输入框并聚焦，提交时透传 termHint。 */
+  termHint?: string;
 }
 
 export default function AskPanel({
@@ -171,11 +173,16 @@ export default function AskPanel({
   retryLastFailed,
   canRetry,
   draftQuestion,
+  termHint,
 }: AskPanelProps): ReactElement {
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [inputValue, setInputValue] = useState("");
   // 同一 draft 只消费一次（StrictMode / Fast Refresh 下 effect 会双跑）。
   const consumedDraftRef = useRef<string | null>(null);
+  // 「问更多」术语提示：预填一次、聚焦一次；提交时透传一次后清空。
+  const termHintRef = useRef<string>("");
+  const consumedTermHintRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (draftQuestion === undefined || draftQuestion === "") return;
@@ -183,6 +190,15 @@ export default function AskPanel({
     consumedDraftRef.current = draftQuestion;
     setInputValue(draftQuestion);
   }, [draftQuestion]);
+
+  useEffect(() => {
+    if (termHint === undefined || termHint === "") return;
+    if (consumedTermHintRef.current === termHint) return;
+    consumedTermHintRef.current = termHint;
+    termHintRef.current = termHint;
+    setInputValue(termHint);
+    inputRef.current?.focus();
+  }, [termHint]);
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -194,7 +210,9 @@ export default function AskPanel({
       return;
     }
     setInputValue("");
-    await sendQuestion(text);
+    const hint = termHintRef.current;
+    termHintRef.current = "";
+    await sendQuestion(text, hint !== "" ? { termHint: hint } : undefined);
   }, [inputValue, busy, sendQuestion]);
 
   return (
@@ -243,6 +261,7 @@ export default function AskPanel({
               id="ask-input"
               name="question"
               type="text"
+              ref={inputRef}
               aria-label="输入询问问题"
               value={inputValue}
               onChange={(event) => {

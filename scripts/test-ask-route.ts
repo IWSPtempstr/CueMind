@@ -308,6 +308,17 @@ async function testPrivacyTranscriptNeverLeavesToSearch(baseUrl: string): Promis
   assert.ok(newProviderBodies[1].includes(marker), "生成调用（本地）应携带只读转写上下文");
 }
 
+async function testTermHintUsedAsFallbackKeyword(baseUrl: string): Promise<void> {
+  // B 阶段（卡片「问更多」）：关键词提取为空时，termHint 作为兜底关键词（非问题前缀）。
+  const response = await POST(makeRequest(askBody(baseUrl, { question: "展开说说", termHint: "Speculative Decoding" })));
+  const events = await collectEvents(response);
+
+  const searching = findEvents(events, "searching");
+  assert.equal(searching.length, 1);
+  const keywords = searching[0].keywords as string[];
+  assert.equal(keywords[0], "Speculative Decoding", "关键词提取为空时，termHint 应作为兜底搜索关键词");
+}
+
 // --- f) askPrompt 旧键迁移（localStorage 可注入 shim，无 jsdom 依赖）---
 
 interface StorageShim {
@@ -535,6 +546,31 @@ async function main(): Promise<void> {
         await stopMockServer(server);
       }
       console.log("e) 隐私红线（外发不含转写片段）通过");
+    }
+
+    // i) B 阶段：termHint 作为关键词兜底（卡片「问更多」→ 关键词提取为空时）
+    {
+      askCacheClear();
+      tavilyResultCount = 2;
+      searchLayerCalls.length = 0;
+      const script: ProviderScript = {
+        keywords: [], // 强制走 termHint 兜底分支
+        generationContent: JSON.stringify({
+          answer: "speculative decoding 通过草稿模型并行生成 [1][2]。",
+          sources: [
+            { title: "KV Cache explained", url: "https://example.com/kv-cache" },
+            { title: "Second source", url: "https://example.com/second" },
+          ],
+          confidence: "medium",
+        }),
+      };
+      const { server, baseUrl } = await startMockProvider(script);
+      try {
+        await testTermHintUsedAsFallbackKeyword(baseUrl);
+      } finally {
+        await stopMockServer(server);
+      }
+      console.log("i) termHint 关键词兜底（关键词提取为空 → termHint 兜底）通过");
     }
 
     // f) askPrompt 旧键迁移（纯 localStorage shim）：用户自定义旧值 → 保留

@@ -123,6 +123,8 @@ export default function Home(): ReactElement {
   const ask = useAsk({ transcriptChunks: recorder.transcriptChunks, sessionId: activeSessionId });
   // 批次三：转写内联标注点击 → setAskDraft 预填右栏询问框（AskPanel 不自动发送）。
   const [askDraft, setAskDraft] = useState("");
+  // B 阶段：卡片「问更多」→ setAskTermHint 预填右栏询问框并聚焦 + 提交透传 termHint。
+  const [askTermHint, setAskTermHint] = useState("");
   const [topicSummary, setTopicSummary] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState(new Date());
   const [resumeCandidate, setResumeCandidate] = useState<SessionSnapshot | null>(null);
@@ -594,6 +596,7 @@ export default function Home(): ReactElement {
           error={contextCards.error}
           onCardDeposit={handleCardDeposit}
           depositedCardIds={depositedCardIds}
+          onAskMore={(term) => setAskTermHint(term)}
         />
         <AskPanel
           messages={ask.messages}
@@ -605,6 +608,7 @@ export default function Home(): ReactElement {
           retryLastFailed={ask.retryLastFailed}
           canRetry={ask.canRetry}
           draftQuestion={askDraft}
+          termHint={askTermHint}
         />
       </main>
     </div>
