@@ -7,6 +7,8 @@
 // 读取白名单：candidates 表整行（账本）+ sessions 表仅 id / transcript_json；
 // sessions 的 cards_json / metrics_json / title 等列一律不读；
 // chat_messages 表仅取 session_id / role / content（会中询问历史，决策 67 第二通道）。
+// 降级/失败回答不参与信号：信号仅匹配 role=user 的问题文本，降级文案均为
+// assistant 回答（角色过滤天然排除）；提取层（lib/ask-history）亦跳过降级回答。
 //
 // 用法：npx tsx scripts/export-training-data.ts [--data-dir <dir>] [--out <dir>] [--useful <json-file>] [--now <iso>]
 // - --data-dir 默认 process.env.CUEMIND_DATA_DIR || <cwd>/.data

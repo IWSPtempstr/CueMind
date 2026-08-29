@@ -14,9 +14,22 @@ export const MAX_ASK_FIELD_CHARS = 2_000;
 /** 总结输入上下文中「会中询问」块的最长字符数（截断保护）。 */
 export const MAX_ASK_CONTEXT_CHARS = 8_000;
 
+/** 降级/失败回答的文案前缀（与 useAsk.ts 的上屏文案一致）。 */
+export const DEGRADED_ANSWER_PREFIXES = [
+  "没找到可靠来源",
+  "回答生成失败",
+] as const;
+
+/** 内容是否为降级/失败文案（trim 后前缀匹配；覆盖 DB 回读无 isDegraded 标志的场景）。 */
+export function isDegradedAnswerText(content: string): boolean {
+  const trimmed = content.trim();
+  return DEGRADED_ANSWER_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
+}
+
 /**
- * 从按时间升序的会中询问消息中抽取相邻 user→assistant 问答对。
- * 跳过流式未定稿消息；assistant 的 sources（仅会话内存）一并带上。
+ * 从会话消息抽取完整问答对（user → 紧随的 assistant）。
+ * 跳过：流式未定稿消息；降级/失败回答（isDegraded 或降级文案前缀）——
+ * 这类回答不进入总结上下文、vault「会中询问」小节与训练信号。
  */
 export function extractAskExchanges(
   messages: readonly ChatMessage[],
@@ -29,7 +42,9 @@ export function extractAskExchanges(
       pendingQuestion = message.content.trim().length > 0 ? message : null;
     } else if (message.role === "assistant" && pendingQuestion !== null) {
       const answer = message.content.trim();
-      if (answer.length > 0) {
+      const degraded =
+        message.isDegraded === true || isDegradedAnswerText(answer);
+      if (answer.length > 0 && !degraded) {
         exchanges.push({
           question: pendingQuestion.content.trim(),
           answer,

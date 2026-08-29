@@ -206,6 +206,25 @@ function testFormatAskExchangesOneLineAndTruncation(): void {
   );
 }
 
+function testExtractAskExchangesSkipsDegraded(): void {
+  // 降级/失败回答不得进入总结、vault「会中询问」与训练信号：
+  // isDegraded 标志与降级文案前缀（DB 回读无标志场景）两条路径均跳过。
+  const messages: ChatMessage[] = [
+    msg("user", "降级问题"),
+    msg("assistant", "没找到可靠来源，无法给出有依据的回答。\n已尝试：arxiv / hackernews", { isDegraded: true }),
+    msg("user", "失败问题"),
+    // 无 isDegraded 标志（模拟 DB 回读）→ 前缀匹配兜底
+    msg("assistant", "回答生成失败：本地模型生成失败"),
+    msg("user", "正常问题"),
+    msg("assistant", "正常答案", { sources: [{ title: "S", url: "https://s" }] }),
+  ];
+
+  const exchanges = extractAskExchanges(messages);
+  assert.equal(exchanges.length, 1, "仅正常问答对入选");
+  assert.equal(exchanges[0].question, "正常问题");
+  assert.equal(exchanges[0].answer, "正常答案");
+}
+
 // --- main ---
 
 async function main(): Promise<void> {
@@ -234,6 +253,9 @@ async function main(): Promise<void> {
 
   testFormatAskExchangesOneLineAndTruncation();
   console.log("d) formatAskExchangesOneLine（一行拼接 + 字段/总长截断）通过");
+
+  testExtractAskExchangesSkipsDegraded();
+  console.log("e) extractAskExchanges 跳过降级/失败回答（标志 + 文案前缀双路径）通过");
 
   console.log("summarize route regression tests passed");
 }
