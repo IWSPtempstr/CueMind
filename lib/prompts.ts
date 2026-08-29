@@ -25,6 +25,9 @@ export const SUGGESTIONS_TEMPERATURE = 0.4;
 
 export const CHAT_MAX_TOKENS = 1024;
 
+/** Max tokens for the live-ask citation JSON generation. */
+export const ASK_MAX_TOKENS = 1024;
+
 /** User messages sent with chat requests (client + server cap). */
 export const CHAT_HISTORY_MAX_MESSAGES = 20;
 

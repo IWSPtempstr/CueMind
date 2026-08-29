@@ -99,3 +99,26 @@ export function isAbortTimeoutError(caught: unknown): boolean {
     (caught as { name?: unknown }).name === "TimeoutError"
   );
 }
+
+/**
+ * Card-pipeline in-flight counter. Live asks yield to context-card generation
+ * (red line 3): the ask route waits for this counter to drain before starting
+ * its own model calls. Kept on globalThis so dev-HMR/duplicate module
+ * instances share one counter (same pattern as the api-security rate limiter).
+ */
+const globalCardInflight = globalThis as typeof globalThis & {
+  cueMindCardInflight?: { count: number };
+};
+export const cardInflight =
+  globalCardInflight.cueMindCardInflight ?? { count: 0 };
+globalCardInflight.cueMindCardInflight = cardInflight;
+
+/** Counts fn as one in-flight card generation for the ask yield queue. */
+export async function withCardInflight<T>(fn: () => Promise<T>): Promise<T> {
+  cardInflight.count += 1;
+  try {
+    return await fn();
+  } finally {
+    cardInflight.count -= 1;
+  }
+}

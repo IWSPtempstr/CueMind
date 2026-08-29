@@ -237,17 +237,18 @@ export default function useChat({
       const controller = new AbortController();
       abortControllerRef.current = controller;
       try {
-        const response = await fetch("/api/chat", {
+        const response = await fetch("/api/ask", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            message: trimmed,
+            question: trimmed,
+            recentTranscript: transcriptContext,
             chatHistory,
-            transcriptContext,
-            askPrompt: settings.askPrompt,
-            chatContextChars: settings.chatContextChars,
+            settings: {
+              askPrompt: settings.askPrompt,
+            },
           }),
           signal: controller.signal,
         });
