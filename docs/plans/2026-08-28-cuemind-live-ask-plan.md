@@ -108,11 +108,23 @@
 6. test: ask route + anchor regression (sources/degraded/schema/cache/privacy/anchor)
 ```
 
-## B 阶段（后续，不在本计划范围）
+## B 阶段（已实现，2026-08-29 回写）
 
-- 卡片「问更多」入口：术语自动带入 ask box（`termHint` 参数已在本计划预留）
-- 会议总结纳入询问历史（一行拼接，不新建存储）
-- MCP `list_asks(session_id)` 只读工具（远期）
+- ✅ 卡片「问更多」入口：术语经 `termHint` 预填右栏询问框并聚焦（提交 `98a3e8b`）
+- ✅ 会议总结纳入询问历史（一行拼接 + 截断保护，不新建存储；提交 `eb90d12`）
+- ✅（范围外增补）vault meetings「会中询问」小节：决策 64 三档开关约束，none 档不导；提交 `0a6eb72`
+- MCP `list_asks(session_id)` 只读工具（远期，未开工）
+
+## C 阶段（整改迭代，2026-08-29 立）
+
+B 阶段交付后的问题分析与整改按优先级排入 [2026-08-29-cuemind-optimization-roadmap.md](./2026-08-29-cuemind-optimization-roadmap.md)：
+
+- P0 询问完成延迟（大幅缓解 -45%，残留待产品裁决）
+- P1 降级回答过滤（✅ 提交 `e7864eb`）
+- P2 询问持久化完整性（chat_messages 增列 + replay 接线）
+- P3 训练信号严谨化（时序约束 + 双通道去重 + 命中阈值）
+- P4 用户裁决与失败可见（漏报裁决入口 + 降级率）
+- P5 工程卫生（落库重试、仓库清理、端到端用例、隐私降级口根治）
 
 ## 交接纪律
 
