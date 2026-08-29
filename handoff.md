@@ -1,5 +1,7 @@
 # CueMind 项目交接文档（handoff）
 
+> **开发唯一入口：** [docs/plans/CUEMIND-MASTER-DEVELOPMENT-PLAN.md](docs/plans/CUEMIND-MASTER-DEVELOPMENT-PLAN.md)。后续开发、阶段状态、验收证据和新增内容统一写入该文档；本文仅用于接手导航和环境提示。
+
 > 更新：2026-08-29（覆盖优化整改轮，基线提交 `ace5610` 之后；以 `git log -1` 为准）
 > 读者：完全没有上下文的新会话 / 新接手者。接手顺序：本文 → `CLAUDE.md` → `AGENTS.md` → `README.md` → `docs/product/cuemind-grilling-decisions.md`（锁定决策）→ `docs/plans/`（实施计划）。
 > 仓库：`/home/work/asr/CueMind`，分支 `codex/local-realtime-meeting-copilot`（本地，未推送）。
