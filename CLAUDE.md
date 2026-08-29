@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code / Trae) when working with code in this repository.
 
 ## Commands
 
@@ -11,38 +11,50 @@ npm run build     # production build — the primary correctness gate (runs full
 npm run start     # serve the production build (add `-- -p <port>` to change port)
 npm run lint      # eslint (flat config, next/core-web-vitals + next/typescript)
 npx tsc --noEmit  # standalone type-check
+npx tsx scripts/test-<name>.ts   # regression / eval scripts (see scripts/)
 ```
 
-There is **no test suite** in this project. The verification loop is: `npx tsc --noEmit` → `npm run lint` → `npm run build`. `npm run build` is the real gate because it type-checks every route and page under production settings.
+Verification chain: `npx tsc --noEmit` → `npm run lint` → `npm run build` → relevant `scripts/test-*.ts` regressions. `npm run build` is the real gate because it type-checks every route and page under production settings. Key regression scripts: `test-context-card-route.ts`, `test-model-providers.ts`, `test-vertical-sources.ts`, `test-chat-store.ts`, `test-media-upload-route.ts`, `test-session-title-route.ts`, `test-local-asr.ts`.
+
+## Runtime environment notes
+
+- **Trae 沙箱无 GPU**：沙箱命名空间未绑定 `/dev/nvidia*`（白名单配置无法修复）。沙箱内 llama-server 恒为 CPU 回退；需要 GPU 推理时，在**普通终端**执行 `scripts/llama-gpu-start.sh`（沙箱外启动，应用仍连 `127.0.0.1:8082`，零改动），停止用 `scripts/llama-gpu-stop.sh`。判断 GPU 是否生效：日志无 `ggml_cuda_init: failed` 且 `nvidia-smi` 进程列表含 llama-server。
+- **build 前停 :3000 dev server**（turbopack 与 build 共写 `.next` 会产物损坏 ENOENT）。
 
 ## Big-picture architecture
 
-**CueMind** is a single-page **meeting copilot** (Next.js 15 App Router, React 19, Tailwind v4, no database, no auth). One client shell orchestrates three columns; four API routes are thin server-side proxies to **Groq** (OpenAI-compatible endpoints). All live state lives in React; recent sessions autosave to `localStorage`.
+**CueMind** is a local-first **realtime meeting cognition assistant** (Next.js 15 App Router, React 19, Tailwind v4, no auth). The core loop: audio in → local ASR (whisper.cpp) → candidate windows → keyword detection → sourced web search → Chinese explanation cards via local llama.cpp, with JSONL trace / replay. Product decisions are locked in `docs/product/cuemind-grilling-decisions.md` (read decisions 56–62 for the current direction); the demo scope contract is `docs/plans/2026-08-27-cuemind-demo-design.md`.
 
-**The client owns everything; routes are stateless proxies.** [app/page.tsx](app/page.tsx) is the only page. It composes three hooks — `useMicRecorder`, `useSuggestions`, `useChat` — and passes their state down to the three column components ([MicTranscript](components/MicTranscript.tsx), [LiveSuggestions](components/LiveSuggestions.tsx), [ChatPanel](components/ChatPanel.tsx)). The hooks are the source of truth; components are presentational. To understand any feature, start at the hook, not the component.
+**Three input paths, one transcript state.** Upload (`MediaUploadPanel` → `useMediaUploader` → `/api/upload-media`), microphone (`useMicRecorder` → `/api/local-transcribe`), and desktop Windows helper (`useDesktopTranscript`, double-track WASAPI events). All three write into the same `transcriptChunks` state; downstream components don't care which source produced a chunk.
 
-**The transcription pipeline is the subtle part.** [hooks/useMicRecorder.ts](hooks/useMicRecorder.ts) runs **overlapping `MediaRecorder` segments** on one `MediaStream`: recorder B starts ~1s before recorder A stops (`RECORDER_OVERLAP_MS`), so each ~30s window produces a *self-contained* WebM/Opus blob with a valid header while covering the rollover seam. This deliberately avoids `MediaRecorder` timeslice, which yields headerless "orphan" chunks Whisper rejects. Blobs under 1KB or below the silence RMS threshold are skipped client-side; each blob POSTs to `/api/transcribe`. Failed uploads are **retried with exponential backoff** (audio is never dropped). `flushCurrentChunk()` (manual refresh) stops all recording segments early and starts a fresh one. Read the README's "How the Transcription Works" before touching this file — the design rationale matters.
+**Model providers: local llama.cpp default, remote-api explicit.** [lib/model-provider.ts](lib/model-provider.ts) defines `"llama.cpp" | "remote-api"`. No cloud provider is a silent default — remote is opt-in configuration. Prompt/caps constants live in [lib/prompts.ts](lib/prompts.ts).
 
-**The suggestion refresh is a two-call sequence.** [hooks/useSuggestions.ts](hooks/useSuggestions.ts) `runCycle()` first POSTs the older transcript slice to `/api/summarize`, then POSTs `{ recentTranscript, earlierSummary, previousSuggestions }` to `/api/suggestions`. Context is split into a recent verbatim tail + a summarized earlier region (see `buildContextStrings`). Suggestions use Groq **JSON-schema structured output** (exactly 3 items, each `{ type, preview, detail }`) — validated at the route boundary. Previous + dismissed previews are fed back as anti-repeat context.
+**The context-card pipeline is the product core.** [hooks/useContextCards.ts](hooks/useContextCards.ts) feeds transcript windows to `/api/context-cards`, which runs the candidate ledger → hard rules / duplicate suppression → keyword judgment → search → card generation chain. Search is [lib/search.ts](lib/search.ts) `searchKeywordSources`: vertical sources first ([lib/arxiv-search.ts](lib/arxiv-search.ts), [lib/hn-search.ts](lib/hn-search.ts), [lib/github-search.ts](lib/github-search.ts), [lib/so-search.ts](lib/so-search.ts)) — parallel via `Promise.allSettled`, short-circuit when ≥2 usable results — falling through to the generic search chain otherwise. `searchWeb` must keep its exact signature/behavior (replay/eval compatibility).
 
-**Chat streams via SSE.** [hooks/useChat.ts](hooks/useChat.ts) POSTs to `/api/chat` with `stream: true` and parses SSE frames manually (buffering on `\n\n` boundaries). Clicking a suggestion inserts its `detail` instantly, then streams a fuller answer. Supports mid-stream abort (`AbortController`) and retry of the last failed prompt.
+**ASR is local whisper.cpp.** [lib/local-asr.ts](lib/local-asr.ts) spawns a whisper-cli subprocess (mkdtemp temp dir, finally cleanup, AbortSignal kills the subprocess, optional prompt-biasing glossary). Uploaded media is converted to 16k mono WAV server-side ([lib/upload-media.ts](lib/upload-media.ts), [lib/wav-slice.ts](lib/wav-slice.ts)) before transcription. Knowledge/vector retrieval (Milvus) has been removed — do not reintroduce embeddings.
 
-**Session model.** [types/session.ts](types/session.ts) `SessionSnapshot` is the serializable unit for both autosave ([lib/session-storage.ts](lib/session-storage.ts), last 10 sessions) and export ([lib/export.ts](lib/export.ts), JSON or Markdown). Because `Date` fields don't survive JSON, both load paths **explicitly revive** them — preserve that when adding fields.
+**Chat streams via SSE and persists to server-side SQLite.** [hooks/useChat.ts](hooks/useChat.ts) parses SSE frames manually (buffering on `\n\n`). Follow-up messages persist via `/api/chat-messages` to [lib/chat-store.ts](lib/chat-store.ts) (better-sqlite3 + WAL at `<CUEMIND_DATA_DIR>/cuemind.db`, JSONL fallback when the native module fails to load). `CUEMIND_DATA_DIR` (default `<cwd>/.data`) is the shared data-dir convention — new server-side stores must reuse it and the chat-store pattern.
+
+**Session model.** [types/session.ts](types/session.ts) `SessionSnapshot` is the serializable unit for autosave ([lib/session-storage.ts](lib/session-storage.ts), last 10 sessions, browser localStorage) and export ([lib/export.ts](lib/export.ts)). Session titles are ≤20-char Chinese topic phrases generated by llama.cpp at meeting end ([lib/session-title.ts](lib/session-title.ts), `/api/session-title`), falling back to first-line truncation. Because `Date` fields don't survive JSON, load paths **explicitly revive** them — preserve that when adding fields.
+
+**Trace / replay.** [lib/telemetry.ts](lib/telemetry.ts) and [lib/replay.ts](lib/replay.ts) record per-candidate latency and final states; `scripts/run-context-card-replay.ts` and `scripts/evaluate-*.ts` consume them. Every candidate keeps a stable ID and a single final state (`card_shown`, `suppressed_as_duplicate`, `model_skip`, `search_failed`, `timeout`, `invalid_schema`, …) — never delete ledger records.
 
 ## Conventions that will bite you if missed
 
 - **`@/*` path alias** maps to the repo root (see `tsconfig.json` paths). Import as `@/hooks/...`, `@/lib/...`.
-- **All browser storage is namespaced `cuemind_*`** (`cuemind_settings`, `cuemind_groq_api_key` / `cuemind_session_groq_api_key`, `cuemind_sessions_v1`); exports use `cuemind-session-*` filenames. Only `groq_api_key` (unprefixed) is a recognized legacy key the settings loader migrates. Renaming any of these keys orphans existing users' saved data — treat them as a stable contract.
-- **Prompts, models, and all caps/limits live in [lib/prompts.ts](lib/prompts.ts).** Models are `whisper-large-v3` for transcription and `openai/gpt-oss-120b` for everything else. Don't hardcode these elsewhere — add a constant here.
-- **API-route security is centralized in [lib/api-security.ts](lib/api-security.ts)** and applied uniformly: every route calls `enforceRateLimit(request, bucket, limit)`, resolves the key via `resolveGroqApiKey` (custom `x-groq-api-key` header → `GROQ_API_KEY` env fallback), and clamps request-body inputs with `cappedText`/`cappedPrompt` against the `MAX_*` constants in `lib/prompts.ts`. Any new route must follow this same shape. The rate limiter is a per-instance safety net, not a distributed limiter.
-- **Never trust client-supplied sizes.** Context/prompt/message lengths are clamped server-side to `MAX_*` ceilings regardless of what the client sends; transcript content is wrapped in `<meeting_transcript>` delimiters and labeled as untrusted data (prompt-injection hardening). Keep both.
-- **The Groq key never appears in the preferences blob.** [hooks/useSettings.ts](hooks/useSettings.ts) stores the secret separately (localStorage / sessionStorage / in-memory per `apiKeyStorage` mode) and strips it from `cuemind_settings`. `loadCueMindSettings()` runs a **one-time** legacy-key migration and otherwise does not write storage on every call — don't reintroduce per-load writes.
-- **Security headers** (CSP, X-Frame-Options, etc.) are set in [next.config.ts](next.config.ts) `headers()`; `connect-src 'self'` means the browser only talks to same-origin `/api/*`, never Groq directly.
-- **Route response helpers**: use `groqApiErrorMessage` / `extractGroqChatAssistantContent` ([lib/groq-route-helpers.ts](lib/groq-route-helpers.ts)) and the `isErrorResponseBody` guard ([lib/api-response.ts](lib/api-response.ts)) rather than re-parsing Groq/error envelopes inline.
+- **All browser storage is namespaced `cuemind_*`** (`cuemind_settings`, `cuemind_sessions_v1`, `cuemind_llama_cpp_api_key` / `cuemind_remote_api_api_key` / `cuemind_search_api_key` plus `cuemind_session_*` variants). Renaming keys orphans existing users' saved data — treat them as a stable contract. Secrets are stored separately from the `cuemind_settings` blob.
+- **API-route security is centralized in [lib/api-security.ts](lib/api-security.ts)**: every route calls `enforceRateLimit(request, bucket, limit)` and clamps request-body inputs against the `MAX_*` constants in `lib/prompts.ts`. Any new route must follow this shape. The rate limiter is a per-instance safety net, not a distributed limiter.
+- **Never trust client-supplied sizes.** Context/prompt/message lengths are clamped server-side to `MAX_*` ceilings regardless of what the client sends; transcript content is wrapped in delimiters and labeled as untrusted data (prompt-injection hardening, decision 46). Keep both.
+- **Route response helpers**: use the `isErrorResponseBody` guard ([lib/api-response.ts](lib/api-response.ts)) rather than re-parsing error envelopes inline.
+- **User-uploaded media always goes to a mkdtemp temp directory with finally cleanup** — never write uploads into the repo tree. `git add dataset/` is forbidden.
+- **Side-channel persistence is fire-and-forget**: any new store writes (ledger, sessions) must never block or add latency to the realtime card pipeline (card P95 ≤ 8s red line).
+- **Security headers** (CSP, X-Frame-Options, etc.) are set in [next.config.ts](next.config.ts) `headers()`; `connect-src 'self'` means the browser only talks to same-origin `/api/*`.
 
-## Known constraint
+## Known constraints
 
-Audio capture is **microphone-only**. Browser sandboxing prevents capturing the remote participant's voice in virtual meetings (WebRTC audio is not reachable via tab capture). This is a platform limitation, not a bug — see the README's "Known Limitations & Future Work". A native desktop shell (Electron loopback audio) is the documented path to two-way capture.
+- **Windows helper is code-complete but not实机-verified.** `native/CueMind.Audio` implements WASAPI loopback + mic double-track capture; system-audio claims must not be made before on-machine acceptance (decision 58).
+- **Audio input in the browser sandbox is microphone/upload only**; system audio requires the desktop helper (Electron + Windows). This is a platform limitation, not a bug.
+- **Planning docs**: `docs/plans/` holds dated implementation plans (landing master plan, demo design, vertical-sources design, knowledge-export + MCP plan). `docs/plans/2026-08-27-cuemind-knowledge-export-mcp-plan.md` (M1–M3) is the next implementation wave — vault export + read-only stdio MCP server.
 
 ## 构建规范
 
