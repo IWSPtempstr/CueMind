@@ -1,7 +1,8 @@
 "use client";
 
-// Right column: always-visible live health metrics for the ASR pipeline,
-// replacing the collapsible LatencyPanel summary in the realtime console.
+// Live health metrics for the ASR/card pipeline (decision 68): no longer a
+// permanent right-column panel — this content-only component renders inside
+// the SettingsModal "实时健康指标" fold-out, refreshed in real time while open.
 
 import type { ReactElement } from "react";
 
@@ -40,6 +41,9 @@ interface HealthPanelProps {
   degradationStatus: string | null;
 }
 
+/** 页面层一次性算好的健康快照，原样接进设置折叠区（数据源不变）。 */
+export type HealthSnapshot = HealthPanelProps;
+
 const ASR_STATE_META = {
   idle: { label: "空闲", dot: "bg-neutral-500", text: "text-neutral-400" },
   recording: { label: "录音中", dot: "animate-pulse bg-red-500", text: "text-red-400" },
@@ -66,9 +70,9 @@ export default function HealthPanel(props: HealthPanelProps): ReactElement {
   const hasLatencyData = latencySummaries.some((summary) => summary.count > 0);
 
   return (
-    <aside className="flex h-[50vh] min-h-0 w-full shrink-0 flex-col gap-3 overflow-y-auto border-l border-neutral-800 px-4 py-5 tabular-nums lg:h-auto lg:w-72 lg:shrink-0">
+    <div className="flex flex-col gap-3 tabular-nums">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-neutral-500">实时健康指标</h2>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-500">实时健康指标</h3>
         <span
           aria-label={chainActive ? "链路活跃" : "链路空闲"}
           aria-hidden={!chainActive}
@@ -145,6 +149,6 @@ export default function HealthPanel(props: HealthPanelProps): ReactElement {
           </div>
         </dl>
       </section>
-    </aside>
+    </div>
   );
 }

@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import ChatPanel from "@/components/ChatPanel";
-import ChatPanelDrawer from "@/components/ChatPanelDrawer";
-import HealthPanel, { type AsrStatusSnapshot, type UploadStatusSnapshot } from "@/components/HealthPanel";
-import LiveSuggestions from "@/components/LiveSuggestions";
+import AskPanel from "@/components/AskPanel";
+import ContextCardsPanel from "@/components/ContextCardsPanel";
+import { type AsrStatusSnapshot, type UploadStatusSnapshot } from "@/components/HealthPanel";
 import MediaUploadPanel from "@/components/MediaUploadPanel";
 import MicTranscript from "@/components/MicTranscript";
 import SettingsModal from "@/components/SettingsModal";
-import useChat from "@/hooks/useChat";
+import useAsk from "@/hooks/useAsk";
 import useContextCards from "@/hooks/useContextCards";
 import useDesktopTranscript from "@/hooks/useDesktopTranscript";
 import useMediaUploader, { isUploadedRecordCompleted } from "@/hooks/useMediaUploader";
@@ -24,7 +23,7 @@ import { loadSessions, storeSession } from "@/lib/session-storage";
 import { summarizeLatency } from "@/lib/telemetry";
 import type { ChatMessage } from "@/types/chat";
 import type { MeetingReport, SessionSnapshot } from "@/types/session";
-import type { ContextCard, Suggestion } from "@/types/suggestions";
+import type { ContextCard } from "@/types/suggestions";
 
 function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptChunks">): string {
   const firstWords = snapshot.transcriptChunks[0]?.text.trim().slice(0, 44);
@@ -49,9 +48,9 @@ function formatSessionDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-// --- P2 服务端 chat 持久化辅助：序列化 / 解析 / 合并 ---
+// --- P2 服务端询问历史持久化辅助（语义升级：chat_messages 表承载会中询问）：序列化 / 解析 / 合并 ---
 
-function toStoredChatMessages(sessionId: string, messages: ChatMessage[]): StoredChatMessage[] {
+function toStoredAskMessages(sessionId: string, messages: ChatMessage[]): StoredChatMessage[] {
   return messages
     .filter((message) => !message.isStreaming)
     .map((message) => ({
@@ -64,7 +63,7 @@ function toStoredChatMessages(sessionId: string, messages: ChatMessage[]): Store
     }));
 }
 
-function parseStoredChatMessages(raw: unknown): StoredChatMessage[] {
+function parseStoredAskMessages(raw: unknown): StoredChatMessage[] {
   if (!Array.isArray(raw)) return [];
   const messages: StoredChatMessage[] = [];
   for (const item of raw) {
@@ -86,7 +85,7 @@ function parseStoredChatMessages(raw: unknown): StoredChatMessage[] {
   return messages;
 }
 
-function mergeChatMessages(local: ChatMessage[], server: StoredChatMessage[]): ChatMessage[] {
+function mergeAskMessages(local: ChatMessage[], server: StoredChatMessage[]): ChatMessage[] {
   const byId = new Map<string, ChatMessage>();
   for (const message of local) byId.set(message.id, message);
   // 服务端数据为准（同 id 覆盖本地），统一按 createdAt 升序。
@@ -113,15 +112,17 @@ export default function Home(): ReactElement {
   });
   const isCardFlowActive = (recorder.isRecording && !recorder.isPaused) || uploader.isProcessing;
   const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive });
-  const chat = useChat({ transcriptChunks: recorder.transcriptChunks });
-  const [pendingSuggestion, setPendingSuggestion] = useState<Suggestion | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
   const [meetingReport, setMeetingReport] = useState<MeetingReport | null>(null);
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportRequested, setReportRequested] = useState(false);
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // 会中询问（决策 67/68）：单飞锁 + SSE 阶段状态机，请求体透传 sessionId。
+  const ask = useAsk({ transcriptChunks: recorder.transcriptChunks, sessionId: activeSessionId });
+  // 批次三预留：转写内联标注点击 → setAskDraft 预填右栏询问框（本笔仅接线状态）。
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [askDraft, setAskDraft] = useState("");
   const [topicSummary, setTopicSummary] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState(new Date());
   const [resumeCandidate, setResumeCandidate] = useState<SessionSnapshot | null>(null);
@@ -145,9 +146,10 @@ export default function Home(): ReactElement {
   useEffect(() => { setDepositedCardIds(loadDepositedCardIds()); }, []);
   // 已处理过"上传完成"事件的 uploadId 去重集合（主题摘要只生成一次）。
   const handledUploadIdsRef = useRef(new Set<string>());
-  // P2 chat 服务端同步：代 token 使在途合并失效（restore/new 切换会话时不串数据）。
-  const chatSyncTokenRef = useRef(0);
-  const wasChatOpenRef = useRef(false);
+  // P2 → live-ask 服务端同步：代 token 使在途合并失效（restore/new 切换会话时不串数据）；
+  // lastAskSyncedSessionRef 保证每个 sessionId 只拉取一次历史（AskPanel 常驻右栏）。
+  const askSyncTokenRef = useRef(0);
+  const lastAskSyncedSessionRef = useRef<string | null>(null);
 
   const generateTopicSummary = useCallback((transcriptText: string): void => {
     const trimmed = transcriptText.trim();
@@ -238,7 +240,7 @@ export default function Home(): ReactElement {
     setResumeCandidate(saved[0] ?? null);
   }, []);
 
-  const hasContent = recorder.transcriptChunks.length > 0 || suggestions.batches.length > 0 || chat.messages.length > 0 || meetingReport !== null;
+  const hasContent = recorder.transcriptChunks.length > 0 || suggestions.batches.length > 0 || ask.messages.length > 0 || meetingReport !== null;
   useEffect(() => {
     if (!hasContent || activeSessionId) return;
     setActiveSessionId(crypto.randomUUID());
@@ -285,8 +287,8 @@ export default function Home(): ReactElement {
     return () => window.clearTimeout(id);
   }, [activeSessionId, hasContent, snapshot]);
 
-  const postChatMessages = useCallback((sessionId: string, messages: ChatMessage[]): void => {
-    const payload = toStoredChatMessages(sessionId, messages);
+  const postAskMessages = useCallback((sessionId: string, messages: ChatMessage[]): void => {
+    const payload = toStoredAskMessages(sessionId, messages);
     if (payload.length === 0) return;
     // fire-and-forget：失败静默，不影响主流程。
     void fetch("/api/chat-messages", {
@@ -296,14 +298,14 @@ export default function Home(): ReactElement {
     }).catch(() => undefined);
   }, []);
 
-  const fetchServerChatMessages = useCallback(
+  const fetchServerAskMessages = useCallback(
     async (sessionId: string): Promise<StoredChatMessage[]> => {
       try {
         const response = await fetch(`/api/chat-messages?sessionId=${encodeURIComponent(sessionId)}`);
         if (!response.ok) return [];
         const payload: unknown = await response.json();
         if (typeof payload !== "object" || payload === null || !("messages" in payload)) return [];
-        return parseStoredChatMessages((payload as { messages: unknown }).messages);
+        return parseStoredAskMessages((payload as { messages: unknown }).messages);
       } catch {
         return [];
       }
@@ -312,68 +314,61 @@ export default function Home(): ReactElement {
   );
 
   // P2: 消息落定后持久化到服务端——debounce 800ms；流式 delta 会持续重置计时器，
-  // 因此流式中途不会触发 POST，仅在 isStreaming 结束后 800ms 落库。
+  // 因此流式中途不会触发 POST，仅在询问流结束后 800ms 落库。
   useEffect(() => {
-    if (!activeSessionId || chat.messages.length === 0) return;
-    if (chat.messages.some((message) => message.isStreaming)) return;
+    if (!activeSessionId || ask.messages.length === 0) return;
+    if (ask.messages.some((message) => message.isStreaming)) return;
     const timer = window.setTimeout(() => {
-      postChatMessages(activeSessionId, chat.messages);
+      postAskMessages(activeSessionId, ask.messages);
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [activeSessionId, chat.messages, postChatMessages]);
+  }, [activeSessionId, ask.messages, postAskMessages]);
 
-  // P2: 抽屉打开（true 边沿）时按 activeSessionId 同步服务端历史——
-  // 服务端无数据且内存有旧 localStorage 消息 → 懒迁移 POST；有数据 → 合并刷新。
+  // P2 → live-ask: AskPanel 常驻右栏——挂载时（或 sessionId 变化时）拉取一次服务端历史。
+  // 服务端无数据且本地有消息 → 懒迁移 POST；服务端有数据 → 以服务端为准合并刷新。
+  // 每个 sessionId 只拉取一次（ref 去重，兼容 StrictMode 双挂载）。
   useEffect(() => {
-    if (!isChatOpen) {
-      wasChatOpenRef.current = false;
-      return;
-    }
-    if (wasChatOpenRef.current) return;
-    wasChatOpenRef.current = true;
     if (!activeSessionId) return;
+    if (lastAskSyncedSessionRef.current === activeSessionId) return;
+    lastAskSyncedSessionRef.current = activeSessionId;
     const sessionId = activeSessionId;
-    const syncToken = chatSyncTokenRef.current;
-    void fetchServerChatMessages(sessionId).then((serverMessages) => {
-      if (chatSyncTokenRef.current !== syncToken) return;
+    const syncToken = ++askSyncTokenRef.current;
+    void fetchServerAskMessages(sessionId).then((serverMessages) => {
+      if (askSyncTokenRef.current !== syncToken) return;
       if (serverMessages.length === 0) {
-        postChatMessages(sessionId, chat.messages);
+        postAskMessages(sessionId, ask.messages);
         return;
       }
-      chat.setMessages(mergeChatMessages(chat.messages, serverMessages));
+      ask.setMessages(mergeAskMessages(ask.messages, serverMessages));
     });
-  }, [activeSessionId, chat, fetchServerChatMessages, isChatOpen, postChatMessages]);
+  }, [activeSessionId, ask, fetchServerAskMessages, postAskMessages]);
 
   const restoreSession = useCallback((session: SessionSnapshot): void => {
     if (recorder.isRecording) recorder.stopRecording();
     recorder.setTranscriptChunks(session.transcriptChunks);
     suggestions.setBatches(session.suggestionBatches);
-    chat.setMessages(session.chatMessages);
+    ask.setMessages(session.chatMessages);
     setMeetingReport(session.meetingReport);
     setTopicSummary(session.topicSummary ?? null);
     setActiveSessionId(session.id);
     setCreatedAt(session.createdAt);
     setResumeCandidate(null);
-    // P2: localStorage 快照先行渲染，再异步拉服务端历史——有数据则以服务端为准合并（按 createdAt 排序）。
-    const syncToken = ++chatSyncTokenRef.current;
-    void fetchServerChatMessages(session.id).then((serverMessages) => {
-      if (chatSyncTokenRef.current !== syncToken || serverMessages.length === 0) return;
-      chat.setMessages(mergeChatMessages(session.chatMessages, serverMessages));
-    });
-  }, [chat, fetchServerChatMessages, recorder, suggestions]);
+    // P2: localStorage 快照先行渲染；sessionId 变化触发的同步 effect 会拉服务端历史，
+    // 有数据则以服务端为准合并（按 createdAt 排序），无数据则懒迁移本地消息。
+  }, [ask, recorder, suggestions]);
 
   const newSession = useCallback((): void => {
-    chatSyncTokenRef.current += 1; // 使在途的服务端合并失效，避免旧会话消息混入新会话
+    askSyncTokenRef.current += 1; // 使在途的服务端合并失效，避免旧会话消息混入新会话
     if (recorder.isRecording) recorder.stopRecording();
     recorder.setTranscriptChunks([]);
     suggestions.setBatches([]);
-    chat.setMessages([]);
+    ask.setMessages([]);
     setMeetingReport(null);
     setTopicSummary(null);
     setActiveSessionId(crypto.randomUUID());
     setCreatedAt(new Date());
     setResumeCandidate(null);
-  }, [chat, recorder, suggestions]);
+  }, [ask, recorder, suggestions]);
 
   const handleRecordingChange = useCallback((recording: boolean): void => {
     if (recording) {
@@ -424,6 +419,15 @@ export default function Home(): ReactElement {
     recorder.flushCurrentChunk();
     window.setTimeout(suggestions.triggerRefresh, 500);
   }, [recorder, suggestions.triggerRefresh]);
+
+  // 建议刷新倒计时（建议卡 UI 移除后由顶栏承接，生成节奏不变）：录音期间每秒走一格。
+  const [refreshNow, setRefreshNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isCardFlowActive || suggestions.nextRefreshAt === null) return;
+    const id = window.setInterval(() => setRefreshNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [isCardFlowActive, suggestions.nextRefreshAt]);
+  const refreshSeconds = suggestions.nextRefreshAt === null ? null : Math.max(0, Math.ceil((suggestions.nextRefreshAt - refreshNow) / 1000));
 
   const latencySamples = useMemo(
     () => [...desktopRecorder.latencySamples, ...contextCards.latencySamples],
@@ -491,16 +495,20 @@ export default function Home(): ReactElement {
           </button>
           <button
             type="button"
-            onClick={() => setIsChatOpen(true)}
-            className="relative rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200"
+            onClick={manualRefresh}
+            disabled={suggestions.isLoading}
+            className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 disabled:opacity-40"
           >
-            会后追问
-            {chat.messages.length > 0 ? (
-              <span className="absolute -right-2 -top-2 flex min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-4 text-white">
-                {chat.messages.length > 99 ? "99+" : chat.messages.length}
-              </span>
-            ) : null}
+            ↺ 刷新建议
           </button>
+          <span className="hidden text-[10px] text-neutral-600 sm:inline">
+            {isCardFlowActive && refreshSeconds !== null ? `${refreshSeconds} 秒后自动刷新` : "开始录音后自动刷新"}
+          </span>
+          {suggestions.error ? (
+            <span className="hidden max-w-48 truncate text-[10px] text-red-400 sm:inline" title={suggestions.error}>
+              建议：{suggestions.error}
+            </span>
+          ) : null}
           <button type="button" onClick={() => setIsSettingsOpen(true)} className="flex size-8 items-center justify-center rounded-lg bg-neutral-800 text-neutral-400" aria-label="Open settings">
             ⚙
           </button>
@@ -522,7 +530,20 @@ export default function Home(): ReactElement {
           {persistenceError}
         </div>
       ) : null}
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        health={{
+          asrStatus,
+          uploadStatus,
+          cardCount: contextCards.cards.length,
+          failureCount: contextCards.failures.length,
+          latestTotalLatencyMs: contextCards.cards[0]?.latencyMs.total ?? null,
+          latencySummaries,
+          queueStatus: desktopRecorder.error?.includes("队列") ? "有待处理" : "正常",
+          degradationStatus: contextCards.cards.some((card) => card.demoTrace && card.demoTrace.decisionSource !== "model") ? "已启用" : null,
+        }}
+      />
       <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col lg:flex-row [&>section]:min-w-0">
         <MicTranscript
           transcriptChunks={recorder.transcriptChunks}
@@ -554,52 +575,26 @@ export default function Home(): ReactElement {
             />
           }
         />
-        <LiveSuggestions
-          batches={suggestions.batches}
-          isLoading={suggestions.isLoading}
-          isRecording={recorder.isRecording && !recorder.isPaused}
-          nextRefreshAt={suggestions.nextRefreshAt}
-          onManualRefresh={manualRefresh}
-          error={suggestions.error}
-          onSuggestionSelect={(suggestion) => {
-            setPendingSuggestion({ ...suggestion });
-            setIsChatOpen(true);
-          }}
-          dismissedIds={suggestions.dismissedIds}
-          pinnedIds={suggestions.pinnedIds}
-          onFeedback={suggestions.recordFeedback}
-          contextCards={contextCards.cards}
-          contextCardFailures={contextCards.failures}
-          contextCardsLoading={contextCards.isLoading}
-          contextCardsError={contextCards.error}
+        <ContextCardsPanel
+          cards={contextCards.cards}
+          failures={contextCards.failures}
+          isLoading={contextCards.isLoading}
+          error={contextCards.error}
           onCardDeposit={handleCardDeposit}
           depositedCardIds={depositedCardIds}
         />
-        <HealthPanel
-          asrStatus={asrStatus}
-          uploadStatus={uploadStatus}
-          cardCount={contextCards.cards.length}
-          failureCount={contextCards.failures.length}
-          latestTotalLatencyMs={contextCards.cards[0]?.latencyMs.total ?? null}
-          latencySummaries={latencySummaries}
-          queueStatus={desktopRecorder.error?.includes("队列") ? "有待处理" : "正常"}
-          degradationStatus={contextCards.cards.some((card) => card.demoTrace && card.demoTrace.decisionSource !== "model") ? "已启用" : null}
+        <AskPanel
+          messages={ask.messages}
+          phase={ask.phase}
+          busy={ask.busy}
+          sendQuestion={ask.sendQuestion}
+          error={ask.error}
+          stopGenerating={ask.stopGenerating}
+          retryLastFailed={ask.retryLastFailed}
+          canRetry={ask.canRetry}
+          draftQuestion={askDraft}
         />
       </main>
-      <ChatPanelDrawer isOpen={isChatOpen} onClose={() => setIsChatOpen(false)}>
-        <ChatPanel
-          messages={chat.messages}
-          isStreaming={chat.isStreaming}
-          sendMessage={chat.sendMessage}
-          addSuggestionToChat={chat.addSuggestionToChat}
-          error={chat.error}
-          pendingSuggestion={pendingSuggestion}
-          onSuggestionHandled={() => setPendingSuggestion(null)}
-          stopGenerating={chat.stopGenerating}
-          retryLastFailed={chat.retryLastFailed}
-          canRetry={chat.canRetry}
-        />
-      </ChatPanelDrawer>
     </div>
   );
 }

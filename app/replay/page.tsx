@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactElement } from "react";
 import Link from "next/link";
 import LatencyPanel from "@/components/LatencyPanel";
-import { ContextCardView } from "@/components/SuggestionCard";
+import ContextCardView from "@/components/ContextCardView";
 import useContextCards from "@/hooks/useContextCards";
 import { parseReplayEvents, replayDelayMs } from "@/lib/replay";
 import type { DesktopEvent, TranscriptReadyEvent } from "@/lib/desktop-events";

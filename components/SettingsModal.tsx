@@ -6,9 +6,11 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent,
   type ReactElement,
 } from "react";
+import HealthPanel, { type HealthSnapshot } from "@/components/HealthPanel";
 import useSettings from "@/hooks/useSettings";
 import type { Settings } from "@/types/settings";
 
@@ -23,15 +25,20 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** 决策 68：实时健康指标折叠区的数据（与旧右栏 HealthPanel 同一数据流）。 */
+  health?: HealthSnapshot;
 }
 
 export default function SettingsModal({
   isOpen,
   onClose,
+  health,
 }: SettingsModalProps): ReactElement | null {
   const { settings, updateSetting, saveSettings, resetToDefaults } =
     useSettings();
   const panelRef = useRef<HTMLDivElement>(null);
+  // 折叠区展开才渲染健康内容——展开期间随页面渲染实时刷新，收起即停止。
+  const [healthOpen, setHealthOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -222,6 +229,34 @@ export default function SettingsModal({
                   </p>
                 </div>
               </div>
+            </section>
+
+            <section className="flex flex-col gap-3 border-b border-neutral-800 pb-8">
+              <details
+                onToggle={(event) => setHealthOpen(event.currentTarget.open)}
+                className="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3"
+              >
+                <summary className="cursor-pointer select-none text-sm font-medium text-neutral-200">
+                  实时健康指标
+                </summary>
+                {healthOpen && health ? (
+                  <div className="mt-4">
+                    <HealthPanel
+                      asrStatus={health.asrStatus}
+                      uploadStatus={health.uploadStatus}
+                      cardCount={health.cardCount}
+                      failureCount={health.failureCount}
+                      latestTotalLatencyMs={health.latestTotalLatencyMs}
+                      latencySummaries={health.latencySummaries}
+                      queueStatus={health.queueStatus}
+                      degradationStatus={health.degradationStatus}
+                    />
+                  </div>
+                ) : null}
+              </details>
+              <p className="text-xs leading-relaxed text-neutral-500">
+                ASR 状态、窗口延迟与卡片统计；展开期间实时刷新，收起停止更新。
+              </p>
             </section>
 
             <section className="flex flex-col gap-4 border-b border-neutral-800 pb-8">
