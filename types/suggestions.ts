@@ -12,6 +12,8 @@ export interface Suggestion {
   type: SuggestionType;
   preview: string;
   detail: string;
+  /** 近期转写原文连续子串（≤12 字），用于把建议锚定到左栏转写的具体位置。 */
+  anchor?: string;
 }
 
 export interface SuggestionBatch {

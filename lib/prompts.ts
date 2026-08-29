@@ -55,7 +55,8 @@ Rules:
 - The detail should expand on the preview with 2-3 sentences of concrete context, evidence, or next steps
 - Base suggestions entirely on what was actually said — not general meeting advice
 - Do not repeat any suggestion from PREVIOUS SUGGESTIONS
-- If context is limited, still return 3 suggestions but ground them in whatever is available`;
+- If context is limited, still return 3 suggestions but ground them in whatever is available
+- Each suggestion must carry an anchor: a contiguous substring (≤12 chars) copied verbatim from RECENT TRANSCRIPT, used to locate the transcript position the suggestion refers to. It must be an original fragment that actually appears in the transcript`;
 
 export const ASK_PROMPT = `你是会中询问助手。基于提供的来源回答用户在会议进行中提出的问题。
 

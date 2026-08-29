@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
+import { normalizeSuggestionAnchor } from "@/lib/suggestion-anchor";
 import type { TranscriptChunk } from "@/types/session";
 import type { Suggestion, SuggestionBatch } from "@/types/suggestions";
 
@@ -98,10 +99,19 @@ export default function useSuggestions({ transcriptChunks, isRecording }: UseSug
       if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Suggestions failed");
       if (!isSuggestionsSuccess(payload)) throw new Error("Invalid suggestions response");
 
+      // anchor 契约（批次三）：必填字符串，去空白后 >12 字截断保留前 12；
+      // 空/缺失 → 该建议丢弃（宁缺毋滥），批次允许少于 3 条。
+      const anchorValidated: Suggestion[] = [];
+      for (const suggestion of payload.suggestions) {
+        const anchor = normalizeSuggestionAnchor(suggestion.anchor);
+        if (anchor === null) continue;
+        anchorValidated.push({ ...suggestion, anchor });
+      }
+
       const batch: SuggestionBatch = {
         id: crypto.randomUUID(),
         timestamp: new Date(),
-        suggestions: payload.suggestions.map((suggestion) => ({ ...suggestion, id: crypto.randomUUID() })),
+        suggestions: anchorValidated.map((suggestion) => ({ ...suggestion, id: crypto.randomUUID() })),
       };
       setBatchState((previous) => [batch, ...previous]);
     } catch (caught) {

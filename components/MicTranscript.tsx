@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import { typeBadgeClasses, typeLabel } from "@/components/ContextCardView";
 import { AUDIO_SOURCE_MODE_LABELS, AUDIO_SOURCE_MODES, type AudioSourceMode } from "@/lib/audio-source-mode";
 import { speakerBadge } from "@/lib/speaker-attributes";
+import { matchSuggestionAnchor } from "@/lib/suggestion-anchor";
 import type { MeetingReport, TranscriptChunk } from "@/types/session";
+import type { Suggestion } from "@/types/suggestions";
 
 interface Props {
   transcriptChunks: TranscriptChunk[];
@@ -24,6 +27,10 @@ interface Props {
   onAudioSourceModeChange?: (mode: AudioSourceMode) => void;
   /** 进行中 segment 的临时转写（决策 66 partial 态，仅麦克风链路）；confirmed 到达后置 null。 */
   partialText?: string | null;
+  /** 批次三：建议内联标注（仅传入已过滤的有效建议；未命中锚点的由渲染层再丢弃）。 */
+  suggestions?: Suggestion[];
+  /** 点击建议徽标 → 预填右栏询问框（不自动发送）。 */
+  onSuggestionAsk?: (suggestion: Suggestion) => void;
 }
 
 function Highlight({ text, query }: { text: string; query: string }): ReactElement {
@@ -40,11 +47,25 @@ function windowIndexOf(id: string): number | null {
 }
 
 export default function MicTranscript(props: Props): ReactElement {
-  const { transcriptChunks, isRecording, isPaused, micLevel, retryCount, onRecordingChange, onPauseToggle, recordingError, meetingReport, isReportLoading, isUploadProcessing = false, uploaderSlot, isDesktop = false, audioSourceMode = "mixed", onAudioSourceModeChange, partialText = null } = props;
+  const { transcriptChunks, isRecording, isPaused, micLevel, retryCount, onRecordingChange, onPauseToggle, recordingError, meetingReport, isReportLoading, isUploadProcessing = false, uploaderSlot, isDesktop = false, audioSourceMode = "mixed", onAudioSourceModeChange, partialText = null, suggestions, onSuggestionAsk } = props;
   const endRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"mic" | "upload">("mic");
   const filtered = useMemo(() => transcriptChunks.filter((chunk) => chunk.text.toLowerCase().includes(search.trim().toLowerCase())), [search, transcriptChunks]);
+
+  // 批次三：建议锚点命中 → 目标 chunk 行内类别徽标。未命中（返回 null）的建议
+  // 在渲染层丢弃；同一 chunk 可挂多条建议。
+  const suggestionsByChunkId = useMemo(() => {
+    const map = new Map<string, Suggestion[]>();
+    for (const suggestion of suggestions ?? []) {
+      const match = matchSuggestionAnchor(suggestion, transcriptChunks);
+      if (match === null) continue;
+      const list = map.get(match.chunkId) ?? [];
+      list.push(suggestion);
+      map.set(match.chunkId, list);
+    }
+    return map;
+  }, [suggestions, transcriptChunks]);
 
   // 列表底部自动跟随：confirmed 追加（length 变化）或 partial 出现/更新时滚到底。
   useEffect(() => {
@@ -116,7 +137,18 @@ export default function MicTranscript(props: Props): ReactElement {
             // 2.2-b 说话人徽标：仅 chunk.speaker 存在时渲染（YOU/REMOTE，partial 行无标签）。
             const speakerBadgeInfo = chunk.speaker ? speakerBadge(chunk.speaker) : null;
             return (
-              <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}{speakerBadgeInfo ? <span className={`rounded border px-1.5 py-0.5 text-[10px] ${speakerBadgeInfo.className}`}>{speakerBadgeInfo.label}</span> : null}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
+              <article key={chunk.id} className={`py-3 ${index ? "border-t border-neutral-800" : ""} ${isTopicBreak ? "mt-6" : ""}`}><div className="mb-1 flex items-center gap-2"><time className="text-[10px] text-neutral-600">{chunk.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>{chunk.source ? <span className="rounded border border-neutral-700 px-1.5 py-0.5 text-[9px] text-neutral-500">{chunk.source === "system" ? "系统音频" : chunk.source === "upload" ? "上传" : "麦克风"}</span> : null}{speakerBadgeInfo ? <span className={`rounded border px-1.5 py-0.5 text-[10px] ${speakerBadgeInfo.className}`}>{speakerBadgeInfo.label}</span> : null}{suggestionsByChunkId.get(chunk.id)?.map((suggestion, suggestionIndex) => (
+                <button
+                  key={suggestion.id ?? `suggestion-${chunk.id}-${suggestionIndex}`}
+                  type="button"
+                  onClick={() => onSuggestionAsk?.(suggestion)}
+                  aria-label={`建议（${typeLabel(suggestion.type)}）：${suggestion.preview}`}
+                  title={suggestion.preview}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${typeBadgeClasses(suggestion.type)}`}
+                >
+                  {typeLabel(suggestion.type)}
+                </button>
+              ))}</div><p className="text-sm leading-relaxed text-neutral-300"><Highlight text={chunk.text} query={search.trim()} /></p></article>
             );
           })}
           {/* partial 行（决策 66）：仅 isRecording && partialText 非空渲染，不参与上方段落分组；

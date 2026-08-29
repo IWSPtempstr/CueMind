@@ -58,6 +58,7 @@ function parseSuggestionsPayload(parsed: unknown): Suggestion[] | null {
     const type = o.type;
     const preview = o.preview;
     const detail = o.detail;
+    const anchor = o.anchor;
     if (
       typeof type !== "string" ||
       !isSuggestionType(type) ||
@@ -66,7 +67,10 @@ function parseSuggestionsPayload(parsed: unknown): Suggestion[] | null {
     ) {
       return null;
     }
-    result.push({ type, preview, detail });
+    // anchor 契约（批次三）：原样透传；缺失/非字符串时省略，由客户端校验丢弃该建议。
+    result.push(
+      typeof anchor === "string" ? { type, preview, detail, anchor } : { type, preview, detail },
+    );
   }
   return result;
 }
@@ -120,7 +124,8 @@ ${previousSuggestions || "None"}
   const systemPrompt = `${activePrompt}
 
 Return ONLY a valid JSON object with exactly 3 items in this shape:
-{"suggestions":[{"type":"question|talking_point|answer|fact_check|clarify","preview":"...","detail":"..."}]}
+{"suggestions":[{"type":"question|talking_point|answer|fact_check|clarify","preview":"...","detail":"...","anchor":"..."}]}
+("anchor" = a contiguous substring of at most 12 characters copied verbatim from RECENT TRANSCRIPT)
 No markdown fences, no commentary.`;
 
   let payload: unknown;

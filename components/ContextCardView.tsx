@@ -4,13 +4,38 @@
 
 import { useState, type ReactElement } from "react";
 import ReactMarkdown from "react-markdown";
-import type { ContextCard } from "@/types/suggestions";
+import type { ContextCard, Suggestion } from "@/types/suggestions";
 
 interface ContextCardProps {
   card: ContextCard;
   /** M3-a：沉淀到 vault（fire-and-forget 导出 cuemind/concepts/<term>.md）。 */
   onDeposit?: (card: ContextCard) => void;
   isDeposited?: boolean;
+}
+
+/** 建议类别色板（批次三：左栏转写内联徽标沿用；五类全映射）。 */
+export function typeBadgeClasses(type: Suggestion["type"]): string {
+  switch (type) {
+    case "question":
+      return "bg-blue-900 text-blue-300";
+    case "talking_point":
+      return "bg-purple-900 text-purple-300";
+    case "answer":
+      return "bg-green-900 text-green-300";
+    case "fact_check":
+      return "bg-yellow-900 text-yellow-300";
+    case "clarify":
+      return "bg-orange-900 text-orange-300";
+    default: {
+      const _exhaustive: never = type;
+      return _exhaustive;
+    }
+  }
+}
+
+/** 建议类别文案：问题/观点/回答/核查/澄清。 */
+export function typeLabel(type: Suggestion["type"]): string {
+  return { question: "问题", talking_point: "观点", answer: "回答", fact_check: "核查", clarify: "澄清" }[type];
 }
 
 export function sourceBadge(sourceType: ContextCard["sources"][number]["sourceType"] | string | undefined): string {

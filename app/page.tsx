@@ -20,6 +20,7 @@ import { AUDIO_SOURCE_MODE_LABELS } from "@/lib/audio-source-mode";
 import { exportSession } from "@/lib/export";
 import { END_OF_MEETING_PROMPT } from "@/lib/prompts";
 import { loadSessions, storeSession } from "@/lib/session-storage";
+import { matchSuggestionAnchor } from "@/lib/suggestion-anchor";
 import { summarizeLatency } from "@/lib/telemetry";
 import type { ChatMessage } from "@/types/chat";
 import type { MeetingReport, SessionSnapshot } from "@/types/session";
@@ -120,8 +121,7 @@ export default function Home(): ReactElement {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   // 会中询问（决策 67/68）：单飞锁 + SSE 阶段状态机，请求体透传 sessionId。
   const ask = useAsk({ transcriptChunks: recorder.transcriptChunks, sessionId: activeSessionId });
-  // 批次三预留：转写内联标注点击 → setAskDraft 预填右栏询问框（本笔仅接线状态）。
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // 批次三：转写内联标注点击 → setAskDraft 预填右栏询问框（AskPanel 不自动发送）。
   const [askDraft, setAskDraft] = useState("");
   const [topicSummary, setTopicSummary] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState(new Date());
@@ -429,6 +429,16 @@ export default function Home(): ReactElement {
   }, [isCardFlowActive, suggestions.nextRefreshAt]);
   const refreshSeconds = suggestions.nextRefreshAt === null ? null : Math.max(0, Math.ceil((suggestions.nextRefreshAt - refreshNow) / 1000));
 
+  // 批次三：当前有效建议 = 最新批次过滤 dismissed + 锚点命中（未命中的不传给左栏）。
+  const activeSuggestions = useMemo(
+    () => (suggestions.batches[0]?.suggestions ?? []).filter(
+      (suggestion) =>
+        !(suggestion.id !== undefined && suggestions.dismissedIds.has(suggestion.id)) &&
+        matchSuggestionAnchor(suggestion, recorder.transcriptChunks) !== null,
+    ),
+    [recorder.transcriptChunks, suggestions.batches, suggestions.dismissedIds],
+  );
+
   const latencySamples = useMemo(
     () => [...desktopRecorder.latencySamples, ...contextCards.latencySamples],
     [contextCards.latencySamples, desktopRecorder.latencySamples],
@@ -561,6 +571,8 @@ export default function Home(): ReactElement {
           isDesktop={desktopRecorder.isDesktop}
           audioSourceMode={desktopRecorder.audioSourceMode}
           onAudioSourceModeChange={desktopRecorder.setAudioSourceMode}
+          suggestions={activeSuggestions}
+          onSuggestionAsk={(suggestion) => setAskDraft(suggestion.preview)}
           uploaderSlot={
             <MediaUploadPanel
               isProcessing={uploader.isProcessing}
