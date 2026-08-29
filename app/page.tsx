@@ -16,6 +16,7 @@ import useSuggestions from "@/hooks/useSuggestions";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { StoredChatMessage } from "@/lib/chat-store";
 import { isErrorResponseBody } from "@/lib/api-response";
+import { extractAskExchanges } from "@/lib/ask-history";
 import { AUDIO_SOURCE_MODE_LABELS } from "@/lib/audio-source-mode";
 import { exportSession } from "@/lib/export";
 import { END_OF_MEETING_PROMPT } from "@/lib/prompts";
@@ -152,6 +153,9 @@ export default function Home(): ReactElement {
   // lastAskSyncedSessionRef 保证每个 sessionId 只拉取一次历史（AskPanel 常驻右栏）。
   const askSyncTokenRef = useRef(0);
   const lastAskSyncedSessionRef = useRef<string | null>(null);
+  // B 阶段：总结/导出复用会中询问问答对——ref 读取最新消息，避免长任务读到过期闭包。
+  const askMessagesRef = useRef(ask.messages);
+  useEffect(() => { askMessagesRef.current = ask.messages; }, [ask.messages]);
 
   const generateTopicSummary = useCallback((transcriptText: string): void => {
     const trimmed = transcriptText.trim();
@@ -389,10 +393,12 @@ export default function Home(): ReactElement {
       setIsReportLoading(true);
       // 与会议总结并行生成会话主题摘要（fire-and-forget）。
       generateTopicSummary(transcriptRef.current.map((chunk) => chunk.text).join("\n"));
+      // B 阶段：会议总结纳入本次会话询问问答对（仅传 question/answer，截断由服务端负责）。
+      const askHistory = extractAskExchanges(askMessagesRef.current).map(({ question, answer }) => ({ question, answer }));
       void fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ earlierTranscript: transcriptRef.current.map((chunk) => chunk.text).join("\n"), summarizationPrompt: END_OF_MEETING_PROMPT, polish: true }),
+        body: JSON.stringify({ earlierTranscript: transcriptRef.current.map((chunk) => chunk.text).join("\n"), summarizationPrompt: END_OF_MEETING_PROMPT, polish: true, askHistory }),
       }).then(async (response) => {
         const payload: unknown = await response.json();
         if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Could not build the meeting report");
