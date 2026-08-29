@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { appendCandidates } from "@/lib/candidate-store";
+import { askCacheSet } from "@/lib/ask-cache";
 import { generateLlamaCppJson, withCardInflight } from "@/lib/llama-cpp";
 import { generateRemoteApiJson } from "@/lib/remote-api";
 import {
@@ -340,12 +341,15 @@ async function searchWithRetry(
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       onAttempt(attempt + 1);
-      return await searchKeywordSources({
+      const outcome = await searchKeywordSources({
         keyword,
         tavilyApiKey: process.env.TAVILY_API_KEY?.trim() || request.settings.searchApiKey,
         enableAgentReachFallback: request.settings.enableAgentReachFallback,
         timeoutMs: 4_000,
       });
+      // Ask 缓存单向写：同关键词询问复用本次结果，避免重复外发（fire-and-forget，吞错）。
+      try { askCacheSet(keyword, outcome.results); } catch { /* 不影响卡片链路 */ }
+      return outcome;
     } catch (caught) {
       lastError = caught;
       if (!(caught instanceof InsufficientSearchSourcesError) && attempt === 0) break;

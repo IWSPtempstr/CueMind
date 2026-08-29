@@ -12,6 +12,7 @@ import {
   cappedText,
   enforceRateLimit,
 } from "@/lib/api-security";
+import { askCacheGet, askCacheSet } from "@/lib/ask-cache";
 import {
   cardInflight,
   generateLlamaCppJson,
@@ -180,6 +181,7 @@ export async function POST(
       let keywordMs = 0;
       let searchMs = 0;
       let generationMs = 0;
+      let cacheHit = false;
       const logStages = (finalState: AskFinalState): void => {
         // Ask latency is tracked independently from card metrics: stages only
         // land in the done event and this console line (no ledger/telemetry).
@@ -189,7 +191,7 @@ export async function POST(
       };
       const done = (payload: Record<string, unknown>, finalState: AskFinalState): void => {
         logStages(finalState);
-        emit({ event: "done", finalState, stages: { keywordMs, searchMs, generationMs }, ...payload });
+        emit({ event: "done", finalState, cacheHit, stages: { keywordMs, searchMs, generationMs }, ...payload });
       };
 
       try {
@@ -247,48 +249,61 @@ export async function POST(
 
         emit({ event: "searching", keywords });
 
-        // [2] Search: reuse the card pipeline's vertical short-circuit +
-        // generic fallback. Only the keyword leaves the machine.
-        const searchStartedAt = performance.now();
-        let searchOutcome: SearchKeywordOutcome;
-        let searchAttempts = 0;
-        try {
-          searchOutcome = await searchAskSources({
-            keyword: searchKeyword,
-            tavilyApiKey:
-              process.env.TAVILY_API_KEY?.trim() || browserSearchApiKey,
-            enableAgentReachFallback,
-            onAttempt: (attempt) => {
-              searchAttempts = attempt;
-            },
-          });
-        } catch (caught) {
+        // [2] Search: term-level cache first (shared with the card pipeline's
+        // one-way writes), then the vertical short-circuit + generic fallback.
+        // Only the keyword ever leaves the machine.
+        let sources: SearchResult[];
+        const cachedSources = askCacheGet(searchKeyword);
+        if (cachedSources !== null) {
+          cacheHit = true;
+          sources = cachedSources;
+        } else {
+          const searchStartedAt = performance.now();
+          let searchOutcome: SearchKeywordOutcome;
+          let searchAttempts = 0;
+          try {
+            searchOutcome = await searchAskSources({
+              keyword: searchKeyword,
+              tavilyApiKey:
+                process.env.TAVILY_API_KEY?.trim() || browserSearchApiKey,
+              enableAgentReachFallback,
+              onAttempt: (attempt) => {
+                searchAttempts = attempt;
+              },
+            });
+          } catch (caught) {
+            searchMs = Math.round(performance.now() - searchStartedAt);
+            // Fail-closed: no usable sources → no generation, never invent.
+            emit({
+              event: "degraded",
+              message: "没找到可靠来源，无法给出有依据的回答。",
+              keywords,
+              attempts: {
+                vertical: ["arxiv", "hackernews", "github", "stackoverflow"],
+                genericFallback: enableAgentReachFallback
+                  ? "tavily → agent-reach"
+                  : "tavily",
+                tries: searchAttempts,
+                reason:
+                  caught instanceof InsufficientSearchSourcesError
+                    ? "usable sources < 2"
+                    : caught instanceof Error
+                      ? caught.message
+                      : "search failed",
+              },
+            });
+            done({ sources: [] }, "degraded");
+            finish();
+            return;
+          }
           searchMs = Math.round(performance.now() - searchStartedAt);
-          // Fail-closed: no usable sources → no generation, never invent.
-          emit({
-            event: "degraded",
-            message: "没找到可靠来源，无法给出有依据的回答。",
-            keywords,
-            attempts: {
-              vertical: ["arxiv", "hackernews", "github", "stackoverflow"],
-              genericFallback: enableAgentReachFallback
-                ? "tavily → agent-reach"
-                : "tavily",
-              tries: searchAttempts,
-              reason:
-                caught instanceof InsufficientSearchSourcesError
-                  ? "usable sources < 2"
-                  : caught instanceof Error
-                    ? caught.message
-                    : "search failed",
-            },
-          });
-          done({ sources: [] }, "degraded");
-          finish();
-          return;
+          sources = searchOutcome.results;
+          try {
+            askCacheSet(searchKeyword, sources);
+          } catch {
+            // Cache write failure must never affect the ask response.
+          }
         }
-        searchMs = Math.round(performance.now() - searchStartedAt);
-        const sources = searchOutcome.results;
 
         // [3] Citation generation: streamed upstream, buffered server-side and
         // schema-validated before any answer text reaches the client.
