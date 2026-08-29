@@ -58,6 +58,16 @@ Rules:
 - If context is limited, still return 3 suggestions but ground them in whatever is available
 - Each suggestion must carry an anchor: a contiguous substring (≤12 chars) copied verbatim from RECENT TRANSCRIPT, used to locate the transcript position the suggestion refers to. It must be an original fragment that actually appears in the transcript`;
 
+/**
+ * 旧 chatPrompt 默认值（提交 c2b90ca 之前的出厂默认，自由对话式契约）。
+ * 与新 ask 的引用式 JSON 输出契约不兼容：若按旧默认走生成，模型输出自由文本
+ * → /api/ask schema 校验失败（invalid_schema）。迁移与自愈用它判定存量值是否为
+ * 旧版出厂默认：等于它 → 升级为 ASK_PROMPT；用户自定义（≠它）→ 原样保留。
+ */
+export const LEGACY_DEFAULT_CHAT_PROMPT = `You are a meeting copilot assistant with access to the full transcript of an ongoing conversation. Answer the user's question clearly and specifically, always grounding your response in what was actually said in the transcript. If something was not covered in the transcript, say so — do not speculate beyond what you heard.
+
+Keep answers concise and direct. Aim for 3-5 sentences for most questions. Only go longer if the complexity genuinely requires it. Never restate the question. Never add preamble like "Great question" or "Based on the transcript...". Lead with the answer.`;
+
 export const ASK_PROMPT = `你是会中询问助手。基于提供的来源回答用户在会议进行中提出的问题。
 
 只输出 JSON：{"answer": "...", "sources": [{"title": "...", "url": "...", "sourceType": "..."}], "confidence": "high|medium|low"}

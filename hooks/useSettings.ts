@@ -6,6 +6,7 @@ import {
   CHAT_CONTEXT_CHARS,
   CHUNK_INTERVAL_SECONDS,
   EARLIER_CONTEXT_CHARS,
+  LEGACY_DEFAULT_CHAT_PROMPT,
   MAX_CHUNK_INTERVAL_SECONDS,
   MAX_CONTEXT_CHARS,
   MAX_SUGGESTION_REFRESH_SECONDS,
@@ -129,11 +130,19 @@ export function loadCueMindSettings(): Settings {
 
   const mode = storageMode(o.apiKeyStorage);
 
+  // 旧键迁移 + 已迁移存储自愈：askPrompt 缺失时回退读取旧 chatPrompt 值。
+  // 提交 1 的迁移曾把旧出厂默认（自由对话式契约）原样迁成 askPrompt，导致
+  // /api/ask 生成自由文本、schema 校验失败；因此存量值等于旧默认的一律升级
+  // 为新的引用式契约（幂等自愈），用户自定义（≠旧默认）原样保留。
+  const storedAskPrompt =
+    typeof o.askPrompt === "string" ? o.askPrompt : typeof o.chatPrompt === "string" ? o.chatPrompt : defaults.askPrompt;
+  const askPromptSelfHealed = typeof o.askPrompt === "string" && o.askPrompt === LEGACY_DEFAULT_CHAT_PROMPT;
+  const askPrompt = storedAskPrompt === LEGACY_DEFAULT_CHAT_PROMPT ? defaults.askPrompt : storedAskPrompt;
+
   const settings: Settings = {
     apiKeyStorage: mode,
     suggestionsPrompt: typeof o.suggestionsPrompt === "string" ? o.suggestionsPrompt : defaults.suggestionsPrompt,
-    // 旧键迁移：askPrompt 缺失时回退读取旧 chatPrompt 值（一次性，下方迁移块负责清除旧键）。
-    askPrompt: typeof o.askPrompt === "string" ? o.askPrompt : typeof o.chatPrompt === "string" ? o.chatPrompt : defaults.askPrompt,
+    askPrompt,
     summarizationPrompt: typeof o.summarizationPrompt === "string" ? o.summarizationPrompt : defaults.summarizationPrompt,
     recentContextChars: clampInt(o.recentContextChars, defaults.recentContextChars, 1, MAX_CONTEXT_CHARS),
     earlierContextChars: clampInt(o.earlierContextChars, defaults.earlierContextChars, 1, MAX_CONTEXT_CHARS),
@@ -173,10 +182,12 @@ export function loadCueMindSettings(): Settings {
     persistPreferences(settings);
   }
   // One-time migration only: rename the legacy chatPrompt key onto askPrompt.
-  // settings.askPrompt already carries the legacy value when the new key is
-  // absent; persisting drops chatPrompt from the blob. Later reads touch
-  // nothing unless a legacy field is still present.
-  if ("chatPrompt" in o) {
+  // settings.askPrompt already carries the migrated value when the new key is
+  // absent; persisting drops chatPrompt from the blob. Also self-heals blobs
+  // already migrated with the legacy default: persisting stores the new
+  // citation-contract default. Idempotent — once repaired, later reads find
+  // askPrompt !== LEGACY_DEFAULT_CHAT_PROMPT and touch nothing.
+  if ("chatPrompt" in o || askPromptSelfHealed) {
     persistPreferences(settings);
   }
   return settings;

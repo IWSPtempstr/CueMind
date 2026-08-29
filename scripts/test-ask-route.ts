@@ -17,6 +17,7 @@ import type { NextRequest } from "next/server";
 import { POST } from "@/app/api/ask/route";
 import { askCacheClear } from "@/lib/ask-cache";
 import { loadCueMindSettings } from "@/hooks/useSettings";
+import { ASK_PROMPT, LEGACY_DEFAULT_CHAT_PROMPT } from "@/lib/prompts";
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -311,15 +312,19 @@ async function testPrivacyTranscriptNeverLeavesToSearch(baseUrl: string): Promis
 
 interface StorageShim {
   store: Map<string, string>;
+  /** setItem 调用计数（幂等性断言用）。 */
+  setCalls: number;
   install: () => void;
   uninstall: () => void;
 }
 
 function createStorageShim(seed: Record<string, string>): StorageShim {
   const store = new Map<string, string>(Object.entries(seed));
+  let setCalls = 0;
   const shim = {
     getItem: (key: string): string | null => store.get(key) ?? null,
     setItem: (key: string, value: string): void => {
+      setCalls += 1;
       store.set(key, String(value));
     },
     removeItem: (key: string): void => {
@@ -331,6 +336,9 @@ function createStorageShim(seed: Record<string, string>): StorageShim {
   const previousLocalStorage = globals.localStorage;
   return {
     store,
+    get setCalls(): number {
+      return setCalls;
+    },
     install: () => {
       globals.window = {};
       globals.localStorage = shim;
@@ -360,6 +368,55 @@ function testAskPromptLegacyMigration(): void {
     const persisted = JSON.parse(persistedRaw as string) as Record<string, unknown>;
     assert.equal(persisted.askPrompt, legacyPrompt);
     assert.ok(!("chatPrompt" in persisted), "迁移后旧键 chatPrompt 应被清除");
+  } finally {
+    shim.uninstall();
+  }
+}
+
+// 旧 chatPrompt 值 === 旧出厂默认（自由对话式契约）→ 丢弃旧默认，升级为新
+// 引用式契约 ASK_PROMPT（冒烟 bug 根因：旧默认导致模型输出自由文本 →
+// /api/ask invalid_schema）。
+function testLegacyDefaultChatPromptUpgradesToCitationContract(): void {
+  const shim = createStorageShim({
+    cuemind_settings: JSON.stringify({ chatPrompt: LEGACY_DEFAULT_CHAT_PROMPT }),
+  });
+  shim.install();
+  try {
+    const settings = loadCueMindSettings();
+    assert.equal(settings.askPrompt, ASK_PROMPT, "旧默认值 chatPrompt 应升级为新引用式契约默认");
+
+    const persistedRaw = shim.store.get("cuemind_settings");
+    assert.ok(persistedRaw !== undefined, "迁移后应回写 cuemind_settings");
+    const persisted = JSON.parse(persistedRaw as string) as Record<string, unknown>;
+    assert.equal(persisted.askPrompt, ASK_PROMPT, "回写 blob 的 askPrompt 应为新默认");
+    assert.ok(!("chatPrompt" in persisted), "迁移后旧键 chatPrompt 应被清除");
+  } finally {
+    shim.uninstall();
+  }
+}
+
+// 已迁移存储自愈：提交 1 的迁移已把旧默认写成 askPrompt 且删掉 chatPrompt，
+// 此时存量 askPrompt === 旧默认 → 返回新默认并持久化修正，且修正幂等。
+function testAlreadyMigratedLegacyDefaultSelfHeals(): void {
+  const shim = createStorageShim({
+    cuemind_settings: JSON.stringify({ askPrompt: LEGACY_DEFAULT_CHAT_PROMPT }),
+  });
+  shim.install();
+  try {
+    const settings = loadCueMindSettings();
+    assert.equal(settings.askPrompt, ASK_PROMPT, "自愈场景应返回新引用式契约默认");
+
+    const persistedRaw = shim.store.get("cuemind_settings");
+    assert.ok(persistedRaw !== undefined, "自愈后应回写 cuemind_settings");
+    const persisted = JSON.parse(persistedRaw as string) as Record<string, unknown>;
+    assert.equal(persisted.askPrompt, ASK_PROMPT, "自愈应把修正后的新默认持久化");
+    assert.ok(!("chatPrompt" in persisted));
+
+    // 幂等：修正完成后再次加载不得再回写存储。
+    const setCallsAfterHeal = shim.setCalls;
+    const second = loadCueMindSettings();
+    assert.equal(second.askPrompt, ASK_PROMPT);
+    assert.equal(shim.setCalls, setCallsAfterHeal, "已自愈的存储再次加载不应再回写");
   } finally {
     shim.uninstall();
   }
@@ -480,9 +537,17 @@ async function main(): Promise<void> {
       console.log("e) 隐私红线（外发不含转写片段）通过");
     }
 
-    // f) askPrompt 旧键迁移（纯 localStorage shim）
+    // f) askPrompt 旧键迁移（纯 localStorage shim）：用户自定义旧值 → 保留
     testAskPromptLegacyMigration();
-    console.log("f) askPrompt 旧键迁移（chatPrompt → askPrompt）通过");
+    console.log("f) askPrompt 旧键迁移（用户自定义 chatPrompt → 保留迁入 askPrompt）通过");
+
+    // g) 旧 chatPrompt 值 === 旧出厂默认 → 升级为新引用式契约默认
+    testLegacyDefaultChatPromptUpgradesToCitationContract();
+    console.log("g) 旧默认 chatPrompt → 升级为新 ASK_PROMPT（丢弃旧默认）通过");
+
+    // h) 已迁移存储自愈：askPrompt === 旧默认（chatPrompt 已删）→ 新默认 + 幂等持久化
+    testAlreadyMigratedLegacyDefaultSelfHeals();
+    console.log("h) 已迁移存储自愈（askPrompt=旧默认 → 新默认 + 幂等回写）通过");
   } finally {
     restoreFetch();
   }
