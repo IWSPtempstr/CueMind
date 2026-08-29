@@ -10,10 +10,10 @@ import {
 import { resolveLocalProvider } from "@/lib/llama-cpp";
 import { normalizeChatCompletionsUrl } from "@/lib/model-provider";
 import {
+  ASK_PROMPT,
   CHAT_CONTEXT_CHARS,
   CHAT_HISTORY_MAX_MESSAGES,
   CHAT_MAX_TOKENS,
-  CHAT_PROMPT,
   MAX_CHAT_HISTORY_ENTRY_CHARS,
   MAX_CONTEXT_CHARS,
   MAX_MESSAGE_CHARS,
@@ -102,9 +102,9 @@ export async function POST(
       ? transcriptContextRaw.slice(-contextCap)
       : transcriptContextRaw;
 
-  const chatPromptText = cappedPrompt(
-    record.chatPrompt,
-    CHAT_PROMPT,
+  const askPromptText = cappedPrompt(
+    record.askPrompt,
+    ASK_PROMPT,
     MAX_PROMPT_CHARS,
   );
 
@@ -113,7 +113,7 @@ export async function POST(
   const provider = resolveLocalProvider(record);
 
   const messages: Array<{ role: string; content: string }> = [
-    { role: "system", content: chatPromptText },
+    { role: "system", content: askPromptText },
     {
       role: "system",
       content:

@@ -3,7 +3,7 @@
 export interface Settings {
   apiKeyStorage: "local" | "session" | "memory";
   suggestionsPrompt: string;
-  chatPrompt: string;
+  askPrompt: string;
   summarizationPrompt: string;
   recentContextChars: number;
   earlierContextChars: number;

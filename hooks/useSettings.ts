@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  ASK_PROMPT,
   CHAT_CONTEXT_CHARS,
-  CHAT_PROMPT,
   CHUNK_INTERVAL_SECONDS,
   EARLIER_CONTEXT_CHARS,
   MAX_CHUNK_INTERVAL_SECONDS,
@@ -78,7 +78,7 @@ export function getDefaultSettings(): Settings {
   return {
     apiKeyStorage: "local",
     suggestionsPrompt: SUGGESTIONS_PROMPT,
-    chatPrompt: CHAT_PROMPT,
+    askPrompt: ASK_PROMPT,
     summarizationPrompt: SUMMARIZATION_PROMPT,
     recentContextChars: RECENT_CONTEXT_CHARS,
     earlierContextChars: EARLIER_CONTEXT_CHARS,
@@ -132,7 +132,8 @@ export function loadCueMindSettings(): Settings {
   const settings: Settings = {
     apiKeyStorage: mode,
     suggestionsPrompt: typeof o.suggestionsPrompt === "string" ? o.suggestionsPrompt : defaults.suggestionsPrompt,
-    chatPrompt: typeof o.chatPrompt === "string" ? o.chatPrompt : defaults.chatPrompt,
+    // 旧键迁移：askPrompt 缺失时回退读取旧 chatPrompt 值（一次性，下方迁移块负责清除旧键）。
+    askPrompt: typeof o.askPrompt === "string" ? o.askPrompt : typeof o.chatPrompt === "string" ? o.chatPrompt : defaults.askPrompt,
     summarizationPrompt: typeof o.summarizationPrompt === "string" ? o.summarizationPrompt : defaults.summarizationPrompt,
     recentContextChars: clampInt(o.recentContextChars, defaults.recentContextChars, 1, MAX_CONTEXT_CHARS),
     earlierContextChars: clampInt(o.earlierContextChars, defaults.earlierContextChars, 1, MAX_CONTEXT_CHARS),
@@ -169,6 +170,13 @@ export function loadCueMindSettings(): Settings {
     if (!readSecret("search", "local") && settings.searchApiKey.trim()) {
       writeSecret("search", "local", settings.searchApiKey);
     }
+    persistPreferences(settings);
+  }
+  // One-time migration only: rename the legacy chatPrompt key onto askPrompt.
+  // settings.askPrompt already carries the legacy value when the new key is
+  // absent; persisting drops chatPrompt from the blob. Later reads touch
+  // nothing unless a legacy field is still present.
+  if ("chatPrompt" in o) {
     persistPreferences(settings);
   }
   return settings;

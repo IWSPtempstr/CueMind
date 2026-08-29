@@ -451,17 +451,17 @@ export default function SettingsModal({
 
               <div className="flex flex-col gap-2">
                 <label
-                  htmlFor="settings-chat-prompt"
+                  htmlFor="settings-ask-prompt"
                   className="text-xs font-medium text-neutral-400"
                 >
-                  对话 Prompt
+                  会中询问提示词（askPrompt）
                 </label>
                 <textarea
-                  id="settings-chat-prompt"
+                  id="settings-ask-prompt"
                   rows={6}
-                  value={settings.chatPrompt}
+                  value={settings.askPrompt}
                   onChange={(event) => {
-                    updateSetting("chatPrompt", event.target.value);
+                    updateSetting("askPrompt", event.target.value);
                   }}
                   className="w-full resize-y rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-xs leading-relaxed text-neutral-200 focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
                 />

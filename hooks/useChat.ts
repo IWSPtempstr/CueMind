@@ -246,7 +246,7 @@ export default function useChat({
             message: trimmed,
             chatHistory,
             transcriptContext,
-            chatPrompt: settings.chatPrompt,
+            askPrompt: settings.askPrompt,
             chatContextChars: settings.chatContextChars,
           }),
           signal: controller.signal,
