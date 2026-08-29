@@ -25,8 +25,10 @@ export const SUGGESTIONS_TEMPERATURE = 0.4;
 
 export const CHAT_MAX_TOKENS = 1024;
 
-/** Max tokens for the live-ask citation JSON generation. */
-export const ASK_MAX_TOKENS = 1024;
+/** Max tokens for the live-ask citation JSON generation.
+ * P0 修复（2026-08-29）：生成段是完成延迟主导段（修复前实测均值 ~4.8s，8B 输出
+ * 吞吐受限）；配合 ASK_PROMPT 的 80 字答案 + ≤2 条引用收紧输出长度。 */
+export const ASK_MAX_TOKENS = 512;
 
 /** User messages sent with chat requests (client + server cap). */
 export const CHAT_HISTORY_MAX_MESSAGES = 20;
@@ -73,7 +75,9 @@ export const ASK_PROMPT = `你是会中询问助手。基于提供的来源回�
 只输出 JSON：{"answer": "...", "sources": [{"title": "...", "url": "...", "sourceType": "..."}], "confidence": "high|medium|low"}
 
 规则：
+- answer 控制在 80 字以内，直接给结论，不铺垫不重复问题；
 - answer 中用 [1]、[2] 等编号引用对应来源，结论必须有来源支撑；
+- sources 最多列 2 条，选最相关的；
 - 可用来源不足 2 条时，如实回答无法确认，不得编造；
 - confidence 取值 high、medium、low 之一；
 - 除 JSON 外不要输出任何内容。`;
