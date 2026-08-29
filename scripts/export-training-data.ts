@@ -5,7 +5,8 @@
 // 人工维护的 --useful 文件（人工把关）；不含密钥与原始音频。
 //
 // 读取白名单：candidates 表整行（账本）+ sessions 表仅 id / transcript_json；
-// sessions 的 cards_json / metrics_json / title 等列一律不读。
+// sessions 的 cards_json / metrics_json / title 等列一律不读；
+// chat_messages 表仅取 session_id / role / content（会中询问历史，决策 67 第二通道）。
 //
 // 用法：npx tsx scripts/export-training-data.ts [--data-dir <dir>] [--out <dir>] [--useful <json-file>] [--now <iso>]
 // - --data-dir 默认 process.env.CUEMIND_DATA_DIR || <cwd>/.data
@@ -33,6 +34,21 @@ export interface SessionRow {
   transcriptJson: string;
 }
 
+/** 会中询问历史读取白名单：chat_messages 仅取 session_id / role / content。 */
+export interface ChatMessageRow {
+  sessionId: string;
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** 会中询问信号统计（决策 65 第二通道）。 */
+export interface AskSignalStats {
+  /** model_skip 候选 term 被询问命中 → 漏报 DPO 对数量。 */
+  missedTriggerDpo: number;
+  /** card_shown 候选 term 仍被询问 → 卡片解释质量不足。 */
+  cardExplanationInsufficient: number;
+}
+
 export interface SftPair {
   sessionId: string;
   candidateId: string;
@@ -56,6 +72,7 @@ export interface TrainingExport {
   sft: SftPair[];
   dpo: DpoPair[];
   failureStats: Record<string, number>;
+  askSignalStats: AskSignalStats;
   splitMap: Record<string, "train" | "eval">;
   generatedAt: string;
 }
@@ -119,22 +136,44 @@ function buildWindowText(transcriptJson: string, createdAt: string): string {
   return texts.slice(-WINDOW_SIZE).join("\n");
 }
 
+/** 询问提取词命中规则：用户问题（大小写不敏感）包含候选 term → 视为命中。 */
+function questionMentionsTerm(question: string, term: string): boolean {
+  const normalizedQuestion = question.toLowerCase();
+  const normalizedTerm = term.trim().toLowerCase();
+  return normalizedTerm.length > 0 && normalizedQuestion.includes(normalizedTerm);
+}
+
 /**
  * 纯函数数据组装（导出供测试）：
  * - SFT：所有 term != null 的 candidate 各一条（终态即标签，7 类全收；空窗口仍导出）。
  * - DPO：final_state === "model_skip" 且 candidateId ∈ usefulIds 且 term != null → 漏报构造
  *   （chosen/rejected 为决策轨迹文本，轻量档不重建完整 trace）。
+ * - DPO 第二通道（决策 67）：model_skip 候选 term 被会中询问命中 → 漏报 DPO 对
+ *   （rejected=trigger:false 实际输出，chosen=trigger:true + term）；card_shown 候选
+ *   term 仍被询问 → 计入「卡片解释质量不足」统计信号（不直接造偏好对）。
  * - 行序稳定排序 (sessionId, created_at, candidateId) → 同输入字节级幂等。
  */
 export function buildTrainingExport(args: {
   candidates: CandidateRow[];
   sessions: SessionRow[];
+  chatMessages?: ChatMessageRow[];
   usefulIds: Set<string>;
   now?: string;
 }): TrainingExport {
   const generatedAt = args.now ?? new Date().toISOString();
   const sessionById = new Map<string, SessionRow>();
   for (const session of args.sessions) sessionById.set(session.id, session);
+
+  // 会中询问历史：sessionId → 用户问题列表（仅 role=user 非空内容）。
+  const questionsBySession = new Map<string, string[]>();
+  for (const message of args.chatMessages ?? []) {
+    if (message.role !== "user") continue;
+    const question = message.content.trim();
+    if (question === "") continue;
+    const list = questionsBySession.get(message.sessionId);
+    if (list !== undefined) list.push(question);
+    else questionsBySession.set(message.sessionId, [question]);
+  }
 
   const sorted = [...args.candidates].sort((a, b) => {
     const bySession = a.sessionId.localeCompare(b.sessionId);
@@ -146,6 +185,7 @@ export function buildTrainingExport(args: {
 
   const sft: SftPair[] = [];
   const dpo: DpoPair[] = [];
+  const askSignalStats: AskSignalStats = { missedTriggerDpo: 0, cardExplanationInsufficient: 0 };
   const splitMap: Record<string, "train" | "eval"> = {};
   for (const candidate of sorted) {
     const split = splitOf(candidate.sessionId);
@@ -162,6 +202,11 @@ export function buildTrainingExport(args: {
         split,
       });
     }
+    const askedAbout =
+      candidate.term !== null &&
+      (questionsBySession.get(candidate.sessionId) ?? []).some((question) =>
+        questionMentionsTerm(question, candidate.term as string),
+      );
     if (candidate.finalState === "model_skip" && candidate.term !== null && args.usefulIds.has(candidate.candidateId)) {
       dpo.push({
         sessionId: candidate.sessionId,
@@ -173,6 +218,21 @@ export function buildTrainingExport(args: {
         split,
       });
     }
+    if (candidate.finalState === "model_skip" && candidate.term !== null && askedAbout) {
+      dpo.push({
+        sessionId: candidate.sessionId,
+        candidateId: candidate.candidateId,
+        windowText,
+        term: candidate.term,
+        chosen: `应提示关键词「${candidate.term}」（会中询问命中）`,
+        rejected: "不提示（model_skip）",
+        split,
+      });
+      askSignalStats.missedTriggerDpo += 1;
+    }
+    if (candidate.finalState === "card_shown" && candidate.term !== null && askedAbout) {
+      askSignalStats.cardExplanationInsufficient += 1;
+    }
   }
 
   const failureStats: Record<string, number> = {};
@@ -183,7 +243,7 @@ export function buildTrainingExport(args: {
     }
   }
 
-  return { sft, dpo, failureStats, splitMap, generatedAt };
+  return { sft, dpo, failureStats, askSignalStats, splitMap, generatedAt };
 }
 
 // --- 输出渲染（确定性 → 幂等）---
@@ -237,7 +297,7 @@ function renderReport(
   lines.push(`- 导出时间（generatedAt）：${exported.generatedAt}`);
   lines.push(`- 候选账本：${total} 条；会话：${input.sessionCount} 个`);
   lines.push(`- SFT 指令对：${exported.sft.length} 条（空窗口：${countEmptyWindows(exported.sft)} 条）`);
-  lines.push(`- DPO 偏好对：${exported.dpo.length} 条（漏报构造；空窗口：${countEmptyWindows(exported.dpo)} 条）`);
+  lines.push(`- DPO 偏好对：${exported.dpo.length} 条（漏报构造：--useful 人工标记 + 会中询问命中；空窗口：${countEmptyWindows(exported.dpo)} 条）`);
   lines.push("");
   lines.push("## 失败模式统计（7 终态）");
   lines.push("");
@@ -248,6 +308,13 @@ function renderReport(
     const pct = total > 0 ? `${((count / total) * 100).toFixed(1)}%` : "-";
     lines.push(`| ${state} | ${count} | ${pct} |`);
   }
+  lines.push("");
+  lines.push("## 会中询问信号（决策 65 第二通道）");
+  lines.push("");
+  lines.push("| 信号 | 样本量 |");
+  lines.push("|---|---:|");
+  lines.push(`| 漏报 DPO 对（model_skip 命中询问） | ${exported.askSignalStats.missedTriggerDpo} |`);
+  lines.push(`| 卡片解释质量不足（card_shown 命中询问） | ${exported.askSignalStats.cardExplanationInsufficient} |`);
   lines.push("");
   lines.push("## Train/Eval 切分（按 session，防泄漏）");
   lines.push("");
@@ -266,8 +333,8 @@ function renderReport(
   lines.push("## 红线声明（决策 65）");
   lines.push("");
   lines.push("- 纯离线：本脚本仅「只读 SQLite → 本地导出文件」，不接任何实时链路；不自动改 Prompt、不动态改权重，模型替换由人工评估后决定。");
-  lines.push("- 人工把关：DPO「有用」标记仅来自人工维护的 --useful candidateId 文件，无自动标注。");
-  lines.push("- 不含密钥与原始音频：导出字段白名单 = windowText/term/label/split/sessionId/candidateId/chosen/rejected 与统计数；sessions 只读 transcript_json，不读 cards_json / metrics_json（本报告亦不引用其内容）；不触碰 settings / 密钥 / 音频文件。");
+  lines.push("- 双通道漏报构造：DPO 来自 --useful 人工标记（人工把关）与会中询问命中（自动信号，决策 67 第二通道）；两条通道在 chosen 文案中分别标注来源。");
+  lines.push("- 不含密钥与原始音频：导出字段白名单 = windowText/term/label/split/sessionId/candidateId/chosen/rejected 与统计数；sessions 只读 transcript_json，不读 cards_json / metrics_json；chat_messages 只读 role/content，不读任何 sources/密钥类字段；不触碰 settings / 密钥 / 音频文件。");
   lines.push("");
   return `${lines.join("\n")}`;
 }
@@ -346,7 +413,18 @@ function readUsefulIds(file: string): Set<string> {
   return new Set(parsed);
 }
 
-function loadRows(dbPath: string): { candidates: CandidateRow[]; sessions: SessionRow[] } {
+function readChatMessageRows(db: SqliteDatabase): ChatMessageRow[] {
+  // chat_messages 为会中询问落库（决策 67）；旧库可能无该表 → 视为空（只读导出不得因缺表崩溃）。
+  const table = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_messages'")
+    .get() as { name: string } | undefined;
+  if (table === undefined) return [];
+  return db
+    .prepare("SELECT session_id AS sessionId, role, content FROM chat_messages")
+    .all() as ChatMessageRow[];
+}
+
+function loadRows(dbPath: string): { candidates: CandidateRow[]; sessions: SessionRow[]; chatMessages: ChatMessageRow[] } {
   if (!existsSync(dbPath)) {
     fail(`未找到 ${dbPath}：请先运行 CueMind 产生会话数据。`);
   }
@@ -375,9 +453,11 @@ function loadRows(dbPath: string): { candidates: CandidateRow[]; sessions: Sessi
     const sessions = db
       .prepare("SELECT id, transcript_json AS transcriptJson FROM sessions")
       .all() as SessionRow[];
-    return { candidates, sessions };
+    // 会中询问历史：仅取 session_id / role / content。
+    const chatMessages = readChatMessageRows(db);
+    return { candidates, sessions, chatMessages };
   } catch (error) {
-    return fail(`读取 candidates/sessions 表失败（${dbPath}）：${messageOf(error)}`);
+    return fail(`读取 candidates/sessions/chat_messages 表失败（${dbPath}）：${messageOf(error)}`);
   } finally {
     db.close();
   }
@@ -386,8 +466,8 @@ function loadRows(dbPath: string): { candidates: CandidateRow[]; sessions: Sessi
 function main(): void {
   const options = parseCliOptions(process.argv.slice(2));
   const usefulIds = options.usefulFile !== null ? readUsefulIds(options.usefulFile) : new Set<string>();
-  const { candidates, sessions } = loadRows(path.join(options.dataDir, SQLITE_DB_FILE));
-  const exported = buildTrainingExport({ candidates, sessions, usefulIds, now: options.now });
+  const { candidates, sessions, chatMessages } = loadRows(path.join(options.dataDir, SQLITE_DB_FILE));
+  const exported = buildTrainingExport({ candidates, sessions, chatMessages, usefulIds, now: options.now });
 
   mkdirSync(options.outDir, { recursive: true });
   writeFileSync(path.join(options.outDir, "sft.jsonl"), renderSftJsonl(exported));
@@ -403,6 +483,7 @@ function main(): void {
   process.stdout.write(
     `[export-training-data] candidates=${candidates.length} sessions=${sessions.length} ` +
       `sft=${exported.sft.length} dpo=${exported.dpo.length} ` +
+      `askMiss=${exported.askSignalStats.missedTriggerDpo} askCardInsuff=${exported.askSignalStats.cardExplanationInsufficient} ` +
       `split=${evalSessions}/${splitSessions.length} eval 会话 → ${options.outDir}（sft.jsonl, dpo.jsonl, report.md, split.json）\n`,
   );
 }

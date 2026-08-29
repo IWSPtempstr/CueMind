@@ -10,6 +10,7 @@ import {
   FINAL_STATES,
   splitOf,
   type CandidateRow,
+  type ChatMessageRow,
   type SessionRow,
 } from "./export-training-data";
 
@@ -47,9 +48,20 @@ interface CandidateSeed {
   cardId?: string | null;
 }
 
+interface ChatMessageSeed {
+  sessionId: string;
+  role: "user" | "assistant";
+  content: string;
+}
+
 // --- 造库（表结构照抄 lib/session-store.ts 与 lib/candidate-store.ts 的 CREATE 语句）---
 
-function buildDb(dbDir: string, sessions: SessionSeed[], candidates: CandidateSeed[]): string {
+function buildDb(
+  dbDir: string,
+  sessions: SessionSeed[],
+  candidates: CandidateSeed[],
+  chatMessages: ChatMessageSeed[] = [],
+): string {
   mkdirSync(dbDir, { recursive: true });
   const dbPath = path.join(dbDir, "cuemind.db");
   const db = new Database(dbPath);
@@ -75,12 +87,23 @@ function buildDb(dbDir: string, sessions: SessionSeed[], candidates: CandidateSe
       created_at TEXT NOT NULL,
       PRIMARY KEY (session_id, candidate_id)
     );
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+      content TEXT NOT NULL,
+      is_detail INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
   `);
   const insertSession = db.prepare(
     "INSERT INTO sessions (id, title, created_at, updated_at, duration_ms, input_source, transcript_json, cards_json, metrics_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   const insertCandidate = db.prepare(
     "INSERT INTO candidates (session_id, candidate_id, term, final_state, suppress_reason, card_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  );
+  const insertChatMessage = db.prepare(
+    "INSERT INTO chat_messages (id, session_id, role, content, is_detail, created_at) VALUES (?, ?, ?, ?, ?, ?)",
   );
   for (const session of sessions) {
     insertSession.run(
@@ -104,6 +127,16 @@ function buildDb(dbDir: string, sessions: SessionSeed[], candidates: CandidateSe
       candidate.suppressReason ?? null,
       candidate.cardId ?? null,
       candidate.createdAt,
+    );
+  }
+  for (const message of chatMessages) {
+    insertChatMessage.run(
+      `cm-${message.sessionId}-${message.role}-${message.content.slice(0, 8)}`,
+      message.sessionId,
+      message.role,
+      message.content,
+      0,
+      "2026-08-28T12:30:00.000Z",
     );
   }
   db.close();
@@ -425,6 +458,112 @@ function testCliErrorPaths(): void {
   console.log("CLI error paths suite passed");
 }
 
+function testAskSignals(): void {
+  // j) 会中询问信号（决策 65 第二通道）：model_skip 命中→漏报 DPO；card_shown 命中→统计
+  const sessions: SessionRow[] = [
+    { id: "sa", transcriptJson: JSON.stringify([chunkAt(1, "KV Cache 与 LoRA 讨论行")]) },
+    { id: "sb", transcriptJson: JSON.stringify([chunkAt(1, "RAG 讨论行")]) },
+  ];
+  const candidates: CandidateRow[] = [
+    { sessionId: "sa", candidateId: "m1", term: "KV Cache", finalState: "model_skip", createdAt: "2026-08-28T10:00:05.000Z" },
+    { sessionId: "sa", candidateId: "m2", term: "PagedAttention", finalState: "model_skip", createdAt: "2026-08-28T10:00:06.000Z" },
+    { sessionId: "sa", candidateId: "c1", term: "LoRA", finalState: "card_shown", createdAt: "2026-08-28T10:00:07.000Z" },
+    { sessionId: "sa", candidateId: "c2", term: "MoE", finalState: "card_shown", createdAt: "2026-08-28T10:00:08.000Z" },
+  ];
+  const chatMessages: ChatMessageRow[] = [
+    { sessionId: "sa", role: "user", content: "KV Cache 为什么能加速？" },
+    { sessionId: "sa", role: "assistant", content: "复用已计算的键值对。" },
+    { sessionId: "sa", role: "user", content: "LoRA 具体怎么用？" },
+    { sessionId: "sb", role: "user", content: "RAG 的原理？" },
+  ];
+  const exported = buildTrainingExport({
+    candidates,
+    sessions,
+    chatMessages,
+    usefulIds: new Set(),
+    now: FIXED_NOW,
+  });
+
+  // 信号 1：漏报 DPO 对（仅 m1 命中；m2 未命中不造对）
+  const askDpo = exported.dpo.filter((pair) => pair.chosen.includes("会中询问命中"));
+  assert.equal(askDpo.length, 1, "仅 model_skip + 询问命中 的候选造漏报 DPO");
+  assert.equal(askDpo[0].candidateId, "m1");
+  assert.equal(askDpo[0].term, "KV Cache");
+  assert.equal(askDpo[0].chosen, "应提示关键词「KV Cache」（会中询问命中）");
+  assert.equal(askDpo[0].rejected, "不提示（model_skip）");
+  assert.equal(askDpo[0].windowText, "KV Cache 与 LoRA 讨论行", "漏报 DPO 复用转写窗口");
+  assert.equal(exported.askSignalStats.missedTriggerDpo, 1);
+
+  // 信号 2：卡片解释质量不足（仅 c1 命中；c2 未命中不计；且不造偏好对）
+  assert.equal(exported.askSignalStats.cardExplanationInsufficient, 1);
+  assert.equal(
+    exported.dpo.filter((pair) => pair.candidateId === "c1").length,
+    0,
+    "card_shown 命中只统计、不造偏好对",
+  );
+
+  // 切分：漏报 DPO 与 SFT 同 split（沿用既有切分逻辑）
+  const askSplit = expectedSplit("sa");
+  assert.equal(askDpo[0].split, askSplit, "漏报 DPO split 与 sha256 规则一致");
+  assert.equal(askDpo[0].split, exported.splitMap["sa"], "同 session 所有 pair 同 split（防泄漏）");
+
+  // 幂等：固定 now 两次深等
+  const idemArgs = { candidates, sessions, chatMessages, usefulIds: new Set<string>(), now: FIXED_NOW };
+  assert.equal(
+    JSON.stringify(buildTrainingExport(idemArgs)),
+    JSON.stringify(buildTrainingExport(idemArgs)),
+    "含询问信号时仍幂等",
+  );
+
+  // 大小写不敏感命中对照
+  const upperExported = buildTrainingExport({
+    candidates: [
+      { sessionId: "sa", candidateId: "m1", term: "kv cache", finalState: "model_skip", createdAt: "2026-08-28T10:00:05.000Z" },
+      { sessionId: "sa", candidateId: "c1", term: "lora", finalState: "card_shown", createdAt: "2026-08-28T10:00:07.000Z" },
+    ],
+    sessions,
+    chatMessages: [{ sessionId: "sa", role: "user", content: "KV CACHE 与 LORA" }],
+    usefulIds: new Set(),
+    now: FIXED_NOW,
+  });
+  assert.equal(upperExported.askSignalStats.missedTriggerDpo, 1, "大小写不敏感命中 model_skip");
+  assert.equal(upperExported.askSignalStats.cardExplanationInsufficient, 1, "大小写不敏感命中 card_shown");
+  console.log("ask signal suite passed");
+}
+
+function testCliAskSignal(): void {
+  // 落盘链路：DB（含 chat_messages）→ CLI → dpo.jsonl / report.md 含会中询问信号
+  const dbDir = path.join(TMP_ROOT, "dbAsk");
+  const outDir = path.join(TMP_ROOT, "out-ask");
+  buildDb(
+    dbDir,
+    [{ id: "s-ask", chunks: [chunkAt(1, "KV Cache 讨论行"), chunkAt(2, "LoRA 讨论行")] }],
+    [
+      { sessionId: "s-ask", candidateId: "am1", term: "KV Cache", finalState: "model_skip", createdAt: "2026-08-28T10:00:05.000Z" },
+      { sessionId: "s-ask", candidateId: "ac1", term: "LoRA", finalState: "card_shown", createdAt: "2026-08-28T10:00:07.000Z" },
+    ],
+    [
+      { sessionId: "s-ask", role: "user", content: "KV Cache 是什么？" },
+      { sessionId: "s-ask", role: "assistant", content: "复用键值对。" },
+      { sessionId: "s-ask", role: "user", content: "LoRA 具体怎么配？" },
+    ],
+  );
+  const result = runCli(["--data-dir", dbDir, "--out", outDir, "--now", FIXED_NOW]);
+  assert.equal(result.status, 0, `CLI 应成功：${result.stderr}`);
+
+  const dpo = readJsonlLines(path.join(outDir, "dpo.jsonl"));
+  assert.equal(dpo.length, 1, "仅一条漏报 DPO（会中询问命中）");
+  assert.equal(dpo[0].candidateId, "am1");
+  assert.equal(dpo[0].chosen, "应提示关键词「KV Cache」（会中询问命中）");
+  assert.equal(dpo[0].rejected, "不提示（model_skip）");
+
+  const report = readFileSync(path.join(outDir, "report.md"), "utf8");
+  assert.ok(report.includes("## 会中询问信号（决策 65 第二通道）"), "report 含会中询问信号节");
+  assert.ok(report.includes("| 漏报 DPO 对（model_skip 命中询问） | 1 |"));
+  assert.ok(report.includes("| 卡片解释质量不足（card_shown 命中询问） | 1 |"));
+  console.log("CLI ask signal suite passed");
+}
+
 function main(): void {
   const dbADir = path.join(TMP_ROOT, "dbA");
   buildDb(dbADir, DATASET_A_SESSIONS, DATASET_A_CANDIDATES);
@@ -444,6 +583,8 @@ function main(): void {
   testSplit();
   testPureIdempotency();
   testCliErrorPaths();
+  testAskSignals();
+  testCliAskSignal();
 
   console.log("export-training-data regression tests passed");
 }
