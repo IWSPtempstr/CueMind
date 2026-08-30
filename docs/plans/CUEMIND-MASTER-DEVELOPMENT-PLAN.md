@@ -260,7 +260,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 ### 阶段 6：P5 工程卫生与端到端证据
 
-**状态：进行中。**
+**状态：已完成（当前仓库范围）。**
 **目标：** 将当前可用但有局部隐含风险的系统，收敛为可交接、可回归、可发布的面试项目。
 
 **范围：**
@@ -284,6 +284,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 - 回归矩阵全绿；
 - 服务重启后 health OK；
 - `git status` 中只保留明确的用户产物，不出现意外密钥或数据集。
+
+**2026-08-30 完成记录：** 询问落库采用最多 3 次指数退避且最终错误进入本地状态；replay、summarize、vault、训练导出、服务恢复和历史兼容回归均通过；`lib/partial-transcript.ts` lint warning 已清零；`npm run lint`、`npx tsc --noEmit`、`npm run build` 均通过，服务恢复后 health/app probe 正常。Next 构建仍提示动态 `createRequire` 的既有 bundler warning，不影响产物生成，列为后续工程清理项。
 
 ### 阶段 7：长期能力路线
 
