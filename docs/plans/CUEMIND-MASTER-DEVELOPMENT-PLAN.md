@@ -470,6 +470,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：当前视频集已获得 CUDA Whisper 全量 ASR 产物；本证据只覆盖视频到 transcript，不覆盖卡片生成、询问 lineage 或 Live Ask 延迟门禁。
 - 遗留：从 transcript 分窗生成实际 context cards，保存卡片/关键词/来源/终态及 `video → segment → card → ask → case` lineage，再执行卡片驱动询问测评。
 
+### 2026-08-30：中文 ASR 卡片驱动链路抽样
+
+- 阶段：阶段 1 / 视频重新导入与 Live Ask 证据补充。
+- 原因：使用强制 `-l zh` 的全量 transcript，避免自动语言识别将中文内容误判为英文。
+- 变更：新增 `scripts/evaluate-video-card-lineage.ts`；从每个视频均匀抽取 5 个 30 秒窗口，调用真实 `/api/context-cards`，对 `card_shown` 再调用 `/api/ask`，输出 `lineage.jsonl` 与 `manifest.json`。
+- 证据：报告目录 `reports/video-card-lineage-20260830-zh/`；30/30 卡片 `card_shown`，30/30 `verticalHit=true`；询问 27 `answered`、3 `invalid_schema`。所有询问 `cacheHit=true`，原因是卡片链路先写入共享 term cache，故本轮不作为 cold/hot 对照证据。
+- 结论：视频 → ASR → 卡片 → 询问 lineage 抽样已真实执行；ASR 内容质量明显优于自动语言版本，但仍有 3 个询问 schema 失败，且缓存被上游卡片预热，阶段 1 仍未关闭。
+- 遗留：增加测试专用缓存隔离/清理和 schema 失败细分诊断；扩大窗口覆盖并重新执行严格冷热缓存测评。
+
 ### 后续记录模板
 
 ```markdown
