@@ -103,6 +103,8 @@ export async function POST(
   }
 
   const termHint = cappedText(record.termHint, 200).trim();
+  const cacheMode = record.cacheMode === "cold" || record.cacheMode === "hot" ? record.cacheMode : "default";
+  const cacheKey = cappedText(record.cacheKey, 200).trim();
   const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
 
   // Local-only generation context. Never forwarded to the search layer.
@@ -253,7 +255,8 @@ export async function POST(
         // one-way writes), then the vertical short-circuit + generic fallback.
         // Only the keyword ever leaves the machine.
         let sources: SearchResult[];
-        const cachedSources = askCacheGet(searchKeyword);
+        const effectiveCacheKey = cacheKey || searchKeyword;
+        const cachedSources = cacheMode === "cold" ? null : askCacheGet(effectiveCacheKey);
         if (cachedSources !== null) {
           cacheHit = true;
           sources = cachedSources;
@@ -298,10 +301,12 @@ export async function POST(
           }
           searchMs = Math.round(performance.now() - searchStartedAt);
           sources = searchOutcome.results;
-          try {
-            askCacheSet(searchKeyword, sources);
-          } catch {
-            // Cache write failure must never affect the ask response.
+          if (cacheMode !== "cold") {
+            try {
+              askCacheSet(effectiveCacheKey, sources);
+            } catch {
+              // Cache write failure must never affect the ask response.
+            }
           }
         }
 

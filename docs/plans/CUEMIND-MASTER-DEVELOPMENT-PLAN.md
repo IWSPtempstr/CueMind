@@ -485,6 +485,12 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结果：`1085年` -> `degraded`（`sources_empty`，搜索结果与术语无关，未回放无依据答案）；`规则扰动` -> `answered`；`Safe2G` -> `answered`。后两题均为 `confidence=low`，引用搜索结果并保留完整来源。
 - 结论：3 个历史 `invalid_schema` 均已不再以不可解释的 schema 终态结束；其中 1 个按 fail-closed 规则降级，2 个恢复正常回答。此次结果为热缓存（`cacheHit=true`），不作为冷热性能对照。
 
+### 2026-08-30：扩展题集冷热缓存控制复测
+
+- 变更：`/api/ask` 支持评测用 `cacheMode`/`cacheKey`；扩展 evaluator 对 hot 题先预热同一稳定键，cold 题跳过缓存读写。
+- 证据：`reports/ask-extended-video-20260830-v3/scorecard.json`；38 题、失败 0；cold 19/19 命中语义正确，hot 仍 15 次 miss，hot 完成 P95 `7899ms`，总完成 P95 `7299ms`。
+- 结论：缓存控制已可审计，但模型关键词不稳定导致预热键未必命中；阶段 1 继续进行中，P95 超预算且冷热门禁未通过，不能进入阶段 2。
+
 ### 后续记录模板
 
 ```markdown

@@ -149,6 +149,8 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion): Pro
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question: question.question,
+        cacheMode: question.cacheMode,
+        cacheKey: question.termHint?.trim().toLowerCase() || question.id,
         recentTranscript: question.recentTranscript ?? "",
         termHint: question.termHint,
       }),
@@ -208,6 +210,16 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion): Pro
   }
 }
 
+async function warmOne(baseUrl: string, question: AskEvaluationQuestion): Promise<void> {
+  const response = await fetch(`${baseUrl}/api/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question: question.question, recentTranscript: question.recentTranscript ?? "", termHint: question.termHint, cacheKey: question.termHint?.trim().toLowerCase() || question.id }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  await response.arrayBuffer();
+}
+
 async function main(): Promise<void> {
   const manifestPath = process.env.ASK_EXTENDED_MANIFEST;
   if (!manifestPath) throw new Error("ASK_EXTENDED_MANIFEST is required; no dataset is created automatically");
@@ -217,6 +229,7 @@ async function main(): Promise<void> {
   const outputDir = resolve(process.env.ASK_EXTENDED_OUTPUT_DIR ?? DEFAULT_OUTPUT_DIR);
   const results: AskEvaluationResult[] = [];
   for (const question of manifest.questions) {
+    if (question.cacheMode === "hot") await warmOne(baseUrl, question);
     const result = await measureOne(baseUrl, question);
     results.push(result);
     process.stdout.write(`${JSON.stringify(result)}\n`);
