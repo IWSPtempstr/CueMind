@@ -378,6 +378,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：文档变更完成；阶段 1 仍进行中，P0 未关闭。
 - 遗留：取得授权扩展集后，按手册执行冷/热缓存分层和性能异常矩阵；建议新增脚本路径为 `scripts/evaluate-ask-extended.ts`，ASR/回放/UI 端到端脚本亦须先登记后实现。
 
+### 2026-08-30：阶段 1 回归矩阵复核
+
+- 阶段：阶段 1 / P0 延迟稳定性收口。
+- 原因：补充当前可执行的 fail-closed、卡片路由和询问让位回归证据，并排除执行器临时目录导致的假失败。
+- 变更：未修改实时链路代码；使用 `TMPDIR=/tmp TMP=/tmp TEMP=/tmp` 执行现有回归脚本。
+- 证据：`npx tsx scripts/test-ask-route.ts` 全部通过（来源不足降级、schema 违规、缓存、隐私边界、prompt 迁移）；`npx tsx scripts/test-context-card-route.ts` 全部通过；`npx tsx scripts/test-ask-card-concurrency.ts` 通过，卡片基线 P95 `176.9ms`、并发询问下 P95 `135.2ms`、比值 `0.764`（阈值 `<1.3`）。默认环境 `tsx` 因 Windows 挂载临时目录 IPC 不支持而报 `ENOTSUP`，改用 Linux `/tmp` 后测试正常执行。
+- 结论：阶段 1 已具备冻结集和现有 mock/回归证据；P0 仍未关闭，扩展题集、冷/热分层和性能异常矩阵仍缺授权数据/完整实现。
+- 遗留：不得进入阶段 2；等待授权扩展集或产品/数据方明确授权后继续阶段 1。
+
 ### 后续记录模板
 
 ```markdown
