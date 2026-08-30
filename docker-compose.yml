@@ -1,7 +1,7 @@
 services:
   cuemind:
     build: .
-    image: cuemind:local
+    image: ${CUEMIND_IMAGE_TAG:-cuemind:local}
     ports:
       - "3000:3000"
     environment:
