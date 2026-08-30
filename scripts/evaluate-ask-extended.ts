@@ -36,6 +36,8 @@ export interface AskEvaluationResult {
   finalState: string;
   stages: { keywordMs: number; searchMs: number; generationMs: number } | null;
   observedCacheHit?: boolean;
+  warmFinalState?: string;
+  cacheEligible?: boolean;
   error: string | null;
 }
 
@@ -210,14 +212,22 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion): Pro
   }
 }
 
-async function warmOne(baseUrl: string, question: AskEvaluationQuestion): Promise<void> {
+async function warmOne(baseUrl: string, question: AskEvaluationQuestion): Promise<string> {
   const response = await fetch(`${baseUrl}/api/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question: question.question, recentTranscript: question.recentTranscript ?? "", termHint: question.termHint, cacheKey: question.termHint?.trim().toLowerCase() || question.id }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  await response.arrayBuffer();
+  const text = await response.text();
+  const matches = [...text.matchAll(/data:\s*(\{[^\n]+\})/g)];
+  for (const match of matches.reverse()) {
+    try {
+      const payload = JSON.parse(match[1]) as Record<string, unknown>;
+      if (payload.event === "done" && typeof payload.finalState === "string") return payload.finalState;
+    } catch { /* ignore malformed SSE */ }
+  }
+  return "no_done";
 }
 
 async function main(): Promise<void> {
@@ -229,8 +239,12 @@ async function main(): Promise<void> {
   const outputDir = resolve(process.env.ASK_EXTENDED_OUTPUT_DIR ?? DEFAULT_OUTPUT_DIR);
   const results: AskEvaluationResult[] = [];
   for (const question of manifest.questions) {
-    if (question.cacheMode === "hot") await warmOne(baseUrl, question);
+    const warmFinalState = question.cacheMode === "hot" ? await warmOne(baseUrl, question) : undefined;
     const result = await measureOne(baseUrl, question);
+    if (warmFinalState !== undefined) {
+      result.warmFinalState = warmFinalState;
+      result.cacheEligible = warmFinalState === "answered";
+    }
     results.push(result);
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }
@@ -262,7 +276,7 @@ function summarizeMode(results: AskEvaluationResult[]): ModeSummary {
     firstEventMs: percentiles(results.map((result) => result.firstEventMs).filter(isFiniteNumber)),
     firstByteMs: percentiles(results.map((result) => result.firstByteMs).filter(isFiniteNumber)),
     finalStates: countBy(results, (result) => result.finalState),
-    cacheModeMismatches: results.filter((result) => result.observedCacheHit !== undefined && ((result.cacheMode === "cold" && result.observedCacheHit) || (result.cacheMode === "hot" && !result.observedCacheHit))).length,
+    cacheModeMismatches: results.filter((result) => result.observedCacheHit !== undefined && ((result.cacheMode === "cold" && result.observedCacheHit) || (result.cacheMode === "hot" && result.cacheEligible === true && !result.observedCacheHit))).length,
   };
 }
 

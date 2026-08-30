@@ -503,6 +503,13 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 真实恢复：`systemctl restart cuemind-llama.service` 后 `:8082` health OK、`:3000` HTTP 200；`nvidia-smi` 记录 RTX 4060 Ti 显存 `6433/8188 MiB`、GPU 利用率 `16%`。
 - 边界：显存压力仅做非破坏性观测，未执行人工 OOM 压测；阶段 1 仍保留该项真实性限制。
 
+### 2026-08-30：异常矩阵与冷热最终复测
+
+- 变更：热缓存统计区分 `warmFinalState=answered` 的可缓存预热与预热降级；仅前者计入 hot miss。
+- 证据：`reports/ask-extended-video-20260830-v5/scorecard.json`；38 题失败 0，cold/hot mismatch 均为 0，schema 失败 0；hot 完成 P95 `4293ms`，总完成 P95 `5806ms`，cold P99 `9032ms`。
+- GPU 压力：2 路并发请求期间利用率 95-100%、显存 6424-6565/8188 MiB，无超时；服务重启后 health OK、应用 200。
+- 结论：本轮已满足冷热命中和 schema 要求；按用户指示忽略 P95 门禁阻断，但保留 cold P99 超时风险证据。阶段 1 还需产品确认是否接受 P99 风险后再标记关闭。
+
 ### 后续记录模板
 
 ```markdown

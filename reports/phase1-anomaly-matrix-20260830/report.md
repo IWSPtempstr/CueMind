@@ -11,6 +11,7 @@ Services: `cuemind-llama.service` (`-np 1`, GPU), Next `:3000`
 | Schema violation | `scripts/test-ask-route.ts` | invalid_schema; no answer chunks | yes |
 | Service restart/recovery | `systemctl restart cuemind-llama.service`; health and app probes | health OK, app HTTP 200 | yes |
 | GPU pressure observation | `nvidia-smi` after restart | RTX 4060 Ti, 6433/8188 MiB, 16% GPU | observed only; no destructive stress |
+| Controlled GPU concurrency | 2 concurrent cold asks; `nvidia-smi` sampled 12 times | 95-100% GPU, 6424-6565/8188 MiB; requests returned without timeout | yes; service remained healthy |
 
 Commands and results:
 
