@@ -817,7 +817,7 @@ async function assertMissingDbServer(): Promise<void> {
     `explainable missing-db error, got: ${payload.error}`,
   );
   const stillResponsive = (await client.request("tools/list", {})) as { tools: unknown[] };
-  assert.equal(stillResponsive.tools.length, 6, "server stays responsive after db-missing error");
+  assert.equal(stillResponsive.tools.length, 9, "server stays responsive after db-missing error");
   assert.ok(client.isAlive(), "server process must not crash");
   await client.stop();
   console.log(`[g] db-missing path OK (CUEMIND_DATA_DIR=${absentDir}): error 终态可解释，server 不崩`);
