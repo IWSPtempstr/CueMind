@@ -387,6 +387,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：阶段 1 已具备冻结集和现有 mock/回归证据；P0 仍未关闭，扩展题集、冷/热分层和性能异常矩阵仍缺授权数据/完整实现。
 - 遗留：不得进入阶段 2；等待授权扩展集或产品/数据方明确授权后继续阶段 1。
 
+### 2026-08-30：阶段 1 模型与搜索异常回归
+
+- 阶段：阶段 1 / P0 延迟稳定性收口。
+- 原因：补充计划要求的模型/搜索异常和 fail-closed 控制流证据。
+- 变更：未修改实时链路；执行 `TMPDIR=/tmp TMP=/tmp TEMP=/tmp npx tsx scripts/test-model-providers.ts` 与 `TMPDIR=/tmp TMP=/tmp TEMP=/tmp npx tsx scripts/test-vertical-sources.ts`。
+- 证据：模型提供方回归通过，覆盖不可达、超时、HTTP 错误、非法 JSON、schema 错误及安全错误序列化；垂直源回归通过，覆盖 arXiv/HN/GitHub/SO 解析、去重短路、Tavily 回退、来源不足和错误终态。
+- 结论：阶段 1 已有 mock/fixture 异常控制流证据；P0 仍未关闭，真实扩展题集冷/热性能与服务重启/显存压力矩阵仍待执行。
+- 遗留：扩展数据授权前不新增或复制题集；阶段 2 不得提前开工。
+
 ### 后续记录模板
 
 ```markdown
