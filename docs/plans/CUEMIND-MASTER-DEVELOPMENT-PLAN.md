@@ -367,6 +367,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 **2026-08-30 实现记录：** 阶段 9–10 已完成本地交付基础。新增 `lib/model-release.ts` 与测试，提供候选模型元数据登记、人工 release、历史记录和 rollback；新增 Docker Compose、`scripts/cuemind-service.sh` 生命周期入口、`scripts/verify-offline.sh` 和本地交接手册。真实候选模型影子运行、目标硬件矩阵和隔离主机断网演练仍需由发布人执行并归档证据。
 
+**微调与稳定性实验计划：** 具体执行顺序、AMI/DialogSum 数据改造、CueMind 人工标注、SFT/DPO 配置、评测指标和发布门禁见 [`docs/plans/2026-08-30-offline-finetune-and-stability-plan.md`](2026-08-30-offline-finetune-and-stability-plan.md)。该计划明确公开数据只作补充，CueMind 真实裁决数据主导训练与冻结集。
+
 #### 模型与硬件评估
 
 EAGLE3、KV cache、不同量化档位、更强 GPU或蒸馏模型都只能作为候选版本实验。每次模型/参数变化必须绑定模型哈希、llama.cpp 版本、Prompt 版本、来源策略版本、数据集版本和完整冻结集结果。
