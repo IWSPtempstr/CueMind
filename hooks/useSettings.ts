@@ -87,8 +87,9 @@ export function getDefaultSettings(): Settings {
     chunkIntervalSeconds: CHUNK_INTERVAL_SECONDS,
     suggestionRefreshSeconds: SUGGESTION_REFRESH_SECONDS,
     transcriptionLanguage: "auto",
-    localWhisperPath: "",
-    localWhisperModelPath: "",
+    // CUDA build configured for the current WSL host; existing saved settings remain authoritative.
+    localWhisperPath: "/home/work/asr/whisper.cpp/build-cuda/bin/whisper-cli",
+    localWhisperModelPath: "/home/work/asr/.runtime/models/ggml-small.bin",
     localWhisperLanguage: "auto",
     meetingTopic: "",
     domainGlossary: "",

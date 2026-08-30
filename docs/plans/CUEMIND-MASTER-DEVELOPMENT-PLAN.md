@@ -452,6 +452,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：文档协议已登记；下一步先实现/执行内容抽取和 lineage，再重新生成询问集与冷热缓存测评。
 - 遗留：需要确认现有本地 ASR、视频帧/OCR 工具和卡片入口的可执行命令；执行结果必须单独写入新报告目录，不覆盖既有报告。
 
+### 2026-08-30：Whisper CUDA 配置与验证
+
+- 阶段：阶段 1 / 视频重新导入前置。
+- 原因：CPU-only Whisper 无法在可接受时间内完成当前视频集的完整 ASR。
+- 变更：在 `/home/work/asr/whisper.cpp` 以 `GGML_CUDA=ON`、CUDA 12.3、`CMAKE_CUDA_ARCHITECTURES=89` 构建独立 CUDA 版本；CueMind 新用户默认路径指向该二进制和现有 `ggml-small.bin`，不覆盖已有用户设置。
+- 证据：`ldd` 显示 `libggml-cuda.so`、`libcudart.so.12`、`libcublas.so.12`；12 秒视频样本运行日志显示 `found GPU device 0: NVIDIA GeForce RTX 4060 Ti`、`using CUDA0 backend`，总耗时约 `1145ms`。
+- 结论：CUDA ASR 前置配置通过；尚未声称 6 个视频完整转录、卡片生成或卡片驱动询问测评完成。
+- 遗留：使用 CUDA 二进制执行可恢复的分窗全量转录，随后导入卡片链路并生成 lineage。
+
 ### 后续记录模板
 
 ```markdown
