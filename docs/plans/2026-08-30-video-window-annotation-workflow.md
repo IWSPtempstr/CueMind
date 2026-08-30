@@ -155,6 +155,9 @@ reports/finetune/annotations/
 
 三类标注文件都必须包含 `windowId`、`videoId`、`split`、`annotator`；解释标注还必须包含 evidence。DPO 的 `chosen/rejected` 只能来自人工确认，不得直接使用自动模型输出。
 
+已有标注重新裁决时不得原地覆盖，先写入版本化目录，例如
+`reports/finetune/annotations-v2/`，并在 manifest 中记录标注规则版本、日期和裁决人。完成抽样复核后，才能将 v2 提升为正式标注版本。
+
 ## 7. 标注顺序与质量检查
 
 第一轮标注 300–500 个窗口，优先覆盖明显 show、明显 skip、重复概念、无证据、中英文混合和长短不同窗口。建议先完成：
