@@ -9,6 +9,7 @@ import { parseReplayEvents, replayDelayMs } from "@/lib/replay";
 import type { DesktopEvent, TranscriptReadyEvent } from "@/lib/desktop-events";
 import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
+import type { StoredChatMessage } from "@/lib/chat-store";
 
 const speeds = [1, 2, 5] as const;
 
@@ -20,6 +21,9 @@ export default function ReplayPage(): ReactElement {
   const [transcriptChunks, setTranscriptChunks] = useState<TranscriptChunk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
+  const [chatSessionId, setChatSessionId] = useState("");
+  const [chatMessages, setChatMessages] = useState<StoredChatMessage[]>([]);
+  const [chatError, setChatError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const cursorRef = useRef(0);
   const eventsRef = useRef<DesktopEvent[]>([]);
@@ -97,6 +101,20 @@ export default function ReplayPage(): ReactElement {
     }
   }, [reset]);
 
+  const loadChatHistory = useCallback(async (): Promise<void> => {
+    const sessionId = chatSessionId.trim();
+    if (!sessionId) return;
+    setChatError(null);
+    try {
+      const response = await fetch(`/api/chat-messages?sessionId=${encodeURIComponent(sessionId)}`);
+      const payload = (await response.json()) as { messages?: StoredChatMessage[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "无法读取询问历史");
+      setChatMessages(Array.isArray(payload.messages) ? payload.messages : []);
+    } catch (caught) {
+      setChatError(caught instanceof Error ? caught.message : "无法读取询问历史");
+    }
+  }, [chatSessionId]);
+
   const togglePlaying = useCallback((): void => {
     if (events.length === 0) {
       setError("请先加载 JSONL replay 文件。");
@@ -138,6 +156,17 @@ export default function ReplayPage(): ReactElement {
             </select>
           </label>
           <span className="ml-auto text-xs text-neutral-600">{cursor}/{events.length} events</span>
+        </section>
+
+        <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-neutral-500" htmlFor="replay-session-id">询问历史 sessionId</label>
+            <input id="replay-session-id" value={chatSessionId} onChange={(event) => setChatSessionId(event.target.value)} placeholder="输入 sessionId" className="min-w-[16rem] rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-xs text-neutral-200" />
+            <button type="button" onClick={() => void loadChatHistory()} className="rounded bg-blue-600 px-3 py-1.5 text-xs text-white">加载询问历史</button>
+            <span className="text-xs text-neutral-600">{chatMessages.length} 条</span>
+          </div>
+          {chatError ? <p className="mt-2 text-xs text-red-300">{chatError}</p> : null}
+          {chatMessages.length > 0 ? <div className="mt-3 flex flex-col gap-2">{chatMessages.map((message) => <article key={message.id} className="rounded border border-neutral-800 p-3"><p className="text-xs text-neutral-300"><span className="mr-2 text-neutral-600">{message.role === "user" ? "问" : "答"}</span>{message.content}</p><p className="mt-1 text-[10px] text-neutral-600">终态：{message.finalState || "unknown"}{message.keywords?.length ? ` · 关键词：${message.keywords.join(", ")}` : ""}</p>{message.sources?.length ? <div className="mt-1 flex flex-wrap gap-2">{message.sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer" className="text-[10px] text-blue-300 underline">{source.title}</a>)}</div> : null}</article>)}</div> : null}
         </section>
 
         {error ? <p className="rounded border border-red-900 bg-red-950/30 px-3 py-2 text-xs text-red-300">{error}</p> : null}

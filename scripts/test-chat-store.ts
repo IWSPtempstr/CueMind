@@ -30,6 +30,9 @@ function message(overrides: Partial<StoredChatMessage> = {}): StoredChatMessage 
     content: overrides.content ?? `内容 ${seq}`,
     isDetail: overrides.isDetail ?? false,
     createdAt: overrides.createdAt ?? new Date(Date.UTC(2026, 7, 27, 10, 0, seq)).toISOString(),
+    sources: overrides.sources,
+    keywords: overrides.keywords,
+    finalState: overrides.finalState,
   };
 }
 
@@ -38,7 +41,7 @@ function runSuite(): void {
   console.log(`chat-store backend = ${backend} (data dir: ${DATA_DIR})`);
 
   // a) append + get 往返：乱序 createdAt 写入 → 读取按 createdAt 升序
-  const rt1 = message({ id: "rt-1", role: "assistant", content: "assistant 回复", createdAt: "2026-08-27T10:00:05.000Z" });
+  const rt1 = message({ id: "rt-1", role: "assistant", content: "assistant 回复", createdAt: "2026-08-27T10:00:05.000Z", sources: [{ title: "来源", url: "https://example.com" }], keywords: ["KV cache"], finalState: "answered" });
   const rt2 = message({ id: "rt-2", role: "user", content: "user 提问", createdAt: "2026-08-27T10:00:00.000Z" });
   const rt3 = message({ id: "rt-3", role: "assistant", content: "细节补充", isDetail: true, createdAt: "2026-08-27T10:00:10.000Z" });
   appendChatMessages([rt2, rt3, rt1]); // 故意乱序写入
@@ -47,6 +50,9 @@ function runSuite(): void {
   assert.equal(roundtrip[0].content, "user 提问");
   assert.equal(roundtrip[0].role, "user");
   assert.equal(roundtrip[1].content, "assistant 回复");
+  assert.deepEqual(roundtrip[1].sources, [{ title: "来源", url: "https://example.com" }]);
+  assert.deepEqual(roundtrip[1].keywords, ["KV cache"]);
+  assert.equal(roundtrip[1].finalState, "answered");
   assert.equal(roundtrip[2].isDetail, true);
   assert.equal(roundtrip[0].isDetail, false);
 
@@ -55,7 +61,7 @@ function runSuite(): void {
   const afterRepeat = getChatMessages("session-main");
   assert.equal(afterRepeat.length, 3);
   assert.equal(afterRepeat.find((m) => m.id === "rt-1")?.content, "assistant 回复");
-  appendChatMessages([message({ id: "rt-1", role: "assistant", content: "更新后的回复", createdAt: "2026-08-27T10:00:05.000Z" })]);
+  appendChatMessages([message({ id: "rt-1", role: "assistant", content: "更新后的回复", createdAt: "2026-08-27T10:00:05.000Z", sources: [{ title: "来源", url: "https://example.com" }], keywords: ["KV cache"], finalState: "answered" })]);
   const afterUpsert = getChatMessages("session-main");
   assert.equal(afterUpsert.length, 3);
   assert.equal(afterUpsert.find((m) => m.id === "rt-1")?.content, "更新后的回复");
