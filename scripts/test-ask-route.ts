@@ -268,6 +268,15 @@ async function testInvalidSchemaIsFailClosed(baseUrl: string): Promise<void> {
   assert.equal((done[0].failure as { reason?: string })?.reason, "ask answer schema invalid");
 }
 
+async function testFencedJsonAnswerIsAccepted(baseUrl: string): Promise<void> {
+  const response = await POST(makeRequest(askBody(baseUrl, { question: "带 markdown 外壳的回答？" })));
+  const events = await collectEvents(response);
+  const done = findEvents(events, "done");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].finalState, "answered", "完整 schema 仅带 markdown 外壳时应正常回答");
+  assert.ok(findEvents(events, "answer_chunk").length > 0, "正常回答应回放答案片段");
+}
+
 async function testGenerationFailureIsFailClosed(baseUrl: string): Promise<void> {
   const response = await POST(makeRequest(askBody(baseUrl, { question: "模型生成失败场景？" })));
   const events = await collectEvents(response);
@@ -516,6 +525,27 @@ async function main(): Promise<void> {
         await stopMockServer(server);
       }
       console.log("c) schema 违规 → invalid_schema（无伪造内容）通过");
+    }
+
+    // c1) 合法 schema 被 markdown 外壳包裹时仍应接受
+    {
+      askCacheClear();
+      tavilyResultCount = 2;
+      const script: ProviderScript = {
+        keywords: ["fenced-json"],
+        generationContent: "```json\n" + JSON.stringify({
+          answer: "这是有来源支撑的回答",
+          sources: [{ title: "KV Cache explained", url: "https://example.com/kv-cache" }],
+          confidence: "high",
+        }) + "\n```",
+      };
+      const { server, baseUrl } = await startMockProvider(script);
+      try {
+        await testFencedJsonAnswerIsAccepted(baseUrl);
+      } finally {
+        await stopMockServer(server);
+      }
+      console.log("c1) markdown 包裹的合法 JSON → answered 通过");
     }
 
     // c2) 模型生成失败 → model_failed，保留来源但不回放答案

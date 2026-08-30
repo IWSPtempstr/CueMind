@@ -347,10 +347,12 @@ export async function POST(
         const validated = validateAskAnswer(parseJsonLoose(rawAnswerJson));
         if (validated === null) {
           // Fail-closed: schema violation → terminal state, no fabricated answer.
+          const schemaDiagnostic = diagnoseAskSchema(rawAnswerJson);
+          console.warn(`[ask] invalid schema reason=${schemaDiagnostic}`);
           done(
             {
               sources: sourcesForClient(sources),
-              failure: { reason: "ask answer schema invalid" },
+              failure: { reason: "ask answer schema invalid", diagnostic: schemaDiagnostic },
             },
             "invalid_schema",
           );
@@ -579,11 +581,40 @@ function extractDeltaContent(data: unknown): string | null {
 }
 
 function parseJsonLoose(raw: string): unknown {
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
+  const trimmed = raw.trim();
+  const candidates = [trimmed];
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) candidates.push(fenced[1].trim());
+  const objectStart = trimmed.indexOf("{");
+  const objectEnd = trimmed.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(trimmed.slice(objectStart, objectEnd + 1));
   }
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as unknown;
+    } catch {
+      // Continue through the narrowly-scoped wrappers above.
+    }
+  }
+  return null;
+}
+
+function diagnoseAskSchema(raw: string): string {
+  const parsed = parseJsonLoose(raw);
+  if (parsed === null) return "invalid_json";
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "root_not_object";
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.answer !== "string" || record.answer.trim() === "") return "answer_missing_or_empty";
+  if (!Array.isArray(record.sources)) return "sources_missing_or_not_array";
+  if (record.sources.length === 0) return "sources_empty";
+  for (const item of record.sources) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return "source_not_object";
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.title !== "string" || entry.title.trim() === "") return "source_title_missing";
+    if (typeof entry.url !== "string" || entry.url.trim() === "") return "source_url_missing";
+  }
+  return "sources_invalid";
 }
 
 function validateAskAnswer(value: unknown): ValidatedAskAnswer | null {
