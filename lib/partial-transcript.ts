@@ -60,7 +60,8 @@ export function onPartialSent(state: PartialThrottleState, now: number): Partial
 }
 
 /** partial→confirmed 替换语义：confirmed 到达时清 partial 周期与在途标记，开启新周期；segmentStartedAt 一并清除（confirmed 后的新周期回到 4s 起步，避免同一 segment 内重复吃 2s 快速通道）。 */
-export function onConfirmed(_state: PartialThrottleState): PartialThrottleState {
+export function onConfirmed(state: PartialThrottleState): PartialThrottleState {
+  void state;
   return { lastSentAt: 0, inFlight: false };
 }
 
