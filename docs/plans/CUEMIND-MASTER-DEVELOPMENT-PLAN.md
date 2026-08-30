@@ -491,6 +491,12 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 证据：`reports/ask-extended-video-20260830-v3/scorecard.json`；38 题、失败 0；cold 19/19 命中语义正确，hot 仍 15 次 miss，hot 完成 P95 `7899ms`，总完成 P95 `7299ms`。
 - 结论：缓存控制已可审计，但模型关键词不稳定导致预热键未必命中；阶段 1 继续进行中，P95 超预算且冷热门禁未通过，不能进入阶段 2。
 
+### 2026-08-30：稳定 cacheKey 完整预热复测
+
+- 变更：扩展 evaluator 的 hot 预热等待 SSE body 完整结束，并对预热/正式请求传递同一稳定 `cacheKey`。
+- 证据：`reports/ask-extended-video-20260830-v4/scorecard.json`；38 题失败 0；cold mismatch `0`，hot mismatch `2`；hot 完成 P95 `5052ms`，总完成 P95 `6115ms`。
+- 结论：热缓存命中语义基本稳定；2 次 mismatch 对应预热降级、无缓存可写入。按用户指示本轮不因 P95 中止，但阶段 1 仍需完成异常矩阵和剩余缓存降级场景核验。
+
 ### 后续记录模板
 
 ```markdown
