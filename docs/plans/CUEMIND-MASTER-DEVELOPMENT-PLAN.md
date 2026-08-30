@@ -396,6 +396,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：阶段 1 已有 mock/fixture 异常控制流证据；P0 仍未关闭，真实扩展题集冷/热性能与服务重启/显存压力矩阵仍待执行。
 - 遗留：扩展数据授权前不新增或复制题集；阶段 2 不得提前开工。
 
+### 2026-08-30：阶段 1 扩展测评执行器就绪
+
+- 阶段：阶段 1 / P0 延迟稳定性收口。
+- 原因：为已登记的 30-50 题扩展集建立可重复执行入口，但不在未授权时生成或扩展数据。
+- 变更：新增 `scripts/evaluate-ask-extended.ts` 和 `scripts/test-evaluate-ask-extended.ts`。执行器要求外部 `ASK_EXTENDED_MANIFEST` 明确声明 `authorized=true`，读取每题 `id/question/cacheMode`，分别输出 cold/hot 的首事件、答案首字节、完成 P50/P95/P99、失败分母、终态和 cache mode mismatch；缺失或非法 manifest 直接退出，不启动服务、不清缓存、不写应用数据库。
+- 证据：`TMPDIR=/tmp TMP=/tmp TEMP=/tmp npx tsx scripts/test-evaluate-ask-extended.ts` 通过；`npx tsc --noEmit` 通过；`npm run lint` 无错误，仅保留既有 `lib/partial-transcript.ts:63` warning；缺失 `ASK_EXTENDED_MANIFEST` 的 CLI 验证以非零状态退出并提示不会自动创建数据。
+- 结论：扩展测评实现缺口已收口；阶段 1/P0 仍未关闭，因授权 30-50 题数据、真实冷/热运行和完整性能异常矩阵结果尚未具备。
+- 遗留：取得授权 manifest 后直接运行 `ASK_EXTENDED_MANIFEST=<authorized-manifest> TMPDIR=/tmp npx tsx scripts/evaluate-ask-extended.ts`；在此之前不得进入阶段 2。
+
 ### 后续记录模板
 
 ```markdown
