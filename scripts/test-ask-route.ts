@@ -347,6 +347,15 @@ async function testTermHintUsedAsFallbackKeyword(baseUrl: string): Promise<void>
   assert.equal(keywords[0], "Speculative Decoding", "关键词提取为空时，termHint 应作为兜底搜索关键词");
 }
 
+async function testKeywordFailureDoesNotSearch(baseUrl: string): Promise<void> {
+  const before = searchLayerCalls.length;
+  const response = await POST(makeRequest(askBody(baseUrl, { question: "无法提取关键词的问题" })));
+  const events = await collectEvents(response);
+  const done = findEvents(events, "done");
+  assert.equal(done[0].finalState, "degraded");
+  assert.equal(searchLayerCalls.length, before, "关键词提取失败时不得访问搜索层");
+}
+
 // --- f) askPrompt 旧键迁移（localStorage 可注入 shim，无 jsdom 依赖）---
 
 interface StorageShim {
@@ -638,6 +647,21 @@ async function main(): Promise<void> {
         await stopMockServer(server);
       }
       console.log("i) termHint 关键词兜底（关键词提取为空 → termHint 兜底）通过");
+    }
+
+    // j) 关键词提取失败 → 本地降级，零搜索外发
+    {
+      askCacheClear();
+      tavilyResultCount = 2;
+      searchLayerCalls.length = 0;
+      const script: ProviderScript = { keywords: [], generationContent: "不得调用生成" };
+      const { server, baseUrl } = await startMockProvider(script);
+      try {
+        await testKeywordFailureDoesNotSearch(baseUrl);
+      } finally {
+        await stopMockServer(server);
+      }
+      console.log("j) 关键词提取失败 → degraded + 零搜索通过");
     }
 
     // f) askPrompt 旧键迁移（纯 localStorage shim）：用户自定义旧值 → 保留

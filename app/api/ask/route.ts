@@ -241,9 +241,14 @@ export async function POST(
         } catch {
           // Fall through to the deterministic fallback below.
         }
-        if (keywords.length === 0) {
-          keywords = [termHint !== "" ? termHint : question.slice(0, 20)];
+        if (keywords.length === 0 && termHint === "") {
+          keywordMs = Math.round(performance.now() - keywordStartedAt);
+          emit({ event: "degraded", message: "未提取到可搜索关键词，未发起联网搜索。", keywords: [] });
+          done({ sources: [], failure: { reason: "keyword extraction failed" } }, "degraded");
+          finish();
+          return;
         }
+        if (keywords.length === 0) keywords = [termHint];
         keywordMs = Math.round(performance.now() - keywordStartedAt);
         // searchKeywordSources takes one keyword: the first extracted term is the
         // most salient; joined multi-keyword queries degrade vertical recall.
