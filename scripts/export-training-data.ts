@@ -142,7 +142,7 @@ function buildWindowText(transcriptJson: string, createdAt: string): string {
 function questionMentionsTerm(question: string, term: string): boolean {
   const normalizedQuestion = question.toLowerCase();
   const normalizedTerm = term.trim().toLowerCase();
-  return normalizedTerm.length > 0 && normalizedQuestion.includes(normalizedTerm);
+  return normalizedTerm.length >= 2 && normalizedQuestion.includes(normalizedTerm);
 }
 
 /**
@@ -209,18 +209,20 @@ export function buildTrainingExport(args: {
       (questionsBySession.get(candidate.sessionId) ?? []).some((question) =>
         questionMentionsTerm(question, candidate.term as string),
       );
-    if (candidate.finalState === "model_skip" && candidate.term !== null && args.usefulIds.has(candidate.candidateId)) {
+    const manuallyUseful = candidate.finalState === "model_skip" && candidate.term !== null && args.usefulIds.has(candidate.candidateId);
+    if (manuallyUseful) {
+      const term = candidate.term as string;
       dpo.push({
         sessionId: candidate.sessionId,
         candidateId: candidate.candidateId,
         windowText,
-        term: candidate.term,
-        chosen: `应提示关键词「${candidate.term}」（用户标记有用）`,
+        term,
+        chosen: `应提示关键词「${term}」（用户标记有用）`,
         rejected: "不提示（model_skip）",
         split,
       });
     }
-    if (candidate.finalState === "model_skip" && candidate.term !== null && askedAbout) {
+    if (!manuallyUseful && candidate.finalState === "model_skip" && candidate.term !== null && askedAbout) {
       dpo.push({
         sessionId: candidate.sessionId,
         candidateId: candidate.candidateId,

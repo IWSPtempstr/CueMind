@@ -34,6 +34,7 @@ function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptC
 
 // M3-a：卡片沉淀去重记录（本地持久化，避免重复导出同一 candidateId）。
 const DEPOSITED_CARDS_STORAGE_KEY = "cuemind_deposited_cards";
+const USEFUL_CARDS_STORAGE_KEY = "cuemind_useful_cards";
 
 function loadDepositedCardIds(): Set<string> {
   try {
@@ -156,6 +157,7 @@ export default function Home(): ReactElement {
   useEffect(() => { contextCardsRef.current = contextCards.cards; }, [contextCards.cards]);
   // M3-a：已沉淀卡片去重集合（localStorage cuemind_deposited_cards）。
   const [depositedCardIds, setDepositedCardIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [usefulCandidateIds, setUsefulCandidateIds] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => { setDepositedCardIds(loadDepositedCardIds()); }, []);
   // 已处理过"上传完成"事件的 uploadId 去重集合（主题摘要只生成一次）。
   const handledUploadIdsRef = useRef(new Set<string>());
@@ -251,6 +253,13 @@ export default function Home(): ReactElement {
     }).catch(() => undefined);
   }, [depositedCardIds]);
 
+  const handleMarkUseful = useCallback((card: ContextCard): void => {
+    if (!card.candidateId || usefulCandidateIds.has(card.candidateId)) return;
+    const next = new Set(usefulCandidateIds).add(card.candidateId);
+    setUsefulCandidateIds(next);
+    try { localStorage.setItem(USEFUL_CARDS_STORAGE_KEY, JSON.stringify([...next])); } catch { /* local audit is best effort */ }
+  }, [usefulCandidateIds]);
+
   useEffect(() => {
     const saved = loadSessions();
     setSessions(saved);
@@ -308,11 +317,18 @@ export default function Home(): ReactElement {
     const payload = toStoredAskMessages(sessionId, messages);
     if (payload.length === 0) return;
     // fire-and-forget：失败静默，不影响主流程。
-    void fetch("/api/chat-messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, messages: payload }),
-    }).catch(() => undefined);
+    void (async () => {
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const response = await fetch("/api/chat-messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, messages: payload }) });
+          if (response.ok) return;
+          lastError = new Error(`chat history persistence HTTP ${response.status}`);
+        } catch (error) { lastError = error; }
+        await new Promise((resolve) => window.setTimeout(resolve, 250 * 2 ** attempt));
+      }
+      setPersistenceError(lastError instanceof Error ? lastError.message : "无法保存询问历史");
+    })();
   }, []);
 
   const fetchServerAskMessages = useCallback(
@@ -614,6 +630,8 @@ export default function Home(): ReactElement {
           onCardDeposit={handleCardDeposit}
           depositedCardIds={depositedCardIds}
           onAskMore={(term) => setAskTermHint(term)}
+          onMarkUseful={handleMarkUseful}
+          usefulCandidateIds={usefulCandidateIds}
         />
         <AskPanel
           messages={ask.messages}

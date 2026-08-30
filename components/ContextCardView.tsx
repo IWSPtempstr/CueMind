@@ -13,6 +13,8 @@ interface ContextCardProps {
   isDeposited?: boolean;
   /** B 阶段：卡片「问更多」——术语经 termHint 预填右栏询问框并聚焦。 */
   onAskMore?: (term: string) => void;
+  onMarkUseful?: (card: ContextCard) => void;
+  isMarkedUseful?: boolean;
 }
 
 /** 建议类别色板（批次三：左栏转写内联徽标沿用；五类全映射）。 */
@@ -55,7 +57,7 @@ export function sourceBadge(sourceType: ContextCard["sources"][number]["sourceTy
   }
 }
 
-export default function ContextCardView({ card, onDeposit, isDeposited, onAskMore }: ContextCardProps): ReactElement {
+export default function ContextCardView({ card, onDeposit, isDeposited, onAskMore, onMarkUseful, isMarkedUseful }: ContextCardProps): ReactElement {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
 
   const toggleSource = (url: string): void => {
@@ -116,7 +118,7 @@ export default function ContextCardView({ card, onDeposit, isDeposited, onAskMor
           </div>
         ))}
       </div>
-      {onAskMore || onDeposit ? (
+      {onAskMore || onDeposit || onMarkUseful ? (
         <div className="mt-3 flex items-center gap-2 border-t border-blue-900/60 pt-3">
           {onAskMore ? (
             <button
@@ -128,6 +130,7 @@ export default function ContextCardView({ card, onDeposit, isDeposited, onAskMor
               💬 问更多
             </button>
           ) : null}
+          {onMarkUseful ? <button type="button" onClick={() => onMarkUseful(card)} disabled={isMarkedUseful} className="rounded border border-amber-800 px-2 py-1 text-[10px] text-amber-300 disabled:opacity-50">{isMarkedUseful ? "已标记应出卡" : "标记应出卡"}</button> : null}
           {onDeposit ? (
             <button
               type="button"
