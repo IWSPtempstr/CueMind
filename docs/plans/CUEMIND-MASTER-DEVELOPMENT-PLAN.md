@@ -405,6 +405,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：扩展测评实现缺口已收口；阶段 1/P0 仍未关闭，因授权 30-50 题数据、真实冷/热运行和完整性能异常矩阵结果尚未具备。
 - 遗留：取得授权 manifest 后直接运行 `ASK_EXTENDED_MANIFEST=<authorized-manifest> TMPDIR=/tmp npx tsx scripts/evaluate-ask-extended.ts`；在此之前不得进入阶段 2。
 
+### 2026-08-30：阶段 1 扩展数据规模门禁
+
+- 阶段：阶段 1 / P0 延迟稳定性收口。
+- 原因：防止小样本或误授权 manifest 被误当作至少 30 题扩展集执行。
+- 变更：`scripts/evaluate-ask-extended.ts` 增加执行时最少 30 个授权题目的门禁；解析层仍可接受小 fixture 供契约测试使用。
+- 证据：`TMPDIR=/tmp TMP=/tmp TEMP=/tmp npx tsx scripts/test-evaluate-ask-extended.ts` 通过；`npx tsc --noEmit` 通过。
+- 结论：扩展测评执行器具备数据规模保护；阶段 1 仍未关闭，当前没有授权 manifest 可运行。
+- 遗留：获得至少 30 题授权 manifest 后，执行 cold/hot 分层并记录完整分母、异常终态和分位数。
+
 ### 后续记录模板
 
 ```markdown

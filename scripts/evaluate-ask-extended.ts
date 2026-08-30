@@ -107,6 +107,12 @@ export function parseAskEvaluationManifest(raw: string): AskEvaluationManifest {
   };
 }
 
+export function assertExtendedDatasetSize(manifest: AskEvaluationManifest): void {
+  if (manifest.questions.length < 30) {
+    throw new Error(`extended evaluation requires at least 30 authorized questions; got ${manifest.questions.length}`);
+  }
+}
+
 export function summarizeAskResults(results: AskEvaluationResult[]): AskEvaluationSummary {
   const byCacheMode = {
     cold: summarizeMode(results.filter((result) => result.cacheMode === "cold")),
@@ -198,6 +204,7 @@ async function main(): Promise<void> {
   const manifestPath = process.env.ASK_EXTENDED_MANIFEST;
   if (!manifestPath) throw new Error("ASK_EXTENDED_MANIFEST is required; no dataset is created automatically");
   const manifest = parseAskEvaluationManifest(await readFile(resolve(manifestPath), "utf8"));
+  assertExtendedDatasetSize(manifest);
   const baseUrl = process.env.ASK_MEASURE_BASE_URL ?? DEFAULT_BASE_URL;
   const outputDir = resolve(process.env.ASK_EXTENDED_OUTPUT_DIR ?? DEFAULT_OUTPUT_DIR);
   const results: AskEvaluationResult[] = [];

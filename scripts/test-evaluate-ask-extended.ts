@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseAskEvaluationManifest, summarizeAskResults, type AskEvaluationResult } from "@/scripts/evaluate-ask-extended";
+import { assertExtendedDatasetSize, parseAskEvaluationManifest, summarizeAskResults, type AskEvaluationResult } from "@/scripts/evaluate-ask-extended";
 
 function testManifestRequiresAuthorizedQuestions(): void {
   assert.throws(
@@ -22,6 +22,7 @@ function testManifestSeparatesCacheModes(): void {
     ],
   }));
   assert.deepEqual(manifest.questions.map((item) => item.cacheMode), ["cold", "hot"]);
+  assert.throws(() => assertExtendedDatasetSize(manifest), /at least 30/);
 }
 
 function testSummaryKeepsFailuresInDenominator(): void {
