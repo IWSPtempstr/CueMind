@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { assertExtendedDatasetSize, parseAskEvaluationManifest, summarizeAskResults, type AskEvaluationResult } from "@/scripts/evaluate-ask-extended";
 
-function testManifestRequiresAuthorizedQuestions(): void {
+function testManifestRequiresQuestions(): void {
   assert.throws(
-    () => parseAskEvaluationManifest(JSON.stringify({ version: "v1", authorized: false, questions: [] })),
-    /authorized/i,
+    () => parseAskEvaluationManifest(JSON.stringify({ version: "v1", questions: [] })),
+    /non-empty|questions/i,
   );
   assert.throws(
     () => parseAskEvaluationManifest(JSON.stringify({ version: "v1", authorized: true, questions: [{ question: "" }] })),
@@ -15,7 +15,6 @@ function testManifestRequiresAuthorizedQuestions(): void {
 function testManifestSeparatesCacheModes(): void {
   const manifest = parseAskEvaluationManifest(JSON.stringify({
     version: "v1",
-    authorized: true,
     questions: [
       { id: "cold-1", question: "What is KV cache?", cacheMode: "cold" },
       { id: "hot-1", question: "What is LoRA?", cacheMode: "hot" },
@@ -39,7 +38,7 @@ function testSummaryKeepsFailuresInDenominator(): void {
   assert.equal(summary.byCacheMode.cold.completionMs.p50, 100);
 }
 
-testManifestRequiresAuthorizedQuestions();
+testManifestRequiresQuestions();
 testManifestSeparatesCacheModes();
 testSummaryKeepsFailuresInDenominator();
 console.log("extended ask evaluator contract tests passed");

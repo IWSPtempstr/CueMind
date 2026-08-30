@@ -51,7 +51,7 @@
 
 ## 5. Live Ask
 
-冻结集使用现有 `npx tsx scripts/measure-ask-latency.ts`，固定 8 题且不可改题或预算。扩展题集属于阶段 1，目标至少 30–50 题；当前仓库未发现获授权扩展集或对应脚本，不得复制冻结题集冒充新数据。新增脚本建议路径：`scripts/evaluate-ask-extended.ts`，范围仅为读取授权 manifest、冷/热缓存分层、逐题 SSE 计时和 JSONL 报告。
+冻结集使用现有 `npx tsx scripts/measure-ask-latency.ts`，固定 8 题且不可改题或预算。扩展题集属于阶段 1，目标至少 30–50 题；可使用用户提供的本地视频衍生数据，manifest 的授权字段可选，但必须记录来源和证据边界，不得复制冻结题集冒充新数据。`scripts/evaluate-ask-extended.ts` 范围仅为读取 manifest、冷/热缓存分层、逐题 SSE 计时和 JSONL 报告。
 
 每轮必须记录：首事件延迟、答案首字节口径、完成 P50/P95/P99、8 题冻结集与扩展集的独立分母、冷/热缓存标签、失败率/异常终态、关键词提取/搜索/生成分段耗时。`npx tsx scripts/test-ask-route.ts` 覆盖来源不足、schema 违规、缓存和隐私契约；mock 的模型超时、搜索失败和 schema 失败只能证明 fail-closed 控制流。正常回答 P95 超过 7000ms 时保留失败证据并暂停产品/推理裁决，不降低质量、引用数或预算。
 

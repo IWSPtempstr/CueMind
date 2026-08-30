@@ -47,9 +47,9 @@
 
 ### 阶段 1 尚未完成的事项
 
-- 冻结集 `8 题 × 3 轮` 已完成，但后两轮为热缓存；尚未完成至少 30-50 题的扩展题集。
-- 尚未完成冷/热缓存分层、模型/搜索异常的阶段 1 性能矩阵。
-- 尚未获得授权的 30-50 题扩展数据集；不得复制冻结 8 题扩展，需产品/数据授权后执行。
+- 冻结集 `8 题 × 3 轮` 已完成，但后两轮为热缓存；已建立基于 `dataset/` 视频内容的 38 题扩展题集。
+- 已完成一次冷/热标记分层实测；热标记与实际搜索缓存命中存在 17 次不一致，服务重启/显存压力真实性能矩阵仍未完成。
+- 扩展题集不声明授权状态，题目带视频文件与时间定位元数据；不得复制冻结 8 题扩展。
 - 尚未把 `-np 1` 的结果追加到决策 67 和优化路线图。
 - 尚未执行本阶段变更后的完整门禁。
 
@@ -432,6 +432,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 证据：仓库及 `/home/work/asr` 范围内未发现明确 `authorized=true` 的扩展 manifest；现有 `reports/ab-8b-eval/cases.jsonl` 仅 8 行，不能作为扩展集。
 - 结论：阶段 1 保持进行中；当前没有不依赖外部授权且能满足关闭条件的下一步实现工作。
 - 遗留：收到产品/数据方授权 manifest 后，运行 `ASK_EXTENDED_MANIFEST=<path> TMPDIR=/tmp npx tsx scripts/evaluate-ask-extended.ts`，再重新执行阶段 1 门禁。
+
+### 2026-08-30：阶段 1 视频内容扩展题集实测
+
+- 阶段：阶段 1 / P0 延迟稳定性收口。
+- 原因：用户明确允许直接使用 `dataset/` 视频数据，不以授权状态作为扩展题集前置条件。
+- 变更：新增 `fixtures/ask-extended-v1.json`，包含 5 个本地视频衍生的 38 题，覆盖短/中/长、中英混合、Agent memory、微调、前端、LLM/Agent 产品地图、Agent Harness，以及关键词提取、垂直源和通用回退标签；扩展 evaluator 改为授权字段可选并保留来源元数据。
+- 证据：`ASK_EXTENDED_MANIFEST=fixtures/ask-extended-v1.json ASK_EXTENDED_OUTPUT_DIR=reports/ask-extended-video-20260830 TMPDIR=/tmp npx tsx scripts/evaluate-ask-extended.ts`；总分母 38，失败 2（`invalid_schema`），完成 P50/P95/P99 `4808/6819/7218ms`，首事件 P95 `858ms`；cold 19 题失败 1，hot 19 题失败 1，hot 标记与实际缓存命中不一致 17 次。
+- 结论：扩展数据和真实测评入口已具备，但 P0 未关闭：存在 schema 失败、P99 超过 7 秒、缓存模式标记不一致，且服务重启/显存压力矩阵尚未执行。
+- 遗留：保留失败证据，进行模型/提示与缓存语义裁决；不得通过删题、改预算或把失败题改写为通过，阶段 2 不得开始。
 
 ### 后续记录模板
 

@@ -1,0 +1,15 @@
+# CueMind Extended Live Ask Evaluation
+
+- Dataset version: `2026-08-30-video-derived-40q`
+- Questions: 38
+- Denominator: {"total":38,"failed":2}
+- Completion: {"count":38,"p50":4808.354957000003,"p95":6819.166832999999,"p99":7218.128100000002}
+- First event: {"count":38,"p50":708.8531860000003,"p95":858.3692719999963,"p99":1053.003676}
+- First byte: {"count":36,"p50":4900.823642000003,"p95":6819.108561000001,"p99":7218.1173849999905}
+
+## Cache Modes
+
+- cold: {"denominator":{"total":19,"failed":1},"completionMs":{"count":19,"p50":4900.834436000005,"p95":6819.166832999999,"p99":6819.166832999999},"firstEventMs":{"count":19,"p50":648.7123060000013,"p95":1053.003676,"p99":1053.003676},"firstByteMs":{"count":18,"p50":4900.823642000003,"p95":6819.108561000001,"p99":6819.108561000001},"finalStates":{"answered":18,"invalid_schema":1},"cacheModeMismatches":1}
+- hot: {"denominator":{"total":19,"failed":1},"completionMs":{"count":19,"p50":4687.741987000001,"p95":7218.128100000002,"p99":7218.128100000002},"firstEventMs":{"count":19,"p50":756.5524889999942,"p95":858.3692719999963,"p99":858.3692719999963},"firstByteMs":{"count":18,"p50":4687.729947,"p95":7218.1173849999905,"p99":7218.1173849999905},"finalStates":{"answered":18,"invalid_schema":1},"cacheModeMismatches":17}
+
+Only questions supplied by the manifest are measured. The evaluator does not create, expand, or rewrite the dataset and does not clear application caches.

@@ -10,11 +10,16 @@ export interface AskEvaluationQuestion {
   cacheMode: CacheMode;
   recentTranscript?: string;
   termHint?: string;
+  sourceVideo?: string;
+  sourceTimeSec?: number;
+  sourceRange?: string;
+  topic?: string;
+  tags?: string[];
 }
 
 export interface AskEvaluationManifest {
   version: string;
-  authorized: true;
+  authorized?: boolean;
   questions: AskEvaluationQuestion[];
   datasetVersion?: string;
   authorizationNote?: string;
@@ -69,9 +74,7 @@ export function parseAskEvaluationManifest(raw: string): AskEvaluationManifest {
   } catch {
     throw new Error("manifest must be valid JSON");
   }
-  if (!isRecord(value) || value.authorized !== true) {
-    throw new Error("manifest must explicitly set authorized=true");
-  }
+  if (!isRecord(value)) throw new Error("manifest must be a JSON object");
   if (typeof value.version !== "string" || value.version.trim() === "") {
     throw new Error("manifest version is required");
   }
@@ -96,11 +99,16 @@ export function parseAskEvaluationManifest(raw: string): AskEvaluationManifest {
       cacheMode,
       recentTranscript: typeof item.recentTranscript === "string" ? item.recentTranscript : undefined,
       termHint: typeof item.termHint === "string" ? item.termHint : undefined,
+      sourceVideo: typeof item.sourceVideo === "string" ? item.sourceVideo : undefined,
+      sourceTimeSec: typeof item.sourceTimeSec === "number" ? item.sourceTimeSec : undefined,
+      sourceRange: typeof item.sourceRange === "string" ? item.sourceRange : undefined,
+      topic: typeof item.topic === "string" ? item.topic : undefined,
+      tags: Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === "string") : undefined,
     };
   });
   return {
     version: value.version.trim(),
-    authorized: true,
+    authorized: value.authorized === true,
     questions,
     datasetVersion: typeof value.datasetVersion === "string" ? value.datasetVersion : undefined,
     authorizationNote: typeof value.authorizationNote === "string" ? value.authorizationNote : undefined,
@@ -109,7 +117,7 @@ export function parseAskEvaluationManifest(raw: string): AskEvaluationManifest {
 
 export function assertExtendedDatasetSize(manifest: AskEvaluationManifest): void {
   if (manifest.questions.length < 30) {
-    throw new Error(`extended evaluation requires at least 30 authorized questions; got ${manifest.questions.length}`);
+    throw new Error(`extended evaluation requires at least 30 questions; got ${manifest.questions.length}`);
   }
 }
 
@@ -222,7 +230,7 @@ async function main(): Promise<void> {
     questionCount: manifest.questions.length,
     baseUrl,
     cacheModes: ["cold", "hot"],
-    evidenceBoundary: "Only authorized manifest questions are measured. The evaluator does not create, expand, or rewrite the dataset and does not clear application caches.",
+    evidenceBoundary: "Only questions supplied by the manifest are measured. The evaluator does not create, expand, or rewrite the dataset and does not clear application caches.",
   };
   await mkdir(outputDir, { recursive: true });
   await Promise.all([
