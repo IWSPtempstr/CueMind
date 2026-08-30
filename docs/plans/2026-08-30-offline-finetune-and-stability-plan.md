@@ -1,75 +1,62 @@
 # CueMind 工程稳定性与微调实验计划
 
-**目标：** 在不破坏本地实时会议链路的前提下，先建立可重复的稳定性基线，再用两个公开数据集补充 CueMind 专属数据，完成卡片触发、关键词和解释内容的 SFT/DPO 实验。
+**状态：规划已完成，按阶段执行。**
+**目标：** 先建立不微调的可重复基线，再使用 AMI 和 DialogSum 补充训练，单独验证卡片触发、关键词提取和解释内容，最终通过影子运行和人工决策发布。
 
-**数据选择：**
+**数据与约束：** AMI Meeting Corpus（CC BY 4.0）用于会议窗口和重点候选；DialogSum（CC BY-NC-SA 4.0）仅用于解释表达补充。公开数据不超过训练数据 40%，CueMind 真实转录、卡片、失败轨迹和人工裁决不少于 60%；冻结集按视频/会议划分且永不训练。
 
-- [AMI Meeting Corpus](https://huggingface.co/datasets/knkarthick/AMI)：会议转录、主题和摘要，CC BY 4.0。用于构造会议窗口和 `show/skip` 候选，不直接视为 CueMind 真值。
-- [DialogSum](https://huggingface.co/datasets/knkarthick/dialogsum)：对话、主题和摘要，CC BY-NC-SA 4.0。仅用于补充解释表达和关键词格式，发布前必须保留署名并遵守非商业条款。
+### 阶段 0：工程稳定性基线
 
-公开数据占训练数据不超过 40%；CueMind 真实转录、卡片、失败轨迹和人工裁决占至少 60%。冻结集按会议/视频划分，永不进入训练。
+**状态：待执行。**
+**目标：** 证明不微调时系统可重复，避免将工程故障误判为模型能力。
+**范围：** 固定数据、窗口、模型、Prompt、搜索策略和 `cacheKey`；验证 partial/confirmed、终态、冷/热缓存、重复重放、断流、重启和无音频路径；保存 ASR、触发、关键词、检索、生成、缓存和恢复 Trace。
+**异常矩阵归属：** Schema 失败、超时、搜索失败、模型失败、缓存写入失败、confirmed 回退/重复、断流和服务重启。
+**测评依据：** 阶段 7–8 冻结视频、`scripts/run-offline-eval.sh`、ASR/重放/治理回归脚本。
+**验收：** 候选 ID 和 cacheKey 稳定；失败均有明确终态；confirmed 无回退/重复；缓存统计口径一致；报告保留完整分母。
 
-## 阶段 0：稳定性基线
+### 阶段 1：CueMind 训练数据构建
 
-**目标：** 先证明不微调时系统可重复，避免把工程问题误判为模型问题。
+**状态：待执行。**
+**目标：** 形成以真实人工裁决为主的 SFT/DPO 数据。
+**范围：** 视频转录切分 8–30 秒窗口；标注 `show/skip/duplicate/already_known/not_actionable/insufficient_evidence`；为 show 样本标注主关键词、aliases、`keyPoints`、`whyNow` 和正确拒答；去重、脱敏、Schema 校验并按视频划分 train/eval/freeze。
+**异常矩阵归属：** 空窗口、坏转录、重复样本、泄漏样本、未确认自动标签和敏感字段外泄。
+**测评依据：** `scripts/export-training-data.ts`、人工裁决文件、数据 manifest。
+**验收：** 首轮至少 300–500 条 trigger、100–300 条关键词、100–300 条解释偏好对；每条样本具备来源、标注人和证据。
 
-1. 固定 `datasetVersion`、视频哈希、窗口版本、模型哈希、Prompt 版本、搜索策略版本和 `cacheKey` 规则。
-2. 对 `partial/confirmed` 做时序检查：partial 只展示，卡片只消费 confirmed；confirmed 不回退、不重复。
-3. 明确终态：`card_shown`、`model_skip`、`invalid_schema`、`search_failed`、`timeout`、`model_failed`，禁止失败伪装成正常卡片。
-4. 对同一视频执行冷启动、热启动、重复重放、断流、重启和无音频路径。
-5. 每次保存完整 Trace：ASR、触发判断、关键词、检索、生成、缓存、错误和恢复时间。
+### 阶段 2：卡片出现时机 SFT
 
-**门禁：** 同输入候选 ID 和 cacheKey 稳定；Schema 失败可解释；confirmed 无回退/重复；冷/热缓存统计口径一致；所有失败有终态。
+**状态：待执行。**
+**目标：** 学习窗口是否值得生成卡片，优先控制误触发。
+**范围：** AMI 转 CueMind 窗口并人工校正候选；QLoRA 4-bit 仅输出 `trigger` 和 `reason`；CueMind freeze 集先评估，再影子运行。
+**异常矩阵归属：** 误触发、漏报、重复卡片、Schema 失败、partial 误触发和延迟回归。
+**测评依据：** show precision/recall、误触发率、漏报率、重复率、JSON 有效率、单窗口延迟。
+**验收：** 不降低 confirmed 一致性、缓存命中率、服务恢复能力和正常回答延迟；未达标则不进入下一阶段。
 
-## 阶段 1：CueMind 数据构建
+### 阶段 3：关键词 SFT
 
-**目标：** 建立第一版业务训练集，不直接依赖公开数据的自动标签。
+**状态：待执行。**
+**目标：** 让主关键词、别名和 cacheKey 稳定。
+**范围：** 只用人工确认的 show 窗口；第一轮只输出一个主关键词，第二轮加入 aliases；trigger 与 keyword 使用独立 adapter；每窗口重复推理 3 次。
+**异常矩阵归属：** 关键词漂移、过短/过泛、同义词不一致、检索未命中和 cacheKey miss。
+**测评依据：** 规范化完全匹配、同义词命中率、重复一致率、检索命中率、cacheKey 一致率。
+**验收：** 关键词一致性和检索命中改善，且不增加 Schema 失败、延迟或误触发。
 
-1. 从 `/home/work/asr/CueMind/dataset/` 的视频转录生成 8–30 秒窗口，并保存视频哈希、时间范围、转录片段 ID。
-2. 人工标注 `trigger`：`show`、`skip`、`duplicate`、`already_known`、`not_actionable`、`insufficient_evidence`。
-3. 对 `show` 样本标注一个主关键词、可选 aliases 和关键词规范化形式。
-4. 对有证据的卡片标注 `keyPoints`、`whyNow`；无可靠证据标注正确拒答。
-5. 按视频/会议划分 `train/eval/freeze`，禁止相邻窗口跨集合泄漏。
-6. 运行去重、脱敏、Schema 校验和样本来源审计；导出 SFT JSONL 与 DPO JSONL。
+### 阶段 4：解释 SFT 与 DPO
 
-**首轮规模：** 300–500 条 trigger 样本、100–300 条关键词样本、100–300 条解释偏好对。数量不足时延后训练，不用自动标签填充。
+**状态：待执行。**
+**目标：** 生成基于证据、简洁且与当前窗口相关的卡片解释。
+**范围：** CueMind 人工解释为主，DialogSum 补充表达；输入固定为窗口、关键词和证据；先 QLoRA-SFT 学 `keyPoints/whyNow` 和拒答，再用人工确认 chosen/rejected 做 DPO。
+**异常矩阵归属：** 编造事实、无证据回答、冗余、答非所问、拒答错误、JSON 失败和检索/生成归因混淆。
+**测评依据：** 事实一致性、证据覆盖率、上下文相关性、关键点完整性、冗余率、正确拒答率、JSON 有效率和人工偏好胜率。
+**验收：** DPO 相对 base/SFT 有冻结集证据改善，且不降低延迟、Schema、缓存和 ASR 链路指标。
 
-## 阶段 2：AMI 窗口触发 SFT
+### 阶段 5：影子运行与人工发布
 
-1. 将 AMI 的会议转录按 CueMind 窗口规则切分。
-2. 使用主题、摘要和对话行为生成“候选重要窗口”，再由人工抽样校正 `show/skip`。
-3. 训练输入只包含窗口和已知关键词；输出只包含 `trigger` 与简短 `reason`。
-4. 使用 QLoRA 4-bit，冻结基础模型；固定 seed、学习率、epoch、最大长度和 adapter 配置。
-5. 先在 CueMind freeze 集评估，再在真实视频影子运行；不修改线上 Prompt 和基础模型。
+**状态：待执行。**
+**目标：** 在不影响线上模型的前提下验证 adapter，并形成可回滚发布决定。
+**范围：** 每个 adapter 绑定基础模型哈希、数据集版本、训练配置、代码提交、Prompt/Schema 版本和 freeze 报告；影子运行后由人工选择保留、灰度或回滚。
+**异常矩阵归属：** 模型加载失败、OOM、超时、质量回退、影子偏差、发布中断和回滚失败。
+**测评依据：** `lib/model-release.ts`、模型基线 manifest、阶段 8 重放 Trace 和冻结集对照报告。
+**验收：** 无线上自动换模、自动改 Prompt 或自动改权重；发布、回滚和责任人均有审计记录。
 
-**指标：** show precision/recall、误触发率、漏报率、重复卡片率、Schema 有效率、单窗口延迟。触发模型不得降低 confirmed 一致性、缓存命中率或服务恢复能力。
-
-## 阶段 3：关键词 SFT
-
-1. 只使用人工确认的 `show` 窗口和 AMI 主题/摘要中可验证的术语。
-2. 第一轮只输出一个主关键词；第二轮再加入 aliases。
-3. 对每个窗口重复推理 3 次，记录原始关键词、规范化关键词和最终 cacheKey。
-4. 评估规范化完全匹配、同义词命中率、重复运行一致率、检索命中率和 cacheKey 一致率。
-5. 关键词模型与 trigger 模型分开 adapter，避免一个任务的回归掩盖另一个任务的问题。
-
-## 阶段 4：解释 SFT 与 DPO
-
-1. 用 CueMind 人工解释作为主数据，DialogSum 仅补充摘要表达和简洁格式。
-2. 输入固定为窗口、关键词和检索证据；输出 `keyPoints`、`whyNow`，没有证据时输出拒答。
-3. QLoRA-SFT 先学习格式、事实约束和上下文相关性。
-4. 对同一输入构造 chosen/rejected：chosen 必须有证据且简洁；rejected 为泛化、编造、冗余或答非所问文本。
-5. 在 SFT 模型基础上执行 DPO；偏好对必须人工确认，合成偏好只能作为候选并抽样审计。
-6. 比较 base、SFT、DPO 三组的事实一致性、证据覆盖率、相关性、冗余率、正确拒答率、JSON 有效率和人工偏好胜率。
-
-## 阶段 5：受控发布
-
-每个 adapter 绑定基础模型哈希、数据集版本、训练配置、代码提交、Prompt/Schema 版本和 freeze 报告。执行影子运行后由人工选择保留、灰度或回滚；禁止线上自动换模、自动改 Prompt 或自动改权重。
-
-**推荐顺序：**
-
-```text
-工程基线 → CueMind trigger SFT → AMI 补充 → CueMind keyword SFT
-→ DialogSum/真实数据解释 SFT → 解释 DPO → 影子运行 → 人工发布
-```
-
-**不做的事项：** 不微调 Whisper；不使用公开数据直接生成业务真值；不把摘要质量当作卡片触发质量；不以平均延迟替代 P95、失败率和恢复指标。
+**执行顺序：** `工程基线 → CueMind trigger SFT → AMI 补充 → keyword SFT → DialogSum/真实数据解释 SFT → 解释 DPO → 影子运行 → 人工发布`。
