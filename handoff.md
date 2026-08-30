@@ -1,9 +1,15 @@
 # CueMind 项目交接文档（handoff）
 
+> **唯一开发入口：** `docs/plans/CUEMIND-MASTER-DEVELOPMENT-PLAN.md`
+> **测评执行依据：** `docs/plans/CUEMIND-EVALUATION-IMPLEMENTATION-GUIDE.md`（负责“怎么测”）
+> **当前阶段：** 阶段 1：P0 延迟稳定性收口。
+>
+> 8 题 × 3 轮已经完成，三轮均 8/8；第 2、3 轮是热缓存证据。扩展题集和性能异常属于阶段 1；隐私异常属于阶段 3；端到端异常属于阶段 6。服务当前保持关闭，启动前必须检查 `:8082/health` 和应用 health。
+
 > **开发唯一入口：** [docs/plans/CUEMIND-MASTER-DEVELOPMENT-PLAN.md](docs/plans/CUEMIND-MASTER-DEVELOPMENT-PLAN.md)。后续开发、阶段状态、验收证据和新增内容统一写入该文档；本文仅用于接手导航和环境提示。
 
 > 更新：2026-08-29（覆盖优化整改轮，基线提交 `ace5610` 之后；以 `git log -1` 为准）
-> 读者：完全没有上下文的新会话 / 新接手者。接手顺序：本文 → `CLAUDE.md` → `AGENTS.md` → `README.md` → `docs/product/cuemind-grilling-decisions.md`（锁定决策）→ `docs/plans/`（实施计划）。
+> 读者：完全没有上下文的新会话 / 新接手者。接手顺序：本文 → `CLAUDE.md` → `AGENTS.md` → `README.md` → `docs/product/cuemind-grilling-decisions.md`（锁定决策）→ `docs/plans/CUEMIND-MASTER-DEVELOPMENT-PLAN.md` → `docs/plans/CUEMIND-EVALUATION-IMPLEMENTATION-GUIDE.md`。
 > 仓库：`/home/work/asr/CueMind`，分支 `codex/local-realtime-meeting-copilot`（本地，未推送）。
 
 CueMind 是**本地优先的实时会议认知副驾**：三栏界面（左=转写+建议内联标注，中=上下文卡片，右=会中询问），全链路本地生成，外发仅限搜索关键词。定位是面试项目（决策 1）：证明 10 分钟演示稳定、指标完整、工程取舍可解释。
@@ -202,7 +208,7 @@ CueMind 是**本地优先的实时会议认知副驾**：三栏界面（左=转�
 你接手 CueMind 项目（本地优先实时会议认知副驾，面试项目定位）。
 
 仓库：/home/work/asr/CueMind，分支 codex/local-realtime-meeting-copilot（本地未推送；用 git log -1 确认当前位置）。
-先读四份文档再动手：handoff.md → CLAUDE.md → docs/product/cuemind-grilling-decisions.md（锁定决策 68 道，只追加变更记录，不覆盖）→ docs/plans/2026-08-29-cuemind-optimization-roadmap.md（当前行动依据）。
+先进入 `/home/work/asr/CueMind`，优先读取：`handoff.md` → `CLAUDE.md` → `docs/product/cuemind-grilling-decisions.md`（锁定决策 68 道，只追加变更记录，不覆盖）→ `docs/plans/CUEMIND-MASTER-DEVELOPMENT-PLAN.md`（唯一开发入口）→ `docs/plans/CUEMIND-EVALUATION-IMPLEMENTATION-GUIDE.md`（测评执行依据）；旧路线图仅作历史整改依据。
 
 技术栈：Next.js 15 App Router + React 19 + TS；本地 llama.cpp（Qwen3-8B Q4_K_M，systemd cuemind-llama.service，:8082，勿手杀）；本地 whisper.cpp ASR；better-sqlite3（CUEMIND_DATA_DIR/cuemind.db，WAL）。
 
@@ -210,7 +216,7 @@ CueMind 是**本地优先的实时会议认知副驾**：三栏界面（左=转�
 
 硬红线：实时链路零侵入；外发仅问题+关键词（已知例外：提取失败兜底前 20 字，决策 67 变更记录已声明）；来源<2 降级不编造；纯离线导出只读；永不 git add dataset/、永不打印 .env 密钥、不在 /home/work/asr 跑 git；每笔提交过门禁（tsc→lint→build，build 前停 :3000，事后恢复并验证 200）。
 
-待办优先级（路线图详述）：① 延迟残留裁决（完成 P95 7119ms vs 预算 7s，-45% 后残留，须用户裁决三选一）；② chat_messages 增列 sources/keywords/终态 + replay 渲染；③ 用户漏报裁决入口（修复决策 65 人工把关偏差）；④ 训练信号时序/去重/阈值；⑤ 隐私降级口根治与工程卫生。
+当前待办：阶段 1 扩展题集（至少 30-50 题，需授权）与性能异常矩阵；延迟残留裁决（完成 P95 7119ms vs 预算 7s，须用户裁决三选一）。阶段 2 起再处理持久化、裁决、训练信号和隐私/端到端异常。
 
 环境坑：沙箱写不了 /home/work/models、/home/work/reports、/etc/systemd（用 systemd-run 在沙箱外执行）；:3000 常有 next-server 残留（pkill -TERM -f '[n]ext-server'）；lint 有一个已知历史 warning（partial-transcript.ts _state）。
 
