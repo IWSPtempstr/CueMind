@@ -321,6 +321,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 **实现记录：** 7.1–7.8 的基础代码与回归脚本已完成；真实模型矩阵、长时间压力、影子运行和隔离主机断网演练仍需补充硬件证据。
 
+**阶段 0–1 实现记录：** `scripts/build-finetune-dataset.ts` 已基于 6 个本地视频转录生成 372 个 30 秒窗口、稳定样本 ID、manifest 和 SFT JSONL；`lib/finetune-dataset.ts` 提供转录/对话样本规范化，`lib/finetune-experiments.ts` 提供阶段 2–5 的 trigger/keyword/explanation Prompt 和基础指标。AMI/DialogSum 下载按当前决定跳过，样本保持 `unlabeled`，不得直接训练。
+
 ### 阶段 8：实时稳定性与本地可观测性
 
 **状态：基础重放与 Trace 已完成，长时间压力和真实硬件观测待执行。**
