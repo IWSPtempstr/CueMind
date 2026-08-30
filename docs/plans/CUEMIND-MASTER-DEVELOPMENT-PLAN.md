@@ -323,6 +323,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 **阶段 0–1 实现记录：** `scripts/build-finetune-dataset.ts` 已基于 6 个本地视频转录生成 372 个 30 秒窗口、稳定样本 ID、manifest 和 SFT JSONL；`lib/finetune-dataset.ts` 提供转录/对话样本规范化，`lib/finetune-experiments.ts` 提供阶段 2–5 的 trigger/keyword/explanation Prompt 和基础指标。AMI/DialogSum 下载按当前决定跳过，样本保持 `unlabeled`，不得直接训练。
 
+**视频扩展记录：** `scripts/transcribe-videos.ts` 支持 CUDA Whisper 断点续跑；新增 9 个视频已完成转录，累计 15 个视频、950 个 30 秒窗口，bundle 位于 `reports/finetune/local-video-v2`。数据仍需人工标注后才能训练。
+
 ### 阶段 8：实时稳定性与本地可观测性
 
 **状态：基础重放与 Trace 已完成，长时间压力和真实硬件观测待执行。**
