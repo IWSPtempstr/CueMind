@@ -461,6 +461,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：CUDA ASR 前置配置通过；尚未声称 6 个视频完整转录、卡片生成或卡片驱动询问测评完成。
 - 遗留：使用 CUDA 二进制执行可恢复的分窗全量转录，随后导入卡片链路并生成 lineage。
 
+### 2026-08-30：视频集 CUDA 全量 ASR
+
+- 阶段：阶段 1 / 视频重新导入前置。
+- 原因：完成 CUDA 配置后的真实视频转写执行，替代此前 CPU-only 的不可接受吞吐。
+- 变更：使用 `/home/work/asr/whisper.cpp/build-cuda/bin/whisper-cli`、`ggml-small.bin`、`-dev 0 -fa` 对当前 `dataset/*.mp4` 6 个视频逐一抽取 16kHz 单声道 WAV 并生成 JSON/TXT transcript；输出位于 `reports/video-reimport-20260830-cuda/`，支持按 JSON 文件断点跳过。
+- 证据：6/6 视频完成；每个日志均含 `whisper_backend_init_gpu: using CUDA0 backend`。处理耗时分别约 `41.7s/2127.5s`、`142.0s/3305.6s`、`27.2s/916.5s`、`12.8s/1016.9s`、`7.6s/862.9s`、`68.4s/2865.6s`（处理秒数/音频秒数）。
+- 结论：当前视频集已获得 CUDA Whisper 全量 ASR 产物；本证据只覆盖视频到 transcript，不覆盖卡片生成、询问 lineage 或 Live Ask 延迟门禁。
+- 遗留：从 transcript 分窗生成实际 context cards，保存卡片/关键词/来源/终态及 `video → segment → card → ask → case` lineage，再执行卡片驱动询问测评。
+
 ### 后续记录模板
 
 ```markdown
