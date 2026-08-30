@@ -479,6 +479,12 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：视频 → ASR → 卡片 → 询问 lineage 抽样已真实执行；ASR 内容质量明显优于自动语言版本，但仍有 3 个询问 schema 失败，且缓存被上游卡片预热，阶段 1 仍未关闭。
 - 遗留：增加测试专用缓存隔离/清理并重新执行严格冷热缓存测评；`/api/ask` 已增加 markdown JSON 外壳兼容和 `invalid_schema` 细分诊断，需在服务重启后复跑以取得 3 个历史样本的具体诊断。
 
+### 2026-08-30：历史 invalid_schema 三题重测
+
+- 证据：`reports/video-card-lineage-20260830-zh/invalid-schema-recheck-20260830-final.jsonl`；服务重启后真实调用 3 题。
+- 结果：`1085年` -> `degraded`（`sources_empty`，搜索结果与术语无关，未回放无依据答案）；`规则扰动` -> `answered`；`Safe2G` -> `answered`。后两题均为 `confidence=low`，引用搜索结果并保留完整来源。
+- 结论：3 个历史 `invalid_schema` 均已不再以不可解释的 schema 终态结束；其中 1 个按 fail-closed 规则降级，2 个恢复正常回答。此次结果为热缓存（`cacheHit=true`），不作为冷热性能对照。
+
 ### 后续记录模板
 
 ```markdown

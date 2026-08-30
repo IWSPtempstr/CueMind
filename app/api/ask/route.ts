@@ -349,6 +349,17 @@ export async function POST(
           // Fail-closed: schema violation → terminal state, no fabricated answer.
           const schemaDiagnostic = diagnoseAskSchema(rawAnswerJson);
           console.warn(`[ask] invalid schema reason=${schemaDiagnostic}`);
+          if (schemaDiagnostic === "sources_empty") {
+            done(
+              {
+                sources: sourcesForClient(sources),
+                failure: { reason: "answer has no cited sources", diagnostic: schemaDiagnostic },
+              },
+              "degraded",
+            );
+            finish();
+            return;
+          }
           done(
             {
               sources: sourcesForClient(sources),
