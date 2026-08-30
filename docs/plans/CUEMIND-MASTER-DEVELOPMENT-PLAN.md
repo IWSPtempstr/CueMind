@@ -497,6 +497,12 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 证据：`reports/ask-extended-video-20260830-v4/scorecard.json`；38 题失败 0；cold mismatch `0`，hot mismatch `2`；hot 完成 P95 `5052ms`，总完成 P95 `6115ms`。
 - 结论：热缓存命中语义基本稳定；2 次 mismatch 对应预热降级、无缓存可写入。按用户指示本轮不因 P95 中止，但阶段 1 仍需完成异常矩阵和剩余缓存降级场景核验。
 
+### 2026-08-30：阶段 1 异常矩阵
+
+- 证据：`reports/phase1-anomaly-matrix-20260830/report.md`；关键词提取回退、搜索失败/来源不足、模型失败/超时、schema 违规、服务重启恢复均完成验证，控制流回归通过。
+- 真实恢复：`systemctl restart cuemind-llama.service` 后 `:8082` health OK、`:3000` HTTP 200；`nvidia-smi` 记录 RTX 4060 Ti 显存 `6433/8188 MiB`、GPU 利用率 `16%`。
+- 边界：显存压力仅做非破坏性观测，未执行人工 OOM 压测；阶段 1 仍保留该项真实性限制。
+
 ### 后续记录模板
 
 ```markdown
