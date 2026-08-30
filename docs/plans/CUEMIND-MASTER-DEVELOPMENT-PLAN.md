@@ -423,6 +423,16 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：阶段 1 ask 路由的模型失败控制流证据补齐；P0 仍未关闭，扩展集冷/热真实性能和服务重启/显存压力证据仍缺失。
 - 遗留：继续等待授权扩展 manifest，不得进入阶段 2。
 
+### 2026-08-30：阶段 1 关闭条件审计
+
+- 阶段：阶段 1 / P0 延迟稳定性收口。
+- 原因：避免在缺少扩展数据时重复执行相同测评，并按验收条件逐项核对当前证据。
+- 已满足：8 题冻结集真实复测 8/8；首事件 P95 `782ms`；完成 P95 `5492ms`；ask/card/model/search 回归控制流通过；fallback 单元已与 8B systemd 配置对齐；扩展测评执行器和至少 30 题门禁已提交。
+- 未满足：至少 30-50 题授权扩展 manifest；扩展集 cold/hot 真实运行及完整 P50/P95/P99 分母；服务重启/显存压力真实性能矩阵；因此不能将 P0 标记关闭或进入阶段 2。
+- 证据：仓库及 `/home/work/asr` 范围内未发现明确 `authorized=true` 的扩展 manifest；现有 `reports/ab-8b-eval/cases.jsonl` 仅 8 行，不能作为扩展集。
+- 结论：阶段 1 保持进行中；当前没有不依赖外部授权且能满足关闭条件的下一步实现工作。
+- 遗留：收到产品/数据方授权 manifest 后，运行 `ASK_EXTENDED_MANIFEST=<path> TMPDIR=/tmp npx tsx scripts/evaluate-ask-extended.ts`，再重新执行阶段 1 门禁。
+
 ### 后续记录模板
 
 ```markdown
