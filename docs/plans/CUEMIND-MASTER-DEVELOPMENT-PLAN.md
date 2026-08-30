@@ -365,6 +365,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 **验收：** 在干净主机或隔离环境从部署包启动成功；断网可完成核心流程；升级失败可回滚；数据治理审计、发布责任和 evidence boundary 文档齐全。
 
+**2026-08-30 实现记录：** 阶段 9–10 已完成本地交付基础。新增 `lib/model-release.ts` 与测试，提供候选模型元数据登记、人工 release、历史记录和 rollback；新增 Docker Compose、`scripts/cuemind-service.sh` 生命周期入口、`scripts/verify-offline.sh` 和本地交接手册。真实候选模型影子运行、目标硬件矩阵和隔离主机断网演练仍需由发布人执行并归档证据。
+
 #### 模型与硬件评估
 
 EAGLE3、KV cache、不同量化档位、更强 GPU或蒸馏模型都只能作为候选版本实验。每次模型/参数变化必须绑定模型哈希、llama.cpp 版本、Prompt 版本、来源策略版本、数据集版本和完整冻结集结果。

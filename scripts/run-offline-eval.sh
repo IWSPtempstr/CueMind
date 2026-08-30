@@ -19,6 +19,7 @@ echo "[offline-eval] governance and ASR contracts"
 TMPDIR=/tmp npx tsx scripts/test-vault-governance.ts
 TMPDIR=/tmp npx tsx scripts/test-asr-reliability.ts
 TMPDIR=/tmp npx tsx scripts/test-realtime-replay.ts
+TMPDIR=/tmp npx tsx scripts/test-model-release.ts
 TMPDIR=/tmp npx tsx scripts/test-vault-exporter.ts
 
 echo "[offline-eval] writing reproducible baseline manifest"

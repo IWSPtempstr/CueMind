@@ -1,0 +1,16 @@
+services:
+  cuemind:
+    build: .
+    image: cuemind:local
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      CUEMIND_DATA_DIR: /var/lib/cuemind
+    volumes:
+      - cuemind-data:/var/lib/cuemind
+      - ${CUEMIND_MODEL_DIR:-./models}:/models:ro
+    restart: unless-stopped
+
+volumes:
+  cuemind-data:
