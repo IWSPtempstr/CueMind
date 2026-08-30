@@ -157,7 +157,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 ### 阶段 2：P2 询问持久化与数据契约
 
-**状态：待开始。**
+**状态：进行中（第一批持久化契约已实现）。**
 **来源：** 决策 56、65、67；旧路线图 P2。
 **目标：** 让询问历史在刷新、replay、vault 导出和训练数据导出中保留真实来源、关键词和终态。
 
@@ -178,6 +178,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 - 训练导出读真实提取关键词；
 - 持久化失败不阻塞实时链路；
 - 不改变现有卡片 P95 和 SSE 语义。
+
+**2026-08-30 第一批进展：** `ChatMessage`/`StoredChatMessage` 已增加 `sources`、`keywords`、`finalState`；SQLite 启动时通过 `PRAGMA table_info` 幂等追加三列，JSONL 也兼容解析；`/api/chat-messages` 与首页保存/恢复链路已传递新字段。`tsc`、SQLite/JSONL chat-store、训练导出和 ask 回归均通过。待完成 replay 展示、非法 JSON/旧库专项测试及持久化失败端到端验证。
 
 ### 阶段 3：P5 隐私降级口根治
 

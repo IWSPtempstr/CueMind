@@ -37,6 +37,9 @@ function parseChatMessage(
     content: record.content,
     isDetail: record.isDetail === true,
     createdAt: record.createdAt,
+    sources: Array.isArray(record.sources) ? record.sources.filter((item): item is { title: string; url: string; sourceType?: string } => typeof item === "object" && item !== null && typeof (item as Record<string, unknown>).title === "string" && typeof (item as Record<string, unknown>).url === "string") : undefined,
+    keywords: Array.isArray(record.keywords) ? record.keywords.filter((item): item is string => typeof item === "string") : undefined,
+    finalState: typeof record.finalState === "string" ? record.finalState : undefined,
   };
 }
 

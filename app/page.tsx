@@ -62,6 +62,9 @@ function toStoredAskMessages(sessionId: string, messages: ChatMessage[]): Stored
       content: message.content,
       isDetail: message.isDetail === true,
       createdAt: message.timestamp.toISOString(),
+      sources: message.sources,
+      keywords: message.keywords,
+      finalState: message.finalState,
     }));
 }
 
@@ -81,6 +84,9 @@ function parseStoredAskMessages(raw: unknown): StoredChatMessage[] {
       role: record.role,
       content: record.content,
       isDetail: record.isDetail === true,
+      sources: Array.isArray(record.sources) ? record.sources.filter((item): item is { title: string; url: string; sourceType?: string } => typeof item === "object" && item !== null && typeof (item as Record<string, unknown>).title === "string" && typeof (item as Record<string, unknown>).url === "string") : undefined,
+      keywords: Array.isArray(record.keywords) ? record.keywords.filter((item): item is string => typeof item === "string") : undefined,
+      finalState: typeof record.finalState === "string" ? record.finalState : undefined,
       createdAt: record.createdAt,
     });
   }
@@ -97,6 +103,10 @@ function mergeAskMessages(local: ChatMessage[], server: StoredChatMessage[]): Ch
       role: message.role,
       content: message.content,
       isDetail: message.isDetail,
+      sources: message.sources,
+      keywords: message.keywords,
+      finalState: message.finalState,
+      isDegraded: message.finalState === "degraded",
       timestamp: new Date(message.createdAt),
     });
   }

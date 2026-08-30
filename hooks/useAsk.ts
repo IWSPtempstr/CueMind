@@ -214,12 +214,15 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
           }
           if (event === "done") {
             const finalState = typeof data.finalState === "string" ? data.finalState : "";
+            const keywords = Array.isArray(data.keywords) ? data.keywords.filter((item): item is string => typeof item === "string") : [];
             if (finalState === "answered") {
               const sources = parseAskSources(data.sources);
               patchAssistant(assistantId, (message) => ({
                 ...message,
                 isStreaming: false,
                 ...(sources.length > 0 ? { sources } : {}),
+                ...(keywords.length > 0 ? { keywords } : {}),
+                finalState,
               }));
               setPhase("idle");
             } else if (finalState === "degraded") {
@@ -227,6 +230,8 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
                 ...message,
                 isStreaming: false,
                 isDegraded: true,
+                finalState,
+                ...(keywords.length > 0 ? { keywords } : {}),
                 content:
                   message.content !== ""
                     ? message.content
@@ -248,6 +253,8 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
               patchAssistant(assistantId, (message) => ({
                 ...message,
                 isStreaming: false,
+                finalState,
+                ...(keywords.length > 0 ? { keywords } : {}),
                 content: `回答生成失败：${reason}${finalState === "invalid_schema" ? "（invalid_schema）" : ""}`,
               }));
               setError(reason);

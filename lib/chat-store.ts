@@ -12,6 +12,7 @@ import { createRequire } from "node:module";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { Database as SqliteDatabase } from "better-sqlite3";
+import type { AskSource } from "@/types/chat";
 
 export interface StoredChatMessage {
   id: string;
@@ -20,6 +21,9 @@ export interface StoredChatMessage {
   content: string;
   isDetail: boolean;
   createdAt: string;
+  sources?: AskSource[];
+  keywords?: string[];
+  finalState?: string;
 }
 
 export type ChatStoreBackend = "sqlite" | "jsonl";
@@ -62,6 +66,9 @@ interface SqliteRow {
   content: string;
   isDetail: number;
   createdAt: string;
+  sourcesJson?: string | null;
+  keywordsJson?: string | null;
+  finalState?: string | null;
 }
 
 // createRequire is used instead of a static import so a broken native build
@@ -91,12 +98,16 @@ function createSqliteStore(dataDir: string, Database: SqliteDatabaseConstructor)
     );
     CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(session_id, created_at);
   `);
+  const columns = new Set((db.prepare("PRAGMA table_info(chat_messages)").all() as Array<{ name?: string }>).map((row) => row.name));
+  if (!columns.has("sources_json")) db.exec("ALTER TABLE chat_messages ADD COLUMN sources_json TEXT");
+  if (!columns.has("keywords_json")) db.exec("ALTER TABLE chat_messages ADD COLUMN keywords_json TEXT");
+  if (!columns.has("final_state")) db.exec("ALTER TABLE chat_messages ADD COLUMN final_state TEXT");
 
   const insert = db.prepare(
-    "INSERT OR REPLACE INTO chat_messages (id, session_id, role, content, is_detail, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO chat_messages (id, session_id, role, content, is_detail, created_at, sources_json, keywords_json, final_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   const selectBySession = db.prepare(
-    "SELECT id, session_id AS sessionId, role, content, is_detail AS isDetail, created_at AS createdAt FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC, rowid ASC",
+    "SELECT id, session_id AS sessionId, role, content, is_detail AS isDetail, created_at AS createdAt, sources_json AS sourcesJson, keywords_json AS keywordsJson, final_state AS finalState FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC, rowid ASC",
   );
   const appendTx = db.transaction((messages: StoredChatMessage[]) => {
     for (const message of messages) {
@@ -107,6 +118,9 @@ function createSqliteStore(dataDir: string, Database: SqliteDatabaseConstructor)
         message.content,
         message.isDetail ? 1 : 0,
         message.createdAt,
+        message.sources ? JSON.stringify(message.sources) : null,
+        message.keywords ? JSON.stringify(message.keywords) : null,
+        message.finalState ?? null,
       );
     }
   });
@@ -126,6 +140,7 @@ function createSqliteStore(dataDir: string, Database: SqliteDatabaseConstructor)
         content: row.content,
         isDetail: row.isDetail === 1,
         createdAt: row.createdAt,
+        ...parseOptionalFields(row.sourcesJson, row.keywordsJson, row.finalState),
       }));
     },
   };
@@ -150,11 +165,23 @@ function parseJsonlLine(line: string): StoredChatMessage | null {
       content: record.content,
       isDetail: record.isDetail === true,
       createdAt: record.createdAt,
+      ...parseOptionalFields(record.sources, record.keywords, record.finalState),
     };
   } catch {
     return null;
   }
 }
+
+function parseOptionalFields(sources: unknown, keywords: unknown, finalState: unknown): Pick<StoredChatMessage, "sources" | "keywords" | "finalState"> {
+  const parsedSources = typeof sources === "string" ? parseOptionalFieldsJson(sources) : sources;
+  const parsedKeywords = typeof keywords === "string" ? parseOptionalFieldsJson(keywords) : keywords;
+  return {
+    ...(Array.isArray(parsedSources) ? { sources: parsedSources.filter((item): item is AskSource => typeof item === "object" && item !== null && typeof (item as Record<string, unknown>).title === "string" && typeof (item as Record<string, unknown>).url === "string") } : {}),
+    ...(Array.isArray(parsedKeywords) ? { keywords: parsedKeywords.filter((item): item is string => typeof item === "string") } : {}),
+    ...(typeof finalState === "string" && finalState !== "" ? { finalState } : {}),
+  };
+}
+function parseOptionalFieldsJson(value: string): unknown { try { return JSON.parse(value) as unknown; } catch { return null; } }
 
 function createJsonlStore(dataDir: string): ChatStore {
   mkdirSync(dataDir, { recursive: true });
