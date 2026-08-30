@@ -96,6 +96,8 @@ interface ProviderScript {
   keywords: string[];
   /** 生成响应原文（流式调用拼回的内容；合法/非法 schema 都从这里来）。 */
   generationContent: string;
+  /** Optional HTTP failure for the streamed generation call. */
+  generationFailureStatus?: number;
 }
 
 function startMockProvider(script: ProviderScript): Promise<{ server: Server; baseUrl: string }> {
@@ -115,6 +117,11 @@ function startMockProvider(script: ProviderScript): Promise<{ server: Server; ba
           // 非法 JSON 按非流式处理。
         }
         if (stream) {
+          if (script.generationFailureStatus !== undefined) {
+            res.writeHead(script.generationFailureStatus, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: { message: "mock generation failure" } }));
+            return;
+          }
           // SSE：逐段回放 generationContent，data: [DONE] 收尾。
           res.writeHead(200, { "Content-Type": "text/event-stream" });
           const piece = JSON.stringify({ choices: [{ delta: { content: script.generationContent } }] });
@@ -259,6 +266,18 @@ async function testInvalidSchemaIsFailClosed(baseUrl: string): Promise<void> {
   assert.equal(done.length, 1);
   assert.equal(done[0].finalState, "invalid_schema", "schema 违规 → invalid_schema 终态");
   assert.equal((done[0].failure as { reason?: string })?.reason, "ask answer schema invalid");
+}
+
+async function testGenerationFailureIsFailClosed(baseUrl: string): Promise<void> {
+  const response = await POST(makeRequest(askBody(baseUrl, { question: "模型生成失败场景？" })));
+  const events = await collectEvents(response);
+  assert.equal(findEvents(events, "answer_chunk").length, 0, "模型失败时不得回放答案内容");
+  const done = findEvents(events, "done");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].finalState, "model_failed");
+  const sources = done[0].sources as Array<{ url?: unknown }>;
+  assert.ok(Array.isArray(sources) && sources.length >= 2, "模型失败仍应保留搜索来源");
+  assert.match(String((done[0].failure as { reason?: unknown })?.reason), /failed|provider|model/i);
 }
 
 async function testCacheHitSkipsSecondSearch(baseUrl: string): Promise<void> {
@@ -497,6 +516,24 @@ async function main(): Promise<void> {
         await stopMockServer(server);
       }
       console.log("c) schema 违规 → invalid_schema（无伪造内容）通过");
+    }
+
+    // c2) 模型生成失败 → model_failed，保留来源但不回放答案
+    {
+      askCacheClear();
+      tavilyResultCount = 2;
+      const script: ProviderScript = {
+        keywords: ["model failure"],
+        generationContent: "NEVER-SENT model failure content",
+        generationFailureStatus: 503,
+      };
+      const { server, baseUrl } = await startMockProvider(script);
+      try {
+        await testGenerationFailureIsFailClosed(baseUrl);
+      } finally {
+        await stopMockServer(server);
+      }
+      console.log("c2) 模型生成失败 → model_failed（无伪造内容）通过");
     }
 
     // d) 缓存命中 → 第二次同关键词搜索 mock 计数不增加

@@ -414,6 +414,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：扩展测评执行器具备数据规模保护；阶段 1 仍未关闭，当前没有授权 manifest 可运行。
 - 遗留：获得至少 30 题授权 manifest 后，执行 cold/hot 分层并记录完整分母、异常终态和分位数。
 
+### 2026-08-30：阶段 1 ask 路由模型失败终态
+
+- 阶段：阶段 1 / P0 延迟稳定性收口。
+- 原因：异常矩阵需要验证模型生成失败时的路由级 fail-closed 行为，而不只验证底层 provider 错误映射。
+- 变更：扩展 `scripts/test-ask-route.ts` mock provider，新增生成 HTTP 失败用例；不修改生产路由。
+- 证据：`TMPDIR=/tmp TMP=/tmp TEMP=/tmp npx tsx scripts/test-ask-route.ts` 通过；新增用例确认无 `answer_chunk`、终态 `model_failed`、搜索来源保留且错误原因可见。
+- 结论：阶段 1 ask 路由的模型失败控制流证据补齐；P0 仍未关闭，扩展集冷/热真实性能和服务重启/显存压力证据仍缺失。
+- 遗留：继续等待授权扩展 manifest，不得进入阶段 2。
+
 ### 后续记录模板
 
 ```markdown
