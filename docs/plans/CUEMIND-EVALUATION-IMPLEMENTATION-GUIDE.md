@@ -29,6 +29,12 @@
 
 ## 3. ASR 测评
 
+### 视频重新导入测评协议（2026-08-30）
+
+视频内容题集必须先经过内容抽取，再进入卡片与询问链路，不得把人工根据画面写出的问句当作完整视频理解证据。对有音频视频执行完整本地 ASR；对无音频视频执行视频帧抽样、OCR/视觉内容抽取，并记录抽帧时间。随后将带时间定位的 transcript/视觉片段导入 CueMind 卡片生成链路，保存实际卡片、关键词、来源和终态；询问题目只能从实际卡片或其对应证据片段生成。
+
+每个视频样本必须输出 `video-manifest.json`、`transcript/` 或 `vision/`、`cards.jsonl`、`asks.jsonl` 和 `lineage.jsonl`。`lineage` 至少关联 `video -> segment -> card -> ask -> evaluation case`，并记录抽取器版本、模型版本、时间范围和失败原因。只有完成该链路的样本才能计入“转录/卡片驱动问答”证据；人工视频衍生题集只能作为补充延迟 fixture。
+
 | 项目 | 输入 | 执行命令或脚本 | 观察字段 | 通过标准 | 证据输出 | 边界 |
 |---|---|---|---|---|---|---|
 | partial 首次出现 | 授权真机麦克风/短音频，含静音起始 | 已有 `npx tsx scripts/test-partial-transcript.ts`；真机延迟需新增 `scripts/evaluate-asr-latency.ts` | 首个 partial 触发/出现时间、音频时长 | 触发门限符合决策 66；真机时间如实记录 | cases + latency summary | 单测不能证明真机首现 |
