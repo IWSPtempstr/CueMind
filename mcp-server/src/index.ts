@@ -13,6 +13,9 @@ import { registerGetSessionLedger } from "./tools/get-session-ledger.js";
 import { registerListSessions } from "./tools/list-sessions.js";
 import { registerSearchCards } from "./tools/search-cards.js";
 import { registerSearchTranscripts } from "./tools/search-transcripts.js";
+import { registerSearchVault } from "./tools/search-vault.js";
+import { registerGetVaultEntry } from "./tools/get-vault-entry.js";
+import { registerGetVaultVersion } from "./tools/get-vault-version.js";
 
 const SERVER_NAME = "cuemind";
 const SERVER_VERSION = "0.1.0";
@@ -30,6 +33,9 @@ async function main(): Promise<void> {
   registerSearchCards(server);
   registerGetCard(server);
   registerGetSessionLedger(server);
+  registerSearchVault(server);
+  registerGetVaultEntry(server);
+  registerGetVaultVersion(server);
 
   const shutdown = (signal: string): void => {
     console.error(`[cuemind-mcp] received ${signal}, shutting down`);

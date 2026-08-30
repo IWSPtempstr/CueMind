@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { AskExchange } from "@/lib/ask-history";
+import { createVaultEntry } from "@/lib/vault-governance";
 
 export type VaultTranscriptMode = "none" | "folded" | "full";
 
@@ -482,6 +483,18 @@ export function exportConceptToVault(root: string, card: ConceptCardInput): Conc
 
   sidecar[key] = { file: relFile, fileHash: computeFileHash(content), exportedAt: new Date().toISOString() };
   writeSidecar(root, sidecar);
+
+  // 7.4：概念导出同时登记治理索引；Markdown 仍是用户可读的沉淀产物。
+  const firstSource = card.sources?.find((source) => typeof source?.url === "string" && source.url.length > 0);
+  createVaultEntry(root, {
+    entryId: `concept:${slugifyTerm(card.keyword)}`,
+    title: card.keyword,
+    body: content,
+    sourceUrl: firstSource?.url ?? "",
+    sourceType: card.sources?.[0]?.sourceType,
+    highRisk: piece.appendSection !== undefined,
+    actor: "cuemind-exporter",
+  });
 
   if (piece.appendSection !== undefined) {
     return { outcome: "appended", file: relFile, appendSection: piece.appendSection };

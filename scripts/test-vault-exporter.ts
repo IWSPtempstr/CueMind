@@ -13,6 +13,7 @@ import {
   resolveVaultRoot,
   slugifyTerm,
 } from "@/lib/vault-exporter";
+import { getVaultEntry } from "@/lib/vault-governance";
 
 // vault-exporter 回归（M3-a）：a) folded 折叠块 b) none 不导转写 c) full 逐条 [mm:ss]
 // d) concept 新建 frontmatter/正文 e) 追加语义（旧正文保留 + 变更小节 + aliases 合并）
@@ -148,6 +149,7 @@ function runSuite(): void {
   const rootF = newRoot("idem");
   const savedF = exportConceptToVault(rootF, card);
   assert.equal(savedF.outcome, "saved");
+  assert.equal(getVaultEntry(rootF, "concept:推理优化")?.currentVersion, 1, "concept export registers governed active version");
   const filePathF = path.join(rootF, savedF.file);
   const contentF1 = readFileSync(filePathF, "utf8");
   const sidecarF1 = readSidecar(rootF);

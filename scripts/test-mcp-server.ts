@@ -644,18 +644,21 @@ async function assertNormalServer(fixture: CandidateFixture): Promise<void> {
   assert.equal(punctuation.results.length, 0, "punctuation-only query yields no hits");
   console.log(`[e] search_transcripts OK: “知识沉淀”命中 ${SEED_B}，excerpt=“${seedBHit.matchedExcerpt.slice(0, 24)}…”，标题命中与空结果正确`);
 
-  // h) tools/list 现在共 6 个工具（M1 三工具 + M2-b 三工具）
+  // h) tools/list 包含治理只读工具（search/get current/get history）
   const fullToolList = (await client.request("tools/list", {})) as { tools: Array<{ name: string }> };
   const fullToolNames = fullToolList.tools.map((tool) => tool.name).sort();
   assert.deepEqual(fullToolNames, [
     "get_card",
     "get_session",
     "get_session_ledger",
+    "get_vault_entry",
+    "get_vault_version",
     "list_sessions",
     "search_cards",
     "search_transcripts",
+    "search_vault",
   ]);
-  console.log(`[h] tools/list OK: 共 ${fullToolNames.length} 个工具（含新增 search_cards/get_card/get_session_ledger）`);
+  console.log(`[h] tools/list OK: 共 ${fullToolNames.length} 个工具（含 Vault 只读治理接口）`);
 
   // i) get_session_ledger：card_shown 账本行 + finalStateSummary 自洽
   const ledger = toolPayload<GetSessionLedgerPayload>(
