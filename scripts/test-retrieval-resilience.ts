@@ -21,6 +21,10 @@ assert.equal(
   classifyCacheObservation({ before: false, warmedBy: "ask", hit: true }),
   "ask_hot_hit",
 );
+assert.throws(
+  () => classifyCacheObservation({ before: false, warmedBy: null, hit: true }),
+  /requires warmedBy origin/,
+);
 
 now += ASK_CACHE_TTL_MS;
 assert.equal(cache.get("KV CACHE"), null);

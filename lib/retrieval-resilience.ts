@@ -7,7 +7,7 @@ export type CacheObservationClassification =
   | "expired_miss";
 
 export interface CacheObservation {
-  /** Whether the lookup was preceded by an already-warmed cache state. */
+  /** Whether this is the first lookup before any pipeline has warmed the cache. */
   before: boolean;
   /** The pipeline that warmed the cache, when there was a hit. */
   warmedBy: AskCacheOrigin | null;
@@ -18,6 +18,9 @@ export function classifyCacheObservation(
   observation: CacheObservation,
 ): CacheObservationClassification {
   if (observation.hit) {
+    if (observation.warmedBy === null) {
+      throw new Error("cache hit requires warmedBy origin");
+    }
     return observation.warmedBy === "context_card" ? "card_warmed_hit" : "ask_hot_hit";
   }
   return observation.before ? "cold_miss" : "expired_miss";
