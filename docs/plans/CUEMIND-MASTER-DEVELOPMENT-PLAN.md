@@ -717,6 +717,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：真实 ASR 离线处理吞吐、当前 8B llama.cpp tok/s/上游首 token、Ask 请求时间线和受控资源压力/恢复均已有可复现报告；本轮没有执行破坏性 OOM，也没有把服务端缓冲后的答案首字节冒充 TTFT。
 - 遗留：4B 模型需通过独立 systemd 评测实例补齐同口径 timing，不能仅修改请求体模型名；若要证明实时 partial/confirmed，需实现常驻 whisper streaming/LocalAgreement-2；若要得到完整 ASR→卡片→渲染瀑布图，需在生产链路增加不含正文的阶段事件埋点。
 
+### 2026-08-31：生产链路原生事件埋点落地
+
+- 阶段：阶段 7.7/7.8、阶段 8 / 逐请求时间线与本地可观测性。
+- 目标：为 Capture、ASR、关键词和渲染提供真实边界事件，并用单一 `runId` 关联同一音频片段的后续卡片请求。
+- 变更：新增 `PipelineEvent` 契约、单调时间戳与重复/倒序校验；桌面与浏览器录音段发出 `capture_start/end`、`asr_start/end`；context-card 和 Ask 路由发出 `keyword_start/end`；卡片 React DOM commit 前后发出 `render_start/end`。客户端事件通过 `/api/pipeline-events` 脱敏旁路写入本地 JSONL，服务端事件同步写入 `reports/performance-resilience/native-events.jsonl`，任何写入失败均不影响主链路。
+- 证据：`TMPDIR=/tmp npx tsx scripts/test-request-timeline-events.ts`、`scripts/test-pipeline-event-store.ts`、`scripts/test-local-transcribe-contract.ts`、`scripts/test-context-card-route.ts`、`scripts/test-ask-route.ts`、`scripts/test-media-upload-route.ts` 全部通过；`ASK_MEASURE_BASE_URL=http://localhost:3001 TMPDIR=/tmp REQUEST_TIMELINE_OUTPUT=reports/performance-resilience/timeline-native-20260831-live3 npx tsx scripts/evaluate-request-timeline.ts` 3/3 请求成功，关键词原生事件 3/3 可见，capture/ASR/render 在 Ask-only CLI 中按边界保持 `null`。
+- 约束：`render_end` 是 `useLayoutEffect` 的 DOM commit 后近似，不代表 OS compositor 绘制完成；CLI 评测不伪造浏览器音频/渲染事件，旧 SSE 推导边界显式标记 `derived`。
+- 验收：`npx tsc --noEmit --pretty false`、`npm run lint`、`npm run build` 通过。Build 仍显示既有 `better-sqlite3` 的 `module.createRequire` warnings，不影响产物生成。
+
 ```markdown
 ### YYYY-MM-DD：<阶段/变更名称>
 

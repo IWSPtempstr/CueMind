@@ -32,7 +32,7 @@ async function measure(question: string, index: number): Promise<TimelineCase> {
     add(event.name, event.atMs, true);
   };
   try {
-    const response = await fetch(`${baseUrl}/api/ask`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, recentTranscript }), signal: AbortSignal.timeout(120_000) });
+    const response = await fetch(`${baseUrl}/api/ask`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runId, question, recentTranscript }), signal: AbortSignal.timeout(120_000) });
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
