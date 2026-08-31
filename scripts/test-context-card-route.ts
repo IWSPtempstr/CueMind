@@ -33,6 +33,8 @@ type FetchInit = Parameters<typeof fetch>[1];
 const realFetch = globalThis.fetch;
 
 interface RouteTrace {
+  runId: string;
+  pipelineEvents?: Array<{ runId: string; name: string; atMs: number }>;
   candidateId: string;
   datasetVersion: string;
   windowingVersion: string;
@@ -236,6 +238,7 @@ async function testLocalProviderSelected(): Promise<void> {
   try {
     const response = await POST(makeRequest(baseBody({
       sessionId: "m2-route-card-shown",
+      runId: "route-run-card-shown",
       settings: settings({ modelProvider: "llama.cpp", llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
     })));
     assert.equal(response.status, 200);
@@ -249,6 +252,9 @@ async function testLocalProviderSelected(): Promise<void> {
     assert.equal(payload.trace.windowingVersion, "candidate-window-v1");
     assert.equal(payload.trace.decisionSource, "model");
     assert.equal(payload.trace.finalState, "card_shown");
+    assert.equal(payload.trace.runId, "route-run-card-shown");
+    assert.deepEqual(payload.trace.pipelineEvents?.map((event) => event.name), ["keyword_start", "keyword_end"]);
+    assert.ok((payload.trace.pipelineEvents ?? []).every((event) => event.runId === payload.trace.runId));
     assert.equal(payload.card.keyword, "KV Cache");
     assert.deepEqual(
       payload.card.keyPoints,

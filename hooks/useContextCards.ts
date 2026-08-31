@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
 import type { ContextCard, ContextCardFailure } from "@/types/suggestions";
+import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
 
 type ContextCardTrace = NonNullable<ContextCard["demoTrace"]> & {
   finalState: NonNullable<ContextCard["demoTrace"]>["finalState"] | "suppressed_as_duplicate";
@@ -12,8 +13,8 @@ type ContextCardTrace = NonNullable<ContextCard["demoTrace"]> & {
 };
 
 type ContextCardResponse =
-  | { card: ContextCard; failure?: never; trace?: unknown }
-  | { card: null; failure: { reason: string }; trace?: unknown };
+  | { card: ContextCard; failure?: never; trace?: { runId?: string; pipelineEvents?: PipelineEvent[] } }
+  | { card: null; failure: { reason: string }; trace?: { runId?: string; pipelineEvents?: PipelineEvent[] } };
 
 type ContextCardFailureWithTrace = ContextCardFailure & {
   demoTrace?: ContextCardTrace;
@@ -33,20 +34,36 @@ export default function useContextCards({ transcriptChunks, isRecording, session
   error: string | null;
   setCards: (cards: ContextCard[]) => void;
   latencySamples: LatencySample[];
+  pipelineEvents: PipelineEvent[];
 } {
   const [cards, setCardState] = useState<ContextCard[]>([]);
   const [failures, setFailures] = useState<ContextCardFailureWithTrace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
   const lastProcessedIdsRef = useRef<Set<string>>(new Set());
   const lastRunAtRef = useRef(0);
   const runningRef = useRef(false);
   const cardsRef = useRef(cards);
+  const pendingRenderRunIdRef = useRef<string | null>(null);
+  const pipelineEventsRef = useRef<PipelineEvent[]>([]);
   useEffect(() => { cardsRef.current = cards; }, [cards]);
 
   const setCards = useCallback((next: ContextCard[]): void => {
     setCardState(next.map((card) => ({ ...card, createdAt: new Date(card.createdAt) })));
+  }, []);
+
+  const emitPipelineEvent = useCallback((runId: string, name: PipelineEvent["name"], metadata?: unknown): void => {
+    try {
+      const event = createPipelineEvent(runId, name, typeof performance !== "undefined" ? performance.now() : Date.now(), metadata);
+      const eventsForRun = pipelineEventsRef.current.filter((item) => item.runId === runId);
+      appendPipelineEvent(eventsForRun, event);
+      pipelineEventsRef.current = [...pipelineEventsRef.current.filter((item) => item.runId !== runId), ...eventsForRun];
+      setPipelineEvents([...pipelineEventsRef.current]);
+    } catch {
+      // Telemetry is best effort and must not affect card delivery.
+    }
   }, []);
 
   const run = useCallback(async (chunks: TranscriptChunk[]): Promise<void> => {
@@ -56,6 +73,7 @@ export default function useContextCards({ transcriptChunks, isRecording, session
     if (now - lastRunAtRef.current < settings.contextCardCooldownSeconds * 1000) return;
     runningRef.current = true;
     lastRunAtRef.current = now;
+    const runId = crypto.randomUUID();
     setIsLoading(true);
     const knownKeywords = cardsRef.current.map((card) => card.keyword);
     const knownCandidates = cardsRef.current.map(({ candidateId, keyword }) => ({ candidateId, keyword }));
@@ -65,6 +83,7 @@ export default function useContextCards({ transcriptChunks, isRecording, session
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...(sessionId ? { sessionId } : {}),
+          runId,
           recentTranscript: chunks.slice(-8).map((chunk) => chunk.text).join("\n"),
           knownKeywords,
           knownCandidates,
@@ -87,6 +106,8 @@ export default function useContextCards({ transcriptChunks, isRecording, session
       if (!isContextCardResponse(payload)) throw new Error("Invalid context card response");
       if (payload.card) {
         const card = hydrateCard(payload.card);
+        pendingRenderRunIdRef.current = payload.trace?.runId ?? runId;
+        emitPipelineEvent(pendingRenderRunIdRef.current, "render_start", { status: "commit" });
         setCardState((previous) => [card, ...previous]);
         setLatencySamples((previous) => [
           ...previous,
@@ -119,7 +140,16 @@ export default function useContextCards({ transcriptChunks, isRecording, session
       runningRef.current = false;
       setIsLoading(false);
     }
-  }, [sessionId]);
+  }, [emitPipelineEvent, sessionId]);
+
+  // useLayoutEffect runs after React commits the card DOM. This is a DOM-commit
+  // boundary, not an OS compositor/paint completion signal.
+  useLayoutEffect(() => {
+    const runId = pendingRenderRunIdRef.current;
+    if (!runId) return;
+    pendingRenderRunIdRef.current = null;
+    emitPipelineEvent(runId, "render_end", { status: "committed" });
+  }, [cards, emitPipelineEvent]);
 
   useEffect(() => {
     if (!isRecording) return;
@@ -136,7 +166,7 @@ export default function useContextCards({ transcriptChunks, isRecording, session
     }
   }, [isRecording]);
 
-  return { cards, failures, isLoading, error, setCards, latencySamples };
+  return { cards, failures, isLoading, error, setCards, latencySamples, pipelineEvents };
 }
 
 function hydrateCard(card: ContextCard): ContextCard {

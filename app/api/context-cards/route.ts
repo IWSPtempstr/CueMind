@@ -11,10 +11,12 @@ import { InsufficientSearchSourcesError, searchKeywordSources, type SearchKeywor
 import type { ContextCard, ContextCardDemoTrace } from "@/types/suggestions";
 import { getKnowledgeMemoryStore } from "@/lib/knowledge-memory-store";
 import type { MemoryHit } from "@/lib/knowledge-memory";
+import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
 
 export const runtime = "nodejs";
 
 interface ContextCardRequest {
+  runId?: string;
   candidateId: string;
   /** M2-a 候选账本归属会话；可选（live-simple 未携带时账本记 "unassigned"）。 */
   sessionId?: string;
@@ -61,7 +63,7 @@ interface CardResponse {
 
 interface TraceEvent {
   step: number;
-  type: "model_decision" | "tool_call" | "tool_result" | "card_generation" | "terminal";
+  type: "model_decision" | "tool_call" | "tool_result" | "card_generation" | "terminal" | "pipeline";
   durationMs?: number;
   decision?: "search" | "skip";
   tool?: "search_web" | "local_memory";
@@ -71,9 +73,11 @@ interface TraceEvent {
   provider?: "tavily" | "bing" | "serpapi" | "agent-reach" | "vertical" | "vault";
   fallbackUsed?: boolean;
   verticalHit?: boolean;
+  pipelineEvent?: PipelineEvent;
 }
 
 interface ContextCardTrace extends Omit<ContextCardDemoTrace, "finalState"> {
+  runId: string;
   traceId: string;
   task: "context_card";
   inputChunkIds: string[];
@@ -85,6 +89,7 @@ interface ContextCardTrace extends Omit<ContextCardDemoTrace, "finalState"> {
   finalState: ContextCardDemoTrace["finalState"] | "suppressed_as_duplicate";
   duplicateOfCandidateId?: string;
   verticalHit?: boolean;
+  pipelineEvents: PipelineEvent[];
 }
 
 type ContextCardResponse =
@@ -95,10 +100,17 @@ export async function POST(
   request: Request,
 ): Promise<NextResponse<ContextCardResponse>> {
   const started = performance.now();
-  const traceId = crypto.randomUUID();
+  let traceId = crypto.randomUUID();
+  let runId = traceId;
   const body = await readJson(request);
   const parsed = parseRequest(body);
   const traceEvents: TraceEvent[] = [];
+  const pipelineEvents: PipelineEvent[] = [];
+  const emitPipelineEvent = (name: PipelineEvent["name"], metadata?: unknown): void => {
+    const event = createPipelineEvent(runId, name, performance.now(), metadata);
+    appendPipelineEvent(pipelineEvents, event);
+    traceEvents.push({ step: traceEvents.length + 1, type: "pipeline", pipelineEvent: event });
+  };
   const emptyProvider: ResolvedProvider = { name: "llama.cpp", baseUrl: "", model: "", apiKey: "" };
   if (!parsed) {
     return NextResponse.json({
@@ -108,11 +120,15 @@ export async function POST(
     }, { status: 400 });
   }
 
+  runId = parsed.runId ?? traceId;
+  traceId = runId;
+
   const provider = resolveProvider(parsed.settings);
 
   let keyword: string;
   let keywordMs = 0;
   try {
+    emitPipelineEvent("keyword_start", { status: "started" });
     const keywordStarted = performance.now();
     const result = await generateProviderJson<KeywordResponse>(provider, {
       system: "从技术会议转写中识别一个此刻最值得补充背景的具体技术关键词。只返回 JSON：{\"keyword\":\"...\"}。不要返回泛化词。",
@@ -120,6 +136,7 @@ export async function POST(
       timeoutMs: 5_000,
     });
     keywordMs = Math.round(performance.now() - keywordStarted);
+    emitPipelineEvent("keyword_end", { status: "completed" });
     keyword = result.keyword.trim();
     traceEvents.push({
       step: traceEvents.length + 1,
@@ -128,6 +145,7 @@ export async function POST(
       durationMs: keywordMs,
     });
   } catch (caught) {
+    emitPipelineEvent("keyword_end", { status: "failed", errorCode: providerFailureReason(caught) });
     traceEvents.push({ step: traceEvents.length + 1, type: "terminal" });
     return NextResponse.json({
       card: null,
@@ -560,6 +578,7 @@ function parseRequest(value: unknown): ContextCardRequest | null {
   if (searchProvider !== "tavily" && searchProvider !== "bing" && searchProvider !== "serpapi") return null;
 
   return {
+    runId: isNonEmptyString(value.runId) ? value.runId.trim() : undefined,
     candidateId,
     sessionId: isString(value.sessionId) ? value.sessionId : undefined,
     datasetVersion,
@@ -684,6 +703,7 @@ function makeTrace(
   }
   return {
     traceId,
+    runId: traceId,
     task: "context_card",
     candidateId: metadata.candidateId,
     datasetVersion: metadata.datasetVersion,
@@ -693,6 +713,7 @@ function makeTrace(
     modelName: provider.model,
     modelBaseUrl: provider.baseUrl,
     events,
+    pipelineEvents: events.flatMap((event) => event.pipelineEvent ? [event.pipelineEvent] : []),
     decisionSource,
     finalState,
     duplicateOfCandidateId,
