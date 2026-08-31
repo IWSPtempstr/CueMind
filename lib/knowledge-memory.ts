@@ -110,7 +110,8 @@ function isValidDate(value: string): boolean {
 export function isMemoryRecordEligible(record: Pick<MemoryRecord, "status" | "validUntil">, at: Date | string = new Date()): boolean {
   if (record.status !== "active") return false;
   const validUntil = record.validUntil;
-  if (validUntil === undefined || validUntil === null || validUntil.trim().length === 0) return true;
+  if (validUntil === undefined || validUntil === null) return true;
+  if (validUntil.trim().length === 0) return false;
   if (!isValidDate(validUntil)) return false;
   const atDate = at instanceof Date ? at : new Date(at);
   if (Number.isNaN(atDate.getTime())) return false;
@@ -119,4 +120,3 @@ export function isMemoryRecordEligible(record: Pick<MemoryRecord, "status" | "va
 
 /** Explicit alias for code that uses “current” rather than “eligible”. */
 export const isCurrentMemoryRecord = isMemoryRecordEligible;
-

@@ -66,6 +66,11 @@ function run(): void {
     "disputed 不得作为当前知识注入",
   );
   assert.equal(
+    isMemoryRecordEligible({ ...card, status: "archived" }, now),
+    false,
+    "archived 不得作为当前知识注入",
+  );
+  assert.equal(
     isMemoryRecordEligible({ ...decision, validUntil: "2026-08-30T23:59:59.999Z" }, now),
     false,
     "validUntil 已过期不得作为当前决定",
@@ -74,6 +79,11 @@ function run(): void {
     isMemoryRecordEligible({ ...decision, validUntil: "not-a-date" }, now),
     false,
     "无效有效期按不可复用处理（fail closed）",
+  );
+  assert.equal(
+    isMemoryRecordEligible({ ...decision, validUntil: "   " }, now),
+    false,
+    "显式空白有效期按不可复用处理（fail closed）",
   );
   assert.equal(
     isMemoryRecordEligible({ ...decision, validUntil: "2026-08-31T00:00:00.000Z" }, now),
