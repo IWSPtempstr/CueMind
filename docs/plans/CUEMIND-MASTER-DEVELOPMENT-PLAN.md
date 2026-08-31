@@ -338,6 +338,26 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 **测评依据：** `lib/realtime-replay.ts`、`scripts/test-realtime-replay.ts`、固定视频重放结果和本地 JSONL Trace。
 **验收：** 固定视频可重复回放；长时间运行无未解释内存增长；压力下有降级和恢复证据；同输入配置生成可比较报告。
 
+#### 阶段 8A：检索与缓存韧性测评
+
+**状态：设计已批准，待实现。**
+**目标：** 证明垂直检索、通用搜索回退、来源不足和超时终态可重复，并修正缓存命中统计口径。
+**范围：** 一个垂直源超时但其他源足够、垂直源不足回退、回退不足、全部超时、非法来源、冷缓存、卡片预热命中、询问热命中、TTL 过期、别名/大小写规范化和重复候选抑制。缓存条目区分 `ask` 与 `context_card` 来源。
+**实现边界：** 复用 `lib/search.ts` 和 `lib/ask-cache.ts`；新增本地可控 fixture/评测执行器，不依赖外网稳定性。失败终态继续遵守 fail-closed，不生成无来源领域常识卡。
+**报告：** `reports/retrieval-resilience/<run-id>/manifest.json`、`cases.jsonl`、`failures.jsonl`、`scorecard.json`、`report.md`；命中分类固定为 `cold_miss`、`card_warmed_hit`、`ask_hot_hit`、`expired_miss`。
+**验收：** 单源故障不影响足够来源的成功路径；来源不足和全超时有明确终态；缓存统计不把上游卡片预热误报为询问热命中；同一输入的 `cacheKey` 稳定。
+
+#### 阶段 8B：会后体验增强
+
+**状态：设计已批准，待实现。**
+**目标：** 在不修改原始会议事实的前提下提供整理、脱敏和可回放的时间定位数据。
+**范围：** 会后异步 `polishTranscript`（失败回退原文）；确定性规则和用户词典驱动的脱敏导出副本；Markdown/JSON/Vault 保留 `startMs/endMs`；新增 `timeline.json` 关联转写、卡片、询问和总结段落。
+**实现边界：** 不实现 Electron 播放器、`cuemind://` 协议或未经验证的音频 URL；时间线首版只提供稳定导出锚点，未来播放器复用该契约。
+**隐私与审计：** 原始转写、SQLite、浏览器会话和 Vault 不可覆盖；脱敏附带 `redaction-manifest.json`，不记录原始敏感值并标记人工复核要求。
+**验收：** 整理失败可回退；导出副本不含已匹配敏感词；时间线毫秒值与原始 `TranscriptChunk` 一致；模型、Prompt、规则和导出版本可追溯。
+
+**设计依据：** [检索韧性与会后体验设计](2026-08-31-retrieval-resilience-postmeeting-design.md)。
+
 ### 阶段 9：受控模型评估
 
 **状态：候选登记、人工发布和回滚基础已完成，真实模型矩阵与影子运行待执行。**
