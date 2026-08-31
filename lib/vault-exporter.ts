@@ -16,6 +16,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { AskExchange } from "@/lib/ask-history";
 import { createVaultEntry } from "@/lib/vault-governance";
+import { buildTimeline, type Timeline } from "@/lib/timeline";
+import type { RedactionManifest } from "@/lib/redaction";
 
 export type VaultTranscriptMode = "none" | "folded" | "full";
 
@@ -57,6 +59,8 @@ export interface MeetingMarkdownArgs {
   exportTranscript?: VaultTranscriptMode;
   /** 会中询问问答对（可选）；exportTranscript === "none" 时不渲染该小节。 */
   asks?: AskExchange[];
+  timeline?: Timeline;
+  redactionManifest?: RedactionManifest;
 }
 
 export interface VaultConceptSource {
@@ -443,6 +447,18 @@ export function exportMeetingToVault(root: string, meeting: MeetingMarkdownArgs)
   }
 
   writeFileSync(path.join(dir, fileName), content, "utf8");
+  const timeline = meeting.timeline ?? buildTimeline({ transcriptChunks: meeting.transcriptChunks.map((chunk, index) => ({
+    id: chunk.id ?? `chunk-${index + 1}`,
+    startMs: chunk.startMs,
+    endMs: chunk.endMs,
+  })) });
+  writeFileSync(path.join(dir, `${fileName}.timeline.json`), `${JSON.stringify(timeline, null, 2)}\n`, "utf8");
+  const redactionManifest = meeting.redactionManifest ?? {
+    ruleVersion: "redaction-v1" as const,
+    manualReviewRequired: true as const,
+    replacementCounts: {},
+  };
+  writeFileSync(path.join(dir, `${fileName}.redaction-manifest.json`), `${JSON.stringify(redactionManifest, null, 2)}\n`, "utf8");
   const fileHash = computeFileHash(content);
   const relFile = `${VAULT_SUBDIR}/${MEETINGS_DIR}/${fileName}`;
   sidecar[meeting.id] = { file: relFile, fileHash, exportedAt: new Date().toISOString() };

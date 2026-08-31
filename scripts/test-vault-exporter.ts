@@ -178,6 +178,10 @@ function runSuite(): void {
   assert.match(savedH1.file, /^cuemind\/meetings\/2026-08-28-大模型推理优化\.md$/);
   const filePathH1 = path.join(rootH, savedH1.file);
   const contentH1 = readFileSync(filePathH1, "utf8");
+  assert.ok(existsSync(`${filePathH1}.timeline.json`), "meeting timeline sidecar should be written");
+  assert.ok(existsSync(`${filePathH1}.redaction-manifest.json`), "redaction manifest sidecar should be written");
+  const timelineSidecar = JSON.parse(readFileSync(`${filePathH1}.timeline.json`, "utf8")) as { version: string };
+  assert.equal(timelineSidecar.version, "timeline-v1");
   const replayedH = exportMeetingToVault(rootH, { ...BASE_MEETING, transcriptChunks: [...BASE_CHUNKS, { id: "c3", text: "补充转写", startMs: 20000, endMs: 25000, source: "microphone" }] });
   assert.equal(replayedH.outcome, "skipped", "同 meetingId 重放 → skipped（落盘后不可变）");
   assert.ok(replayedH.outcome === "skipped" && replayedH.reason === "already-exported");
