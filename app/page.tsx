@@ -24,7 +24,7 @@ import { loadSessions, storeSession } from "@/lib/session-storage";
 import { matchSuggestionAnchor } from "@/lib/suggestion-anchor";
 import { summarizeLatency } from "@/lib/telemetry";
 import type { ChatMessage } from "@/types/chat";
-import type { MeetingReport, SessionSnapshot } from "@/types/session";
+import type { MeetingReport, PostmeetingTranscriptArtifact, SessionSnapshot } from "@/types/session";
 import type { ContextCard } from "@/types/suggestions";
 
 function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptChunks">): string {
@@ -127,6 +127,8 @@ export default function Home(): ReactElement {
   const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [meetingReport, setMeetingReport] = useState<MeetingReport | null>(null);
+  const [postmeetingTranscript, setPostmeetingTranscript] = useState<PostmeetingTranscriptArtifact | null>(null);
+  const [isPostmeetingLoading, setIsPostmeetingLoading] = useState(false);
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportRequested, setReportRequested] = useState(false);
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
@@ -185,6 +187,25 @@ export default function Home(): ReactElement {
       if (typeof topic === "string" && topic.trim().length > 0) setTopicSummary(topic.trim());
     }).catch(() => undefined);
   }, []);
+
+  const polishPostmeetingTranscript = useCallback((): void => {
+    const chunks = transcriptRef.current;
+    if (chunks.length === 0 || isPostmeetingLoading) return;
+    setIsPostmeetingLoading(true);
+    void fetch("/api/postmeeting-transcript", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcriptChunks: chunks.map((chunk) => ({ text: chunk.text })) }),
+    }).then(async (response) => {
+      const payload: unknown = await response.json();
+      if (!response.ok || typeof payload !== "object" || payload === null || typeof (payload as { text?: unknown }).text !== "string") {
+        throw new Error("无法整理会后转写");
+      }
+      const record = payload as Omit<PostmeetingTranscriptArtifact, "generatedAt"> & { generatedAt: string };
+      setPostmeetingTranscript({ ...record, generatedAt: new Date(record.generatedAt) });
+    }).catch((error: unknown) => setPersistenceError(error instanceof Error ? error.message : "无法整理会后转写"))
+      .finally(() => setIsPostmeetingLoading(false));
+  }, [isPostmeetingLoading]);
 
   // M3-a：会议总结生成成功后的旁路 vault 导出（fire-and-forget，失败静默）。
   // 门槛：meetingReport 非空且转写非空才导；meetings 落盘后不可变（幂等键 = snapshot.id）。
@@ -285,13 +306,14 @@ export default function Home(): ReactElement {
       // P2: chat 消息只持久化到服务端；保留字段以兼容旧 localStorage 快照的读取。
       chatMessages: [] as ChatMessage[],
       meetingReport,
+      postmeetingTranscript: postmeetingTranscript ?? undefined,
     };
     return {
       ...base,
       title: topicSummary ?? sessionTitle(base),
       ...(topicSummary ? { topicSummary } : {}),
     };
-  }, [activeSessionId, createdAt, meetingReport, recorder.transcriptChunks, suggestions.batches, topicSummary]);
+  }, [activeSessionId, createdAt, meetingReport, postmeetingTranscript, recorder.transcriptChunks, suggestions.batches, topicSummary]);
 
   useEffect(() => {
     if (!activeSessionId || !hasContent) return;
@@ -382,6 +404,7 @@ export default function Home(): ReactElement {
     suggestions.setBatches(session.suggestionBatches);
     ask.setMessages(session.chatMessages);
     setMeetingReport(session.meetingReport);
+    setPostmeetingTranscript(session.postmeetingTranscript ?? null);
     setTopicSummary(session.topicSummary ?? null);
     setActiveSessionId(session.id);
     setCreatedAt(session.createdAt);
@@ -397,6 +420,7 @@ export default function Home(): ReactElement {
     suggestions.setBatches([]);
     ask.setMessages([]);
     setMeetingReport(null);
+    setPostmeetingTranscript(null);
     setTopicSummary(null);
     setActiveSessionId(crypto.randomUUID());
     setCreatedAt(new Date());
@@ -538,6 +562,11 @@ export default function Home(): ReactElement {
           <button type="button" disabled={!hasContent} onClick={() => exportSession(snapshot, "md")} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 disabled:opacity-40">
             Markdown
           </button>
+          <button type="button" disabled={recorder.isRecording || recorder.transcriptChunks.length === 0 || isPostmeetingLoading} onClick={polishPostmeetingTranscript} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 disabled:opacity-40">
+            {isPostmeetingLoading ? "整理中…" : postmeetingTranscript ? "重新整理" : "整理转写"}
+          </button>
+          {postmeetingTranscript ? <button type="button" disabled={!hasContent} onClick={() => exportSession(snapshot, "md", { transcript: "polished" })} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 disabled:opacity-40">整理版</button> : null}
+          <button type="button" disabled={!hasContent} onClick={() => exportSession(snapshot, "md", { redacted: true })} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 disabled:opacity-40">脱敏</button>
           <button
             type="button"
             onClick={manualRefresh}
