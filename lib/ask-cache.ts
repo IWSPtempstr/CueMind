@@ -8,14 +8,20 @@ import type { SearchResult } from "@/lib/search";
 
 export const ASK_CACHE_TTL_MS = 10 * 60_000;
 
-interface AskCacheEntry {
-  expiresAt: number;
+export type AskCacheOrigin = "ask" | "context_card";
+
+export interface AskCacheValue {
   results: SearchResult[];
+  origin: AskCacheOrigin;
+}
+
+interface AskCacheEntry extends AskCacheValue {
+  expiresAt: number;
 }
 
 export interface AskCache {
-  get(term: string): SearchResult[] | null;
-  set(term: string, results: SearchResult[]): void;
+  get(term: string): AskCacheValue | null;
+  set(term: string, results: SearchResult[], origin?: AskCacheOrigin): void;
   clear(): void;
 }
 
@@ -24,7 +30,7 @@ export function createAskCache(now: () => number = Date.now): AskCache {
   const store = new Map<string, AskCacheEntry>();
   const normalize = (term: string): string => term.trim().toLowerCase();
   return {
-    get(term: string): SearchResult[] | null {
+    get(term: string): AskCacheValue | null {
       const key = normalize(term);
       const entry = store.get(key);
       if (!entry) return null;
@@ -32,12 +38,13 @@ export function createAskCache(now: () => number = Date.now): AskCache {
         store.delete(key);
         return null;
       }
-      return entry.results;
+      return { results: entry.results, origin: entry.origin };
     },
-    set(term: string, results: SearchResult[]): void {
+    set(term: string, results: SearchResult[], origin: AskCacheOrigin = "ask"): void {
       store.set(normalize(term), {
         expiresAt: now() + ASK_CACHE_TTL_MS,
         results,
+        origin,
       });
     },
     clear(): void {
@@ -52,12 +59,16 @@ const globalAskCache = globalThis as typeof globalThis & {
 const askCache = globalAskCache.cueMindAskCache ?? createAskCache();
 globalAskCache.cueMindAskCache = askCache;
 
-export function askCacheGet(term: string): SearchResult[] | null {
+export function askCacheGet(term: string): AskCacheValue | null {
   return askCache.get(term);
 }
 
-export function askCacheSet(term: string, results: SearchResult[]): void {
-  askCache.set(term, results);
+export function askCacheSet(
+  term: string,
+  results: SearchResult[],
+  origin: AskCacheOrigin = "ask",
+): void {
+  askCache.set(term, results, origin);
 }
 
 export function askCacheClear(): void {
