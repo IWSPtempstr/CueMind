@@ -68,3 +68,11 @@
 **发布门禁：** 三个 SFT adapter 和解释 DPO 完成 `eval` 评估后，统一在冻结集执行一次对照；随后进行影子运行。只有冻结集对比和影子运行证据齐全，才由人工决定发布、灰度保留或回滚；不得自动替换线上 adapter。
 
 **执行顺序：** `工程基线 → trigger-sft.jsonl/触发 adapter → keyword-sft.jsonl/关键词 adapter → explanation-sft.jsonl/解释 adapter → explanation-dpo.jsonl/解释 DPO → eval 评估 → freeze 一次性对比 → 影子运行 → 人工发布或回滚`。
+
+### 服务器训练实施与样本规模门禁（2026-08-31）
+
+当前人工确认增量为 trigger 59、keyword 27、explanation 40、DPO 40 对，足以走通训练流程和验证指标记录，但不足以稳定改变 7B/8B 模型的泛化行为。建议正式实验最低规模为 trigger 500–1,000（show/skip/重复/拒答均衡）、keyword 300–600、explanation 500–1,000，DPO 300–1,000 对；理想规模为 trigger 2,000–5,000、keyword 1,000–3,000、explanation 2,000–5,000、DPO 1,000–5,000 对，并保持每个视频/会议完整划分。
+
+仓库新增 `training/` 离线训练工具链：`validate_data.py` 强制人工确认和 train/eval 边界；`train_sft.py` 使用 4-bit NF4 QLoRA；`train_dpo.py` 使用 TRL DPO；`merge_adapter.py` 将 adapter 合并为独立 Transformers 模型，输出新目录并保留基础模型不变。推荐服务器为 A100 80GB（最低 40GB）、64GB RAM、150GB NVMe；7B/8B 训练使用 batch 1、梯度累积 8、上下文 512、gradient checkpointing，三组超参应串行运行。真实训练前须锁定 `requirements.txt`、基础模型权重及 SHA-256；训练只读 `train`，评估只读 `eval`，所有 adapter 完成 eval 后才允许一次性读取 freeze。
+
+合并后的 Transformers 模型如需部署到 llama.cpp，必须在独立目录执行官方转换脚本生成 F16/BF16 GGUF，再单独量化为 Q4_K_M；量化文件需重新计算 SHA-256 并通过基线、冻结集和影子运行，禁止覆盖现有正式 GGUF。任何发布仍需人工写入 release/rollback 决策记录。
