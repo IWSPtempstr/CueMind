@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import { buildAskContext, buildCardContext, compactAskHistory, estimateContextTokens, fallbackTrimAskHistory, shouldCompact, validateAskContextSummary, type AskHistoryEntry } from "@/lib/realtime-context-memory";
+
+const chunks = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, text: `line ${i}`, timestampMs: i * 10000 }));
+const card = buildCardContext(chunks, ["known"], ["topic"], ["open"]);
+assert.equal(card.recentTranscript, "line 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9");
+assert.deepEqual(card.shownKeywords, ["known"]);
+assert.deepEqual(card.currentTopics, ["topic"]);
+const history: AskHistoryEntry[] = Array.from({ length: 8 }, (_, i) => ({ question: `q${i}`, answer: `a${i}`, cardIds: [`card-${i}`], decisionIds: [`decision-${i}`], sourceUrls: [`https://example.com/${i}`] }));
+const context = buildAskContext("current question", chunks, history, { topics: ["topic"], answeredQuestions: ["old"], unresolvedQuestions: ["open"], referencedCardIds: ["card-x"], referencedDecisionIds: ["decision-x"], referencedSourceUrls: ["https://example.com/x"], summaryVersion: "v1" }, ["evidence"]);
+assert.equal(context.currentQuestion, "current question");
+assert.equal(context.recentTranscript.split("\n").length, 8);
+assert.equal(context.recentTurns.length, 4);
+assert.equal(validateAskContextSummary(context.summary), true);
+assert.equal(shouldCompact(7000, 10000, 5, 11 * 60 * 1000), true);
+assert.equal(estimateContextTokens("1234"), 1);
+assert.equal(compactAskHistory(history, 20).length < history.length, true);
+assert.equal(fallbackTrimAskHistory(history, 20).length < history.length, true);
+const before = chunks.map((chunk) => chunk.text);
+buildCardContext(chunks, [], [], []);
+assert.deepEqual(chunks.map((chunk) => chunk.text), before);
+console.log("realtime context memory assertions passed");
