@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createReplayController, createLocalTrace, summarizeReplay } from "@/lib/realtime-replay";
+import { createReplayController, createLocalTrace, summarizeReplay, recoverRealtimeRun } from "@/lib/realtime-replay";
 
 const controller = createReplayController(4);
 assert.equal(controller.state, "paused");
@@ -14,4 +14,9 @@ assert.equal(controller.cancel().state, "cancelled");
 const trace = createLocalTrace("run-1", { stage: "asr", durationMs: 12, status: "ok" });
 assert.equal(trace.runId, "run-1");
 assert.equal(summarizeReplay([trace]).errorCount, 0);
+const recovered = recoverRealtimeRun({ runId: "run-1", confirmedUntilMs: 1200, pending: [{ startMs: 1200, endMs: 1400, text: "partial" }], inputPath: "/tmp/audio.pcm" }, new Error("worker crashed"));
+assert.equal(recovered.status, "failed");
+assert.equal(recovered.replayFromMs, 1200);
+assert.equal(recovered.discardedPartialCount, 1);
+assert.equal(recovered.replayInputPath, "/tmp/audio.pcm");
 console.log("realtime replay tests passed");

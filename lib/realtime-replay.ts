@@ -14,3 +14,10 @@ export interface LocalTrace { runId: string; stage: string; durationMs: number; 
 export function createLocalTrace(runId: string, value: { stage: string; durationMs: number; status: "ok" | "error" }): LocalTrace { return { runId, ...value, at: new Date().toISOString() }; }
 export function appendLocalTrace(file: string, trace: LocalTrace): void { mkdirSync(path.dirname(file), { recursive: true }); appendFileSync(file, `${JSON.stringify(trace)}\n`, "utf8"); }
 export function summarizeReplay(traces: LocalTrace[]): { runCount: number; errorCount: number; totalDurationMs: number; averageDurationMs: number } { const totalDurationMs = traces.reduce((sum, trace) => sum + Math.max(0, trace.durationMs), 0); return { runCount: traces.length, errorCount: traces.filter((trace) => trace.status === "error").length, totalDurationMs, averageDurationMs: traces.length ? totalDurationMs / traces.length : 0 }; }
+
+export interface RecoveryInput { runId: string; confirmedUntilMs: number; pending: Array<{ startMs: number; endMs: number; text: string }>; inputPath: string }
+export interface RecoveryResult { runId: string; status: "failed"; replayFromMs: number; discardedPartialCount: number; replayInputPath: string; errorCode: string }
+export function recoverRealtimeRun(input: RecoveryInput, error: unknown): RecoveryResult {
+  if (!input.runId.trim() || !input.inputPath.trim() || !Number.isFinite(input.confirmedUntilMs) || input.confirmedUntilMs < 0) throw new Error("invalid recovery input");
+  return { runId: input.runId, status: "failed", replayFromMs: input.confirmedUntilMs, discardedPartialCount: input.pending.length, replayInputPath: input.inputPath, errorCode: error instanceof Error ? "worker_failure" : "unknown_failure" };
+}
