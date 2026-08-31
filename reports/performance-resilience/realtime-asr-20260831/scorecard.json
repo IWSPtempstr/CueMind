@@ -1,1 +1,1 @@
-{"releaseDecision":"keep-cli","gatesPassed":false,"executedCases":0,"failures":["real replay not executed"],"confirmedDuplicates":0,"rollbackCount":0}
+{"releaseDecision":"streaming-default-by-user","gatesPassed":false,"executedCases":0,"failures":["real replay not executed"],"confirmedDuplicates":0,"rollbackCount":0,"note":"Manual release decision; automated gates remain incomplete."}

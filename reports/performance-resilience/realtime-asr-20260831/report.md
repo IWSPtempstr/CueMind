@@ -1,3 +1,3 @@
 # Realtime ASR evaluation
 
-Status: not executed. No fixture or synthetic result is presented as production evidence. Streaming remains opt-in and CLI remains the default until real dataset replay, latency/resource measurements, duplicate/omission checks, recovery timing, and manual release review are complete.
+Status: manually released as the production default by explicit user decision. Real replay and automated gates were not executed; no fixture or synthetic result is presented as production evidence. Set `CUEMIND_REALTIME_ASR=cli` to roll back to the CLI path.
