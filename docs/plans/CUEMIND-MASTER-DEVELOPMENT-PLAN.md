@@ -698,6 +698,16 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：阶段 8C 基础实现完成；本地命中不增加网络调用，过期/`superseded` 决定 fail-closed，索引不可用时不阻塞实时卡片链路。
 - 遗留：在目标 Vault 上执行重建脚本并补充真实会议数据的 Recall@3/误注入率；当前评测为 fixture，不代表真实语料覆盖率。
 
+### 2026-08-31：真实性能与韧性测评补齐执行器
+
+- 阶段：阶段 7.7/7.8、阶段 8 / 真实性能与韧性测评补齐。
+- 原因：补齐真实 ASR 延迟与吞吐、llama.cpp tok/s/TTFT、逐请求时间线和非破坏性资源压力/恢复四项测评缺口。
+- 变更：新增 `lib/performance-metrics.ts`、`lib/llama-timing.ts`、`lib/request-timeline.ts`；新增 `scripts/evaluate-asr-latency.ts`、`scripts/evaluate-llama-timing.ts`、`scripts/evaluate-request-timeline.ts`、`scripts/evaluate-resource-pressure.ts` 和 `scripts/test-performance-metrics.ts`。所有执行器均输出独立 `manifest/cases/failures/scorecard/report`，失败保留在分母中。
+- 真实证据：`reports/performance-resilience/asr-smoke-20260831/` 真实 CUDA whisper.cpp 视频样本 1 个，音频 `1377431ms`、处理 `52921ms`、RTF `0.0373`、吞吐 `26.03 audio-sec/sec`、46 个 segment 无乱序/重叠/重复；`reports/performance-resilience/llama-smoke-20260831/` 真实 llama.cpp SSE 8 题，8/8 成功，tok/s P50 `47.70`，上游首 token P50/P95 `71.8/928.0ms`，完成 P50/P95 `656/1971ms`；`reports/performance-resilience/timeline-smoke-20260831/` 真实 `/api/ask` 3/3 请求含 `runId` 时间线，缺失 capture/ASR/render 事件显式统计；`reports/performance-resilience/pressure-smoke-20260831-v2/` 1/2 并发共 3 请求均成功，GPU 采样约 `3–96%`、显存约 `6840–6844MiB/8188MiB`，应用和 llama health 恢复探针均通过。
+- 验证：`npx tsc --noEmit --pretty false`、`npm run lint`、`TMPDIR=/tmp npx tsx scripts/test-performance-metrics.ts`、`scripts/test-asr-reliability.ts`、`scripts/test-realtime-replay.ts` 和 `npm run build` 均通过；build 仅保留既有 `module.createRequire failed parsing argument` 警告。
+- 结论：四项测评的可复现执行器和真实小规模样本已具备；ASR partial/confirmed 在 CLI per-request 模式不可得，Ask 路由的 capture/ASR/render 事件尚未暴露，故对应字段保持 `null`，不将 buffered first byte 冒充 TTFT。
+- 遗留：扩大 ASR 至全部 15 个有音频视频并执行分层长时回放；对 4B/8B 各完成冷启动 3 次与预热 10 次；补齐业务链路的 capture/ASR/render 事件；在确认显存余量后再决定是否执行 4 并发档位；不得进行破坏性 OOM。
+
 ```markdown
 ### YYYY-MM-DD：<阶段/变更名称>
 
