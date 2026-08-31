@@ -348,7 +348,7 @@ async function searchWithRetry(
         timeoutMs: 4_000,
       });
       // Ask 缓存单向写：同关键词询问复用本次结果，避免重复外发（fire-and-forget，吞错）。
-      try { askCacheSet(keyword, outcome.results); } catch { /* 不影响卡片链路 */ }
+      try { askCacheSet(keyword, outcome.results, "context_card"); } catch { /* 不影响卡片链路 */ }
       return outcome;
     } catch (caught) {
       lastError = caught;

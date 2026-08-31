@@ -264,7 +264,7 @@ export async function POST(
         const cachedSources = cacheMode === "cold" ? null : askCacheGet(effectiveCacheKey);
         if (cachedSources !== null) {
           cacheHit = true;
-          sources = cachedSources;
+          sources = cachedSources.results;
         } else {
           const searchStartedAt = performance.now();
           let searchOutcome: SearchKeywordOutcome;

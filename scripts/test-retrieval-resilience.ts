@@ -7,6 +7,12 @@ const cache = createAskCache(() => now);
 
 cache.set("  KV Cache ", [], "ask");
 assert.deepEqual(cache.get("kv cache")?.origin, "ask");
+cache.set("card keyword", [], "context_card");
+assert.deepEqual(cache.get("card keyword")?.origin, "context_card");
+assert.equal(
+  classifyCacheObservation({ before: true, warmedBy: null, hit: false }),
+  "cold_miss",
+);
 assert.equal(
   classifyCacheObservation({ before: false, warmedBy: "context_card", hit: true }),
   "card_warmed_hit",
