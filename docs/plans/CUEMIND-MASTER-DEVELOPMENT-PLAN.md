@@ -410,6 +410,59 @@ EAGLE3、KV cache、不同量化档位、更强 GPU或蒸馏模型都只能作�
 
 模型训练不是默认路线。若训练，必须严格遵守决策 65：离线导出、训练、人工评估、人工决定替换；不允许线上自动改权重、Prompt 或 schema。
 
+#### 真实性能与韧性测评补齐方案（2026-08-31）
+
+**状态：方案已登记，尚未执行。**
+**目标：** 补齐当前测评中缺失的真实 ASR 延迟/吞吐、llama.cpp 生成吞吐与首 token、逐请求阶段时间线，以及非破坏性 GPU/CPU 压力和恢复证据；不改变实时卡片、Live Ask、来源约束或降级语义。
+**适用范围：** 阶段 7.7（ASR 可靠性）、阶段 7.8（模型基线）和阶段 8（本地可观测性）。本方案不引入 TTS；CueMind 当前没有语音输出链路，TTS 首音频字节指标保持 `not_applicable`。
+
+**共同证据规则：**
+
+- 所有命令先 `cd /home/work/asr/CueMind`；输入视频/音频仅从现有 `dataset/` 或明确的本地运行目录读取，报告不得复制原始音频和完整转写正文；
+- 每次运行生成独立 `reports/performance-resilience/<run-id>/`，至少包含 `manifest.json`、`cases.jsonl`、`failures.jsonl`、`scorecard.json` 和 `report.md`；
+- `manifest` 固定提交、模型/ASR 文件 SHA-256、llama.cpp/whisper.cpp 版本、硬件、GPU 参数、Prompt 版本、输入数据版本和采样口径；
+- 真实服务、视频/音频回放、mock、fixture 必须分别标记，fixture 或控制流测试不得升级为真实延迟、质量或生产稳定性结论；
+- 失败请求保留在分母中，P50/P95/P99 使用项目统一 nearest-rank 口径；不得通过删样本、改变超时或改写输入来消除失败。
+
+**任务 1：真实 ASR 延迟与吞吐。**
+
+- 新增 `scripts/evaluate-asr-latency.ts`，复用 `lib/local-asr.ts` 的 `transcribeWithWhisperCpp`；输入 manifest 至少包含视频/音频路径、音频时长、语言、模型和 `cold/warm` 标签；
+- 视频模式先用 `ffmpeg` 抽取 16 kHz 单声道 WAV，再执行真实 whisper.cpp；实时模式使用固定视频按原时间速率回放，记录首个 partial、confirmed 提交、最终完成和恢复时间；
+- 每个样本记录 `audioDurationMs`、`elapsedMs`、RTF、音频吞吐（audio seconds/second）、segment 数量、时间单调性、丢段/重复/乱序、进程 RSS 和错误终态；
+- 至少覆盖 15 个本地视频中的有音频样本，并单独报告短音频、长音频、中文/中英混合、静音和断流注入样本；无音频视频只记录 `not_applicable`，不得伪造 ASR 结果；
+- 验收：真实运行有完整分母和 P50/P95/P99；RTF、首 partial、confirmed 延迟可复现；confirmed 不回退、不重复；断流/超时要么恢复并记录恢复时间，要么 fail-closed。
+
+**任务 2：llama.cpp tok/s 与 TTFT。**
+
+- 扩展 `scripts/evaluate-model-providers.ts` 或新增 `scripts/evaluate-llama-timing.ts`，使用同一冻结集和真实 `llama.cpp` OpenAI-compatible endpoint；不把远端 API 延迟当作本地模型证据；
+- 优先从 llama.cpp 响应中的 usage/timings 字段读取 prompt tokens、predicted tokens、prompt processing time、generation time 和 `predicted_per_second`；字段缺失时记录 `timing_unavailable`，不得用总耗时推算 tok/s；
+- TTFT 定义为客户端发出请求到收到首个上游 SSE token/chunk。若服务端 Schema 缓冲导致只能看到 `answer_chunk`，同时记录 `first_event`、`upstream_first_token`（若可得）和 `buffered_first_byte`，不得将后者冒充 TTFT；
+- 每个模型/量化/`-np` 配置至少执行冷启动 3 次、预热后 10 次，记录输入/输出 token、tok/s、TTFT、completion P50/P95/P99、Schema 失败和超时；
+- 验收：同一配置的 timing 字段来源明确；4B/8B 当前候选均有可比较结果；缺失 TTFT 的运行标记为 `partial`，不能写成完整性能结论。
+
+**任务 3：逐请求延迟时间线。**
+
+- 新增统一时间线事件契约（建议 `lib/telemetry.ts` 扩展或新增 `lib/request-timeline.ts`），每个 `runId` 记录单调时钟的 `capture_start/end`、`asr_start/end`、`keyword_start/end`、`search_start/end`、`generation_start/end`、`render_start/end`、`first_event`、`first_token`、`complete` 和终态；
+- 修改测评执行器而非改变业务响应协议，将每次请求写入 `timeline.jsonl`，并由报告脚本生成 `timeline-summary.json`；原始问题、转写正文和 trace payload 只保留脱敏摘要或哈希；
+- 报告同时提供逐请求表、阶段耗时堆叠/瀑布数据、阶段占比、空洞时间（未归因开销）和按 cold/hot、answered/degraded/failed 分层的 P50/P95；
+- 验收：任一请求的阶段时间可相加到总耗时（允许记录调度/网络空洞）；缺失阶段显式为 `null`；失败请求也有时间线；同一 `runId` 不得出现重复或倒序事件。
+
+**任务 4：非破坏性资源压力与恢复。**
+
+- 新增 `scripts/evaluate-resource-pressure.ts`，只使用受控并发和短时压力，不执行人工 OOM、不写入系统目录、不停止 systemd 管理的 llama 服务；
+- 压力档位固定为：基线单请求、2 个并发请求、4 个并发请求（若队列/显存已接近上限则自动停止升档）；每 250–500ms 采样 `nvidia-smi` 的 GPU 利用率/显存、进程 RSS、系统 CPU、队列长度和请求终态；
+- 在每个档位注入一次可恢复的请求超时、短暂网络失败或服务重启，记录检测时间、在途请求终态、后续请求恢复时间和是否影响 ASR；服务重启只能通过现有 systemd 操作；
+- 验收：压力不导致数据损坏、请求无限阻塞或静默失败；每个失败有 `timeout/degraded/model_failed/recovered` 等终态；恢复探针连续通过后才结束该档位；报告明确“观测压力”与“未执行 OOM 压测”的边界。
+
+**执行顺序与提交：**
+
+1. 先以 fixture/纯函数测试锁定时间线和 ASR/模型 timing 解析契约；
+2. 再执行真实 ASR 和 llama.cpp 基线，确认服务健康后保存报告；
+3. 运行逐请求时间线和资源压力矩阵，最后执行 `tsc`、lint、build 及既有回归；
+4. 每项任务单独提交本地 commit；只有四项报告齐全且失败终态可解释，才能更新阶段 7.7/7.8 和阶段 8 的状态。
+
+**明确不做：** 不接入 TTS；不把 `nvidia-smi` 单次快照当作压力测试；不进行破坏性 OOM；不引入自动扩容、自动换模、自动改 Prompt 或线上自适应参数。
+
 ## 6. 统一发布与验收门禁
 
 每个阶段独立提交、独立验证。涉及代码时执行：
