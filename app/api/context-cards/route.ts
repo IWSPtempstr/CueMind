@@ -12,6 +12,7 @@ import type { ContextCard, ContextCardDemoTrace } from "@/types/suggestions";
 import { getKnowledgeMemoryStore } from "@/lib/knowledge-memory-store";
 import type { MemoryHit } from "@/lib/knowledge-memory";
 import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
+import { appendPipelineEvents } from "@/lib/pipeline-event-store";
 
 export const runtime = "nodejs";
 
@@ -701,6 +702,8 @@ function makeTrace(
       /* 旁路失败不影响响应 */
     }
   }
+  const nativeEvents = events.flatMap((event) => event.pipelineEvent ? [event.pipelineEvent] : []);
+  try { appendPipelineEvents(nativeEvents); } catch { /* telemetry is best effort */ }
   return {
     traceId,
     runId: traceId,
@@ -713,7 +716,7 @@ function makeTrace(
     modelName: provider.model,
     modelBaseUrl: provider.baseUrl,
     events,
-    pipelineEvents: events.flatMap((event) => event.pipelineEvent ? [event.pipelineEvent] : []),
+    pipelineEvents: nativeEvents,
     decisionSource,
     finalState,
     duplicateOfCandidateId,

@@ -18,6 +18,7 @@ import {
 import {
   appendPipelineEvent,
   createPipelineEvent,
+  persistPipelineEvent,
   type PipelineEvent,
   type RequestTimelineEventName,
 } from "@/lib/request-timeline";
@@ -130,6 +131,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
       const event = createPipelineEvent(runId, name, monotonicNow(), metadata);
       const runEvents = pipelineByRunRef.current.get(runId) ?? [];
       appendPipelineEvent(runEvents, event);
+      persistPipelineEvent(event);
       pipelineByRunRef.current.set(runId, runEvents);
       pipelineEventsRef.current.push(event);
       setPipelineEvents([...pipelineEventsRef.current]);
@@ -196,7 +198,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
       if (text) {
         setTranscriptState((previous) => [
           ...previous,
-          { id: crypto.randomUUID(), text, timestamp },
+          { id: crypto.randomUUID(), text, timestamp, pipelineRunId: segment.runId },
         ].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()));
       }
       // confirmed 文本已落账：清掉同 segment 的 partial 展示并重置节流周期

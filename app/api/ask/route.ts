@@ -34,6 +34,8 @@ import {
   type SearchKeywordOutcome,
   type SearchResult,
 } from "@/lib/search";
+import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
+import { appendPipelineEvents } from "@/lib/pipeline-event-store";
 
 // Idle watchdog for the streamed generation: a stalled provider is aborted,
 // steady token output never is (same semantics as the old chat route).
@@ -103,6 +105,9 @@ export async function POST(
   }
 
   const termHint = cappedText(record.termHint, 200).trim();
+  const runId = typeof record.runId === "string" && record.runId.trim().length > 0
+    ? record.runId.trim().slice(0, 160)
+    : crypto.randomUUID();
   const cacheMode = record.cacheMode === "cold" || record.cacheMode === "hot" ? record.cacheMode : "default";
   const cacheKey = cappedText(record.cacheKey, 200).trim();
   const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
@@ -184,6 +189,16 @@ export async function POST(
       let searchMs = 0;
       let generationMs = 0;
       let cacheHit = false;
+      const pipelineEvents: PipelineEvent[] = [];
+      const emitPipelineEvent = (name: PipelineEvent["name"], metadata?: unknown): void => {
+        try {
+          const event = createPipelineEvent(runId, name, performance.now() - startedAt, metadata);
+          appendPipelineEvent(pipelineEvents, event);
+          emit({ event: "pipeline_event", pipelineEvent: event });
+        } catch {
+          // Timing is best effort and must never interrupt the answer stream.
+        }
+      };
       const logStages = (finalState: AskFinalState): void => {
         // Ask latency is tracked independently from card metrics: stages only
         // land in the done event and this console line (no ledger/telemetry).
@@ -193,7 +208,8 @@ export async function POST(
       };
       const done = (payload: Record<string, unknown>, finalState: AskFinalState): void => {
         logStages(finalState);
-        emit({ event: "done", finalState, cacheHit, stages: { keywordMs, searchMs, generationMs }, ...payload });
+        try { appendPipelineEvents(pipelineEvents); } catch { /* telemetry is best effort */ }
+        emit({ event: "done", runId, pipelineEvents, finalState, cacheHit, stages: { keywordMs, searchMs, generationMs }, ...payload });
       };
 
       try {
@@ -224,6 +240,7 @@ export async function POST(
         // Failure degrades to termHint, then to the question prefix.
         const keywordStartedAt = performance.now();
         let keywords: string[] = [];
+        emitPipelineEvent("keyword_start", { status: "started" });
         try {
           const extracted = await generateLlamaCppJson<{ keywords?: unknown }>({
             baseUrl: provider.baseUrl,
@@ -250,6 +267,7 @@ export async function POST(
         }
         if (keywords.length === 0) keywords = [termHint];
         keywordMs = Math.round(performance.now() - keywordStartedAt);
+        emitPipelineEvent("keyword_end", { status: keywords.length > 0 ? "completed" : "failed" });
         // searchKeywordSources takes one keyword: the first extracted term is the
         // most salient; joined multi-keyword queries degrade vertical recall.
         const searchKeyword = keywords[0];

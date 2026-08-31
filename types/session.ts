@@ -6,6 +6,8 @@ import type { MeetingDecisionRecord } from "@/lib/knowledge-memory";
 export type AudioSource = "system" | "microphone" | "upload";
 
 export interface LatencyTrace {
+  /** Native pipeline event correlation ID; no transcript or prompt data. */
+  runId?: string;
   captureStartedAt?: Date;
   captureEndedAt?: Date;
   asrStartedAt?: Date;
@@ -22,6 +24,8 @@ export interface LatencyTrace {
 export interface TranscriptChunk {
   id: string;
   text: string;
+  /** 贯穿音频、ASR、关键词、卡片和渲染的本地链路关联 ID。 */
+  pipelineRunId?: string;
   timestamp: Date;
   source?: AudioSource;
   /** 双轨桌面模式的说话人角色（决策 2.2 纯 DSP 标注）；单轨/上传链路不设。 */

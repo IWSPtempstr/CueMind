@@ -9,6 +9,7 @@ import type { LatencySample } from "@/lib/telemetry";
 import {
   appendPipelineEvent,
   createPipelineEvent,
+  persistPipelineEvent,
   type PipelineEvent,
   type RequestTimelineEventName,
 } from "@/lib/request-timeline";
@@ -61,6 +62,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       const event = createPipelineEvent(runId, name, monotonicNow(), metadata);
       const runEvents = pipelineByRunRef.current.get(runId) ?? [];
       appendPipelineEvent(runEvents, event);
+      persistPipelineEvent(event);
       pipelineByRunRef.current.set(runId, runEvents);
       pipelineEventsRef.current.push(event);
       setPipelineEvents([...pipelineEventsRef.current]);
@@ -143,6 +145,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
         {
           id: crypto.randomUUID(),
           text: payload.text.trim(),
+          pipelineRunId: runId,
           timestamp: new Date(event.startedAt),
           source: event.source,
           ...(speaker ? { speaker } : {}),

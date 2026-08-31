@@ -5,7 +5,7 @@ import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
 import type { ContextCard, ContextCardFailure } from "@/types/suggestions";
-import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
+import { appendPipelineEvent, createPipelineEvent, persistPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
 
 type ContextCardTrace = NonNullable<ContextCard["demoTrace"]> & {
   finalState: NonNullable<ContextCard["demoTrace"]>["finalState"] | "suppressed_as_duplicate";
@@ -59,6 +59,7 @@ export default function useContextCards({ transcriptChunks, isRecording, session
       const event = createPipelineEvent(runId, name, typeof performance !== "undefined" ? performance.now() : Date.now(), metadata);
       const eventsForRun = pipelineEventsRef.current.filter((item) => item.runId === runId);
       appendPipelineEvent(eventsForRun, event);
+      persistPipelineEvent(event);
       pipelineEventsRef.current = [...pipelineEventsRef.current.filter((item) => item.runId !== runId), ...eventsForRun];
       setPipelineEvents([...pipelineEventsRef.current]);
     } catch {
@@ -73,7 +74,7 @@ export default function useContextCards({ transcriptChunks, isRecording, session
     if (now - lastRunAtRef.current < settings.contextCardCooldownSeconds * 1000) return;
     runningRef.current = true;
     lastRunAtRef.current = now;
-    const runId = crypto.randomUUID();
+    const runId = chunks.find((chunk) => chunk.pipelineRunId)?.pipelineRunId ?? crypto.randomUUID();
     setIsLoading(true);
     const knownKeywords = cardsRef.current.map((card) => card.keyword);
     const knownCandidates = cardsRef.current.map(({ candidateId, keyword }) => ({ candidateId, keyword }));

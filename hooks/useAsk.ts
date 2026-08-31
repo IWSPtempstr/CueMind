@@ -352,6 +352,7 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
 
       const termHint = options?.termHint?.trim() ?? "";
       const sessionIdValue = sessionIdRef.current;
+      const runId = crypto.randomUUID();
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -360,6 +361,7 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            runId,
             question: trimmed,
             recentTranscript,
             ...(termHint !== "" ? { termHint } : {}),

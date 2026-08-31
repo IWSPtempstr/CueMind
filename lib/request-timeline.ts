@@ -76,6 +76,17 @@ export function appendPipelineEvent(events: PipelineEvent[], event: PipelineEven
   events.push(event);
 }
 
+/** Browser-side best-effort JSONL sink through the local API route. */
+export function persistPipelineEvent(event: PipelineEvent): void {
+  if (typeof window === "undefined" || typeof window.fetch !== "function") return;
+  void window.fetch("/api/pipeline-events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify([event]),
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 export function createRequestTimeline(runId: string, events: RequestTimelineEvent[], status: string): RequestTimeline {
   const timeline = { runId, status, events: [...events] };
   validateRequestTimeline(timeline);
