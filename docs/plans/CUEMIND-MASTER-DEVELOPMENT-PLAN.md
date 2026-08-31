@@ -349,12 +349,12 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 #### 阶段 8B：会后体验增强
 
-**状态：整理、脱敏和时间线数据层已实现，前端触发与 Vault sidecar 交接待补齐。**
+**状态：整理、脱敏、时间线数据层、前端触发和 Vault sidecar 已实现；真实桌面音频播放仍未纳入。**
 **目标：** 在不修改原始会议事实的前提下提供整理、脱敏和可回放的时间定位数据。
 **范围：** 会后异步 `polishTranscript`（失败回退原文）；确定性规则和用户词典驱动的脱敏导出副本；Markdown/JSON/Vault 保留 `startMs/endMs`；新增 `timeline.json` 关联转写、卡片、询问和总结段落。
 **实现边界：** 不实现 Electron 播放器、`cuemind://` 协议或未经验证的音频 URL；时间线首版只提供稳定导出锚点，未来播放器复用该契约。
 **隐私与审计：** 原始转写、SQLite、浏览器会话和 Vault 不可覆盖；脱敏附带 `redaction-manifest.json`，不记录原始敏感值并标记人工复核要求。
-**验收：** `scripts/test-postmeeting-experience.ts` 已通过；整理失败可回退；导出副本支持 raw/polished 与 redacted 选项，且不含已匹配敏感词；`timeline-v1` 毫秒值与原始 `TranscriptChunk` 一致；模型、Prompt、规则和导出版本可追溯。会后 UI 触发、Vault `timeline.json`/`redaction-manifest.json` sidecar 和音频播放仍未声称完成。
+**验收：** `scripts/test-postmeeting-experience.ts` 和 `scripts/test-vault-exporter.ts` 已通过；会后可通过 `/api/postmeeting-transcript` 和前端“整理转写”按钮生成整理版，失败可回退；导出副本支持 raw/polished 与 redacted 选项；会议笔记自动写入 `<meeting>.md.timeline.json` 与 `<meeting>.md.redaction-manifest.json`；`timeline-v1` 毫秒值与原始 `TranscriptChunk` 一致。真实桌面音频播放和 seek 仍未纳入。
 
 **设计依据：** [检索韧性与会后体验设计](2026-08-31-retrieval-resilience-postmeeting-design.md)。
 
