@@ -36,6 +36,16 @@ export interface MeetingReport {
   generatedAt: Date;
 }
 
+export interface PostmeetingTranscriptArtifact {
+  status: "polished" | "fallback_raw";
+  text: string;
+  rawHash: string;
+  provider: "local" | "injected";
+  promptVersion: string;
+  generatedAt: Date;
+  failureReason?: string;
+}
+
 export interface SessionSnapshot {
   id: string;
   title: string;
@@ -47,4 +57,5 @@ export interface SessionSnapshot {
   suggestionBatches: SuggestionBatch[];
   chatMessages: ChatMessage[];
   meetingReport: MeetingReport | null;
+  postmeetingTranscript?: PostmeetingTranscriptArtifact;
 }

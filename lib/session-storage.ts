@@ -23,6 +23,9 @@ function revive(session: SessionSnapshot): SessionSnapshot {
     suggestionBatches: session.suggestionBatches.map((batch) => ({ ...batch, timestamp: new Date(batch.timestamp) })),
     chatMessages: session.chatMessages.map((message) => ({ ...message, timestamp: new Date(message.timestamp), isStreaming: false })),
     meetingReport: session.meetingReport ? { ...session.meetingReport, generatedAt: new Date(session.meetingReport.generatedAt) } : null,
+    postmeetingTranscript: session.postmeetingTranscript
+      ? { ...session.postmeetingTranscript, generatedAt: new Date(session.postmeetingTranscript.generatedAt) }
+      : undefined,
   };
 }
 
