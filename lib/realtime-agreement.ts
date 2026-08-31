@@ -17,6 +17,12 @@ export class LocalAgreement2 {
     return { confirmedText, partialText: next.text };
   }
   metrics(): { rollbackCount: number; duplicateCount: number } { return { rollbackCount: this.rollbackCount, duplicateCount: this.duplicateCount }; }
+  finalize(snapshot: DecodeSnapshot): { text: string; confirmedUntilMs: number } {
+    if (snapshot.endMs < this.watermark) return { text: "", confirmedUntilMs: this.watermark };
+    this.watermark = Math.max(this.watermark, snapshot.endMs);
+    this.previous = snapshot;
+    return { text: snapshot.text.trim(), confirmedUntilMs: this.watermark };
+  }
 }
 
 function commonPrefix(a: string, b: string): string {

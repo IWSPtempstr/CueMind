@@ -7,6 +7,7 @@ assert.equal(agreement.push({ text: "alpha better", startMs: 0, endMs: 1200 }).c
 assert.equal(agreement.confirmedUntilMs, 1000);
 assert.equal(agreement.push({ text: "alpha", startMs: 0, endMs: 900 }).confirmedText, "");
 assert.equal(agreement.metrics().rollbackCount, 1);
+assert.deepEqual(agreement.finalize({ text: "tail", startMs: 1000, endMs: 1500 }), { text: "tail", confirmedUntilMs: 1500 });
 const frame = encodeSseEvent({ type: "partial", runId: "r", segmentId: "s", text: "hi", startMs: 0, endMs: 10 });
 assert.deepEqual(parseSseFrames(`${frame}\n${encodeSseEvent({ type: "final", runId: "r", segmentId: "s", text: "hi", startMs: 0, endMs: 10 })}`), [
   { type: "partial", runId: "r", segmentId: "s", text: "hi", startMs: 0, endMs: 10 },
