@@ -358,6 +358,34 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 **设计依据：** [检索韧性与会后体验设计](2026-08-31-retrieval-resilience-postmeeting-design.md)。
 
+#### 阶段 8C：本地历史知识复用（知识卡片与会议决定）
+
+**状态：基础实现已完成；真实 Vault 数据重建和长期回归待执行。**
+**目标：** 将会后确认的知识卡片和会议决定以可追溯、低延迟的本地索引形式复用到下一次会议；不把历史全文无界注入实时 Prompt，不引入 embedding、Milvus 或外部向量服务。
+**范围：** 仅沉淀两类对象：`knowledge_card`（关键词、别名、解释、来源和起源会议）与 `meeting_decision`（决定内容、范围、证据窗口、有效期和状态）。原始会议 Markdown、转写和 Vault 概念文件保持不可覆盖；索引是可重建的派生产物。
+**检索策略：**
+
+1. 规范化关键词/别名哈希命中（Unicode NFKC、大小写折叠、空白和连字符归一化）；
+2. SQLite FTS5 中文 2-gram/ASCII token 索引，使用 `bm25()` 排序；
+3. 元数据过滤：`kind`、`status`、`originMeeting`、`validUntil` 和更新时间；
+4. 确定性字段加权后最多返回 3 条，并在卡片/Ask 上标记 `sourceType: "vault"`；
+5. 未命中才继续现有垂直源和通用搜索，保持 fail-closed。
+
+**实时性约束：** 索引写入只发生在会后 Vault 导出或显式重建任务中；实时请求只执行一次规范化、一次 FTS 查询和有限元数据过滤。不得在卡片 P95 链路中扫描整个 Vault、调用 embedding 模型或启动网络请求。Vault 索引不可用时退回现有检索，不阻塞实时链路。
+
+**计划任务与文件边界：**
+
+- 任务 1（数据契约与规范化）：新增 `lib/knowledge-memory.ts`，定义 `KnowledgeCardRecord`、`MeetingDecisionRecord`、规范化函数和统一命中类型；新增 `scripts/test-knowledge-memory.ts`，覆盖 Unicode/大小写/别名、空输入和状态过滤。
+- 任务 2（SQLite FTS5 索引）：新增 `lib/knowledge-memory-store.ts`，复用 `CUEMIND_DATA_DIR`，建立 `knowledge_memory` 表和 `knowledge_memory_fts`（contentless FTS5）；提供幂等 upsert、按 kind/status/time 搜索和 JSONL 降级；新增 `scripts/test-knowledge-memory-store.ts`，覆盖新库、重复写入、FTS BM25 顺序和 SQLite 不可用回退。
+- 任务 3（Vault 导出接入）：修改 `types/session.ts`、`app/api/vault-export/route.ts`、`lib/vault-exporter.ts`，支持显式会议决定字段并在会后导出成功后旁路写入索引；概念卡片导出同步写入索引；原始文件仍不可变，索引失败只记录本地错误。
+- 任务 4（实时读取）：新增 `lib/local-memory-retrieval.ts` 和 `app/api/local-memory/route.ts`；先 exact/alias 再 FTS，返回最多 3 条带来源、状态和起源会议的结果。`app/api/context-cards/route.ts` 仅在关键词已通过现有硬规则后调用本地读取，命中直接生成历史卡片或作为本地证据，不改变网络回退和来源不足终态。
+- 任务 5（回归与观测）：新增 `scripts/test-local-memory-route.ts` 和 `scripts/evaluate-local-memory.ts`，覆盖命中、别名、过期/被替代决定、空库、索引损坏、断网和实时延迟；报告写入 `reports/local-memory/<run-id>/`，不得写入 `dataset/`。
+- 任务 6（历史重建）：新增 `scripts/rebuild-local-memory-index.ts`，只读扫描既有 `cuemind/concepts/*.md` 并幂等重建本地索引；Vault 不存在或文件损坏时跳过并输出计数，不修改原文件。
+
+**异常矩阵归属：** 索引损坏、SQLite/JSONL 后端切换、重复 upsert、Vault 文件被人工编辑、过期或冲突决定、实时查询超时和本地索引不可用；所有异常必须退回现有检索或明确无历史上下文，不得编造决定。
+**验收：** 规范化相同的关键词得到相同 cache/index key；卡片和决定可幂等写入并被 FTS5/BM25 检索；过期/`superseded` 决定不会作为当前结论注入；正常本地命中不产生网络调用且 P95 目标 ≤100ms（fixture 当前 P95 `1.01ms`）；本地索引失败不阻塞卡片链路；历史概念可通过重建脚本导入；现有 `test-context-card-route.ts`、`test-vault-exporter.ts`、`test-retrieval-resilience.ts` 全部回归通过。
+**明确不做：** dense embedding、HNSW/IVF/PQ、cross-encoder rerank、自动从整段转写抽取未经确认的决定、云端知识库同步。
+
 ### 阶段 9：受控模型评估
 
 **状态：候选登记、人工发布和回滚基础已完成，真实模型矩阵与影子运行待执行。**
@@ -598,6 +626,24 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：本轮已满足冷热命中和 schema 要求；按用户指示忽略 P95 门禁阻断，但保留 cold P99 超时风险证据。阶段 1 还需产品确认是否接受 P99 风险后再标记关闭。
 
 ### 后续记录模板
+
+### 2026-08-31：登记阶段 8C 本地历史知识复用计划
+
+- 阶段：阶段 8C / 本地历史知识复用。
+- 原因：用户确认下一次会议只复用两类沉淀内容：知识卡片和会议决定，并要求采用规范化关键词哈希表、SQLite FTS5 + BM25 和元数据索引，同时保持实时性。
+- 变更：新增阶段 8C 计划，定义数据契约、索引写入、实时读取、异常矩阵、测试报告和明确排除项；实时链路不引入 embedding、Milvus 或 rerank。
+- 证据：已核对 `CLAUDE.md`、产品决策文档和现有 `session-store` 的 FTS5/BM25 实现；当前 Vault 读方向仍未接入实时 `context-cards`，故本阶段作为独立实现任务登记。
+- 结论：计划已登记，尚未声称代码完成；执行顺序为数据契约 → SQLite 索引 → Vault 写入 → 实时读取 → 回归测评。
+- 遗留：按阶段 8C 任务逐项实现，每项完成后运行定向测试并提交本地 commit。
+
+### 2026-08-31：阶段 8C 基础实现与本地索引评测
+
+- 阶段：阶段 8C / 本地历史知识复用。
+- 原因：落实知识卡片、会议决定在下一次会议中的低延迟本地复用，不改变既有网络检索和 fail-closed 规则。
+- 变更：新增 `lib/knowledge-memory.ts`、`lib/knowledge-memory-store.ts`、`app/api/local-memory/route.ts`；Vault 导出支持显式 `decisions` 并旁路索引卡片/决定；`context-cards` 在关键词硬规则通过后注入最多 3 条本地历史证据；新增 `scripts/rebuild-local-memory-index.ts`、契约/存储/路由/评测脚本。
+- 证据：`TMPDIR=/tmp npx tsx scripts/evaluate-local-memory.ts` → SQLite、6/6 fixture、P50 `0.19ms`、P95 `1.01ms`、无网络；`test-knowledge-memory.ts`、`test-knowledge-memory-store.ts`（SQLite/JSONL）、`test-local-memory-route.ts`、`test-vault-exporter.ts`、`test-context-card-route.ts`、`test-retrieval-resilience.ts` 均通过；`npx tsc --noEmit --pretty false` 和 `npm run lint` 通过。
+- 结论：阶段 8C 基础实现完成；本地命中不增加网络调用，过期/`superseded` 决定 fail-closed，索引不可用时不阻塞实时卡片链路。
+- 遗留：在目标 Vault 上执行重建脚本并补充真实会议数据的 Recall@3/误注入率；当前评测为 fixture，不代表真实语料覆盖率。
 
 ```markdown
 ### YYYY-MM-DD：<阶段/变更名称>
