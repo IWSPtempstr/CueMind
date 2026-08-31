@@ -509,6 +509,8 @@ EAGLE3、KV cache、不同量化档位、更强 GPU或蒸馏模型都只能作�
 
 **阶段 5：真实回放、压力和人工发布。** 用 `dataset/` 有音频视频按原速回放，对 CLI/streaming 做 A/B，记录首 partial、首 confirmed、最终延迟、RTF、吞吐、资源、重复/漏段和卡片触发数；执行 10/30 分钟及 1/2 路受控并发，不执行 OOM；冻结协议、模型和参数，经人工 release/rollback 后才可切换默认模式。
 
+**2026-08-31 执行记录：** 阶段 0–4 已实现并分别提交：`1f9a3af`、`a8263c0`、`1f9bde6`、`5282242`、`e354970`。契约、worker 队列/生命周期、SSE/LocalAgreement-2、final decode 与恢复回放定向测试，以及每阶段 `tsc`/lint 均通过。阶段 5 的真实 dataset 回放、10/30 分钟压力、资源采样和人工发布门禁本次未执行；证据记录于 `reports/performance-resilience/realtime-asr-20260831/`，因此 streaming 仍保持 opt-in，CLI 继续为默认。`dataset/` 未加入 Git。
+
 **共同验收：** Trace 只保存 ID、时间戳、状态、耗时和错误码，不保存原始音频、完整转录或模型 payload；阶段 2 以前不得改变生产默认链路；每阶段独立测试、报告和本地 commit，任一门禁失败均保留 CLI 默认。
 
 **执行顺序与提交：**
