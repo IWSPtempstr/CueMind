@@ -1,0 +1,13 @@
+{
+  "version": "retrieval-resilience-v1",
+  "cases": [
+    { "id": "single_vertical_timeout", "kind": "search", "scenario": "single_vertical_timeout", "expected": "vertical_success" },
+    { "id": "vertical_fallback", "kind": "search", "scenario": "vertical_fallback", "expected": "generic_fallback" },
+    { "id": "all_sources_timeout", "kind": "search", "scenario": "all_sources_timeout", "expected": "search_failed" },
+    { "id": "cold_miss", "kind": "cache", "observation": { "before": true, "warmedBy": null, "hit": false }, "expected": "cold_miss" },
+    { "id": "card_warmed_hit", "kind": "cache", "observation": { "before": false, "warmedBy": "context_card", "hit": true }, "expected": "card_warmed_hit" },
+    { "id": "ask_hot_hit", "kind": "cache", "observation": { "before": false, "warmedBy": "ask", "hit": true }, "expected": "ask_hot_hit" },
+    { "id": "expired_miss", "kind": "cache", "observation": { "before": false, "warmedBy": null, "hit": false }, "expected": "expired_miss" },
+    { "id": "alias_normalization", "kind": "cache", "term": "  KV Cache ", "lookup": "kv cache", "expected": "ask_hot_hit" }
+  ]
+}
