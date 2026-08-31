@@ -18,6 +18,8 @@ import type { AskExchange } from "@/lib/ask-history";
 import { createVaultEntry } from "@/lib/vault-governance";
 import { buildTimeline, type Timeline } from "@/lib/timeline";
 import type { RedactionManifest } from "@/lib/redaction";
+import { getKnowledgeMemoryStore } from "@/lib/knowledge-memory-store";
+import type { MeetingDecisionRecord } from "@/lib/knowledge-memory";
 
 export type VaultTranscriptMode = "none" | "folded" | "full";
 
@@ -59,6 +61,7 @@ export interface MeetingMarkdownArgs {
   exportTranscript?: VaultTranscriptMode;
   /** 会中询问问答对（可选）；exportTranscript === "none" 时不渲染该小节。 */
   asks?: AskExchange[];
+  decisions?: MeetingDecisionRecord[];
   timeline?: Timeline;
   redactionManifest?: RedactionManifest;
 }
@@ -242,6 +245,21 @@ function buildAskSection(asks: readonly AskExchange[]): string[] {
   return lines;
 }
 
+function buildDecisionSection(decisions: readonly MeetingDecisionRecord[]): string[] {
+  const valid = decisions.filter((decision) => decision.kind === "meeting_decision" && decision.decision.trim().length > 0);
+  if (valid.length === 0) return [];
+  const lines = ["## 会议决定", ""];
+  for (const decision of valid) {
+    const scope = decision.scope?.trim();
+    lines.push(`- ${flattenInline(decision.decision)}`);
+    if (scope) lines.push(`  - 范围：${flattenInline(scope)}`);
+    lines.push(`  - 状态：${decision.status}`);
+    if (decision.validUntil) lines.push(`  - 有效至：${decision.validUntil}`);
+  }
+  lines.push("");
+  return lines;
+}
+
 /** 会议笔记 markdown：frontmatter 契约 date/duration/input_source/asr_model/audio_hash/transcript/topic。 */
 export function buildMeetingMarkdown(args: MeetingMarkdownArgs): MarkdownPiece {
   const mode: VaultTranscriptMode = args.exportTranscript === "none" || args.exportTranscript === "full" ? args.exportTranscript : "folded";
@@ -283,6 +301,8 @@ export function buildMeetingMarkdown(args: MeetingMarkdownArgs): MarkdownPiece {
   if (summary.length > 0) {
     lines.push("## 主题摘要", "", summary, "");
   }
+
+  lines.push(...buildDecisionSection(args.decisions ?? []));
 
   const cards = (args.cards ?? []).filter((card) => typeof card?.keyword === "string" && card.keyword.trim().length > 0);
   if (cards.length > 0) {
@@ -467,6 +487,13 @@ export function exportMeetingToVault(root: string, meeting: MeetingMarkdownArgs)
     replacementCounts: {},
   };
   writeFileSync(path.join(dir, `${fileName}.redaction-manifest.json`), `${JSON.stringify(redactionManifest, null, 2)}\n`, "utf8");
+  try {
+    const memory = getKnowledgeMemoryStore();
+    if (meeting.decisions && meeting.decisions.length > 0) memory.upsert(meeting.decisions);
+  } catch {
+    // Vault export remains authoritative; an unavailable derived index must not
+    // turn a successful, immutable meeting export into a failed request.
+  }
   const fileHash = computeFileHash(content);
   const relFile = `${VAULT_SUBDIR}/${MEETINGS_DIR}/${fileName}`;
   sidecar[meeting.id] = { file: relFile, fileHash, exportedAt: new Date().toISOString() };
@@ -504,6 +531,29 @@ export function exportConceptToVault(root: string, card: ConceptCardInput): Conc
   const piece = buildConceptMarkdown(card, prev);
   const content = assembleMarkdown(piece);
   writeFileSync(filePath, content, "utf8");
+  const indexedAt = new Date().toISOString();
+  const sourceUrls = (card.sources ?? [])
+    .filter((source) => typeof source?.url === "string" && source.url.length > 0)
+    .map((source) => source.url);
+  try {
+    getKnowledgeMemoryStore().upsert([{
+      id: card.candidateId,
+      kind: "knowledge_card",
+      keyword: card.keyword.trim(),
+      aliases: [card.keyword.trim()],
+      explanation: card.explanation?.trim() ?? "",
+      keyPoints: card.keyPoints,
+      sourceUrls,
+      originMeeting: card.originMeeting?.trim() || card.candidateId,
+      status: "active",
+      validUntil: null,
+      createdAt: indexedAt,
+      updatedAt: indexedAt,
+    }]);
+  } catch {
+    // The markdown Vault remains the source of truth; index failures are
+    // intentionally non-blocking and are recoverable through a rebuild.
+  }
 
   sidecar[key] = { file: relFile, fileHash: computeFileHash(content), exportedAt: new Date().toISOString() };
   writeSidecar(root, sidecar);

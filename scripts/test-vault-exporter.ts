@@ -14,6 +14,7 @@ import {
   slugifyTerm,
 } from "@/lib/vault-exporter";
 import { getVaultEntry } from "@/lib/vault-governance";
+import { getKnowledgeMemoryStore, resetKnowledgeMemoryStoreForTests } from "@/lib/knowledge-memory-store";
 
 // vault-exporter 回归（M3-a）：a) folded 折叠块 b) none 不导转写 c) full 逐条 [mm:ss]
 // d) concept 新建 frontmatter/正文 e) 追加语义（旧正文保留 + 变更小节 + aliases 合并）
@@ -60,6 +61,19 @@ const ASK_HISTORY = [
   },
 ];
 
+const MEETING_DECISION = {
+  id: "decision-q4",
+  kind: "meeting_decision" as const,
+  decision: "采用 Q4 量化方案",
+  scope: "本地模型部署",
+  originMeeting: "meeting-1",
+  status: "active" as const,
+  validUntil: "2026-12-31T00:00:00.000Z",
+  decidedAt: "2026-08-28T10:20:00.000Z",
+  createdAt: "2026-08-28T10:20:00.000Z",
+  updatedAt: "2026-08-28T10:20:00.000Z",
+};
+
 function runSuite(): void {
   // --- markdown 构建 ---
   // a) folded：frontmatter transcript: folded + callout 折叠块 + "> " 前缀
@@ -76,6 +90,9 @@ function runSuite(): void {
   assert.match(folded.frontmatter, /\ntopic: "大模型推理优化"\n/);
   assert.ok(folded.body.includes("# 推理优化专题会"));
   assert.ok(folded.body.includes("## 主题摘要"));
+  const withDecision = buildMeetingMarkdown({ ...BASE_MEETING, decisions: [MEETING_DECISION] });
+  assert.ok(withDecision.body.includes("## 会议决定"));
+  assert.ok(withDecision.body.includes("采用 Q4 量化方案"));
   assert.ok(folded.body.includes("- [[推理优化]] 推理优化"), "卡片链接用 Obsidian wikilink");
 
   // b) none：无转写内容、frontmatter transcript: none
@@ -173,6 +190,7 @@ function runSuite(): void {
 
   // h) meeting 不可变：同 meetingId 二次 → skipped（无论内容变化）
   const rootH = newRoot("meeting");
+  resetKnowledgeMemoryStoreForTests();
   const savedH1 = exportMeetingToVault(rootH, BASE_MEETING);
   assert.equal(savedH1.outcome, "saved");
   assert.match(savedH1.file, /^cuemind\/meetings\/2026-08-28-大模型推理优化\.md$/);
@@ -195,6 +213,11 @@ function runSuite(): void {
   const askTimeline = JSON.parse(readFileSync(path.join(rootHWithAsk, savedHWithAsk.file + ".timeline.json"), "utf8")) as { entries: Array<{ kind: string; id: string }> };
   assert.ok(askTimeline.entries.some((entry) => entry.kind === "ask" && entry.id === "ask-1"));
   assert.ok(askTimeline.entries.some((entry) => entry.kind === "ask" && entry.id === "ask-2"));
+
+  const rootHDecision = newRoot("meeting-decision");
+  const savedHDecision = exportMeetingToVault(rootHDecision, { ...BASE_MEETING, id: "meeting-decision", decisions: [MEETING_DECISION] });
+  assert.equal(savedHDecision.outcome, "saved");
+  assert.equal(getKnowledgeMemoryStore().search({ query: "Q4 量化", kind: "meeting_decision" })[0]?.id, "decision-q4");
   const replayedH = exportMeetingToVault(rootH, { ...BASE_MEETING, transcriptChunks: [...BASE_CHUNKS, { id: "c3", text: "补充转写", startMs: 20000, endMs: 25000, source: "microphone" }] });
   assert.equal(replayedH.outcome, "skipped", "同 meetingId 重放 → skipped（落盘后不可变）");
   assert.ok(replayedH.outcome === "skipped" && replayedH.reason === "already-exported");

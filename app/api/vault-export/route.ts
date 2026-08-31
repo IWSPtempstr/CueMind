@@ -13,6 +13,7 @@ import { enforceRateLimit } from "@/lib/api-security";
 import { getCandidate } from "@/lib/candidate-store";
 import type { AskExchange } from "@/lib/ask-history";
 import type { AskSource } from "@/types/chat";
+import type { MeetingDecisionRecord } from "@/lib/knowledge-memory";
 import {
   exportConceptToVault,
   exportMeetingToVault,
@@ -35,6 +36,7 @@ const MAX_FIELD_CHARS = 8_000;
 const MAX_ASKS = 200;
 const MAX_ASK_QUESTION_CHARS = 500;
 const MAX_ASK_ANSWER_CHARS = 2_000;
+const MAX_DECISIONS = 100;
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
@@ -77,6 +79,34 @@ function buildMeetingArgs(snapshot: Record<string, unknown>): MeetingMarkdownArg
     }
   }
 
+  const decisions: MeetingDecisionRecord[] = [];
+  if (Array.isArray(snapshot.decisions)) {
+    for (const raw of snapshot.decisions.slice(0, MAX_DECISIONS)) {
+      if (typeof raw !== "object" || raw === null) continue;
+      const record = raw as Record<string, unknown>;
+      const id = nonEmptyString(record.id);
+      const decision = nonEmptyString(record.decision);
+      const createdAt = nonEmptyString(record.createdAt) ?? new Date().toISOString();
+      const updatedAt = nonEmptyString(record.updatedAt) ?? createdAt;
+      if (id === null || decision === null) continue;
+      const originMeeting = nonEmptyString(record.originMeeting) ?? id;
+      const status = record.status === "superseded" || record.status === "disputed" || record.status === "archived" ? record.status : "active";
+      decisions.push({
+        id,
+        kind: "meeting_decision",
+        decision: decision.slice(0, MAX_FIELD_CHARS),
+        scope: typeof record.scope === "string" ? record.scope.slice(0, MAX_FIELD_CHARS) : null,
+        originMeeting,
+        evidenceChunkIds: Array.isArray(record.evidenceChunkIds) ? record.evidenceChunkIds.filter((item): item is string => typeof item === "string").slice(0, 100) : undefined,
+        decidedAt: nonEmptyString(record.decidedAt) ?? createdAt,
+        validUntil: typeof record.validUntil === "string" ? record.validUntil : record.validUntil === null ? null : undefined,
+        status,
+        createdAt,
+        updatedAt,
+      });
+    }
+  }
+
   const cards: MeetingMarkdownArgs["cards"] = [];
   if (Array.isArray(snapshot.cards)) {
     for (const raw of snapshot.cards.slice(0, MAX_CARDS)) {
@@ -96,6 +126,7 @@ function buildMeetingArgs(snapshot: Record<string, unknown>): MeetingMarkdownArg
     createdAt: nonEmptyString(snapshot.createdAt) ?? new Date().toISOString(),
     transcriptChunks: chunks,
     meetingReport,
+    decisions,
     cards,
     asrModel: nonEmptyString(snapshot.asrModel),
   };
