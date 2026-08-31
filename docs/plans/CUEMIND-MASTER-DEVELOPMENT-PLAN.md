@@ -708,6 +708,15 @@ TMPDIR=/tmp npx tsx scripts/measure-ask-latency.ts
 - 结论：四项测评的可复现执行器和真实小规模样本已具备；ASR partial/confirmed 在 CLI per-request 模式不可得，Ask 路由的 capture/ASR/render 事件尚未暴露，故对应字段保持 `null`，不将 buffered first byte 冒充 TTFT。
 - 遗留：扩大 ASR 至全部 15 个有音频视频并执行分层长时回放；对 4B/8B 各完成冷启动 3 次与预热 10 次；补齐业务链路的 capture/ASR/render 事件；在确认显存余量后再决定是否执行 4 并发档位；不得进行破坏性 OOM。
 
+### 2026-08-31：真实性能与韧性测评扩展实测
+
+- 阶段：阶段 7.7/7.8、阶段 8 / 真实性能与韧性测评补齐。
+- 变更：使用 `scripts/evaluate-asr-latency.ts` 对 `dataset/` 15 个视频执行真实 CUDA whisper.cpp 全量测评；使用 `scripts/evaluate-llama-timing.ts` 对当前 8B 服务执行 8 题 × 3 轮 SSE timing；使用 `scripts/evaluate-resource-pressure.ts` 完成 1/2/4 并发非破坏性资源观测。
+- 证据：`reports/performance-resilience/asr-all-20260831/` 15/15 成功，累计音频 `28316.7s`、处理 `1065.4s`，RTF `0.03763`、吞吐 `26.58 audio-sec/sec`、失败 `0`；`reports/performance-resilience/llama-8b-3x-20260831/` 24/24 成功，服务端 timing 可得 `24/24`，tok/s P50/P95 `43.03/43.95`，上游首 token P50/P95 `34.8/137.3ms`，完成 P50/P95 `710/893ms`；`reports/performance-resilience/pressure-1-2-4-20260831/` 1/2/4 并发共 `7` 请求全部回答，GPU 高负载采样约 `91–96%`，显存峰值约 `7055/8188MiB`，三档应用和 llama health 均通过。
+- 辅助证据：`reports/performance-resilience/timeline-smoke-20260831/` 真实 `/api/ask` 3/3 请求生成逐 `runId` 时间线；搜索/生成阶段中由服务端耗时反推的事件标记为 `derived`，capture/ASR/render 未暴露字段保持显式缺失。
+- 结论：真实 ASR 离线处理吞吐、当前 8B llama.cpp tok/s/上游首 token、Ask 请求时间线和受控资源压力/恢复均已有可复现报告；本轮没有执行破坏性 OOM，也没有把服务端缓冲后的答案首字节冒充 TTFT。
+- 遗留：4B 模型需通过独立 systemd 评测实例补齐同口径 timing，不能仅修改请求体模型名；若要证明实时 partial/confirmed，需实现常驻 whisper streaming/LocalAgreement-2；若要得到完整 ASR→卡片→渲染瀑布图，需在生产链路增加不含正文的阶段事件埋点。
+
 ```markdown
 ### YYYY-MM-DD：<阶段/变更名称>
 
