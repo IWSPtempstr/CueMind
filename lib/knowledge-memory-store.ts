@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Database as SqliteDatabase } from "better-sqlite3";
 import { bigramTokens } from "@/lib/session-store";
@@ -32,6 +32,7 @@ export interface KnowledgeMemorySearchOptions {
 
 export interface KnowledgeMemoryStore {
   backend: KnowledgeMemoryBackend;
+  clear(): void;
   upsert(records: MemoryRecord[]): void;
   search(options: KnowledgeMemorySearchOptions): MemoryHit[];
   count(): number;
@@ -168,6 +169,9 @@ function createJsonlStore(dataDir: string): KnowledgeMemoryStore {
   const records = (): Map<string, MemoryRecord> => parseJsonl(file);
   return {
     backend: "jsonl",
+    clear() {
+      writeFileSync(file, "", "utf8");
+    },
     upsert(next) {
       if (next.length === 0) return;
       appendFileSync(file, `${next.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
@@ -251,6 +255,9 @@ function createSqliteStore(dataDir: string, Database: SqliteDatabaseConstructor)
   };
   return {
     backend: "sqlite",
+    clear() {
+      db.exec("DELETE FROM knowledge_memory_keys; DELETE FROM knowledge_memory_fts; DELETE FROM knowledge_memory;");
+    },
     upsert(records) {
       if (records.length > 0) upsertTx(records);
     },

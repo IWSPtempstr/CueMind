@@ -47,4 +47,6 @@ assert.equal(store.search({ query: "Q4 量化", at: "2027-01-01T00:00:00.000Z" }
 store.upsert([{ ...decision, status: "superseded" }]);
 assert.equal(store.search({ query: "Q4 量化" }).length, 0, "superseded decision must be hidden");
 assert.equal(store.search({ query: "   " }).length, 0);
+store.clear();
+assert.equal(store.count(), 0, "derived index clear must remove stale records");
 console.log(`knowledge-memory store tests passed (${store.backend})`);

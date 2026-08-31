@@ -51,8 +51,10 @@ function run(): void {
   }
   resetKnowledgeMemoryStoreForTests();
   const records = readdirSync(conceptsDir).filter((name) => name.endsWith(".md")).map((name) => parseConcept(path.join(conceptsDir, name))).filter((record): record is KnowledgeCardRecord => record !== null);
-  getKnowledgeMemoryStore().upsert(records);
-  console.log(JSON.stringify({ indexed: records.length, skipped: readdirSync(conceptsDir).length - records.length, backend: getKnowledgeMemoryStore().backend, vaultRoot: root }));
+  const store = getKnowledgeMemoryStore();
+  store.clear();
+  store.upsert(records);
+  console.log(JSON.stringify({ indexed: records.length, skipped: readdirSync(conceptsDir).length - records.length, backend: store.backend, vaultRoot: root }));
 }
 
 run();
