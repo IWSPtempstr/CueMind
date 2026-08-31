@@ -6,6 +6,12 @@ import type { AudioSourceMode } from "@/lib/audio-source-mode";
 import { parseDesktopEvent, type AudioChunkReadyEvent } from "@/lib/desktop-events";
 import { attributeChunkSpeaker } from "@/lib/speaker-attributes";
 import type { LatencySample } from "@/lib/telemetry";
+import {
+  appendPipelineEvent,
+  createPipelineEvent,
+  type PipelineEvent,
+  type RequestTimelineEventName,
+} from "@/lib/request-timeline";
 import type { TranscriptChunk } from "@/types/session";
 
 /** 最近事件窗口容量（≈5 分钟双轨 5s chunk；说话人归属只关心近邻对轨）。 */
@@ -28,6 +34,7 @@ interface UseDesktopTranscriptResult {
   resumeRecording: () => void;
   flushCurrentChunk: () => void;
   latencySamples: LatencySample[];
+  pipelineEvents: PipelineEvent[];
 }
 
 export default function useDesktopTranscript(): UseDesktopTranscriptResult {
@@ -37,6 +44,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   const [error, setError] = useState<string | null>(null);
   const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
   const [audioSourceMode, setAudioSourceModeState] = useState<AudioSourceMode>("mixed");
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
   const queueRef = useRef<AudioChunkReadyEvent[]>([]);
   const processingRef = useRef(false);
   const seenChunkIdsRef = useRef(new Set<string>());
@@ -45,6 +53,21 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   const audioSourceModeRef = useRef<AudioSourceMode>("mixed");
   // 已同步到主进程的输入源模式；startRecording 前据此判断是否需要先同步。
   const appliedAudioSourceModeRef = useRef<AudioSourceMode>("mixed");
+  const pipelineEventsRef = useRef<PipelineEvent[]>([]);
+  const pipelineByRunRef = useRef(new Map<string, PipelineEvent[]>());
+
+  const emitPipelineEvent = useCallback((runId: string, name: RequestTimelineEventName, metadata?: unknown): void => {
+    try {
+      const event = createPipelineEvent(runId, name, monotonicNow(), metadata);
+      const runEvents = pipelineByRunRef.current.get(runId) ?? [];
+      appendPipelineEvent(runEvents, event);
+      pipelineByRunRef.current.set(runId, runEvents);
+      pipelineEventsRef.current.push(event);
+      setPipelineEvents([...pipelineEventsRef.current]);
+    } catch {
+      // Telemetry is best-effort and must not interrupt desktop capture.
+    }
+  }, []);
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cuemindDesktop));
@@ -59,12 +82,17 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
   }, []);
 
   const transcribeChunk = useCallback(async (event: AudioChunkReadyEvent): Promise<void> => {
+    const runId = crypto.randomUUID();
+    emitPipelineEvent(runId, "capture_start", { source: event.source, status: "ready" });
     const settings = loadCueMindSettings();
     if (!settings.localWhisperPath.trim() || !settings.localWhisperModelPath.trim()) {
+      emitPipelineEvent(runId, "capture_end", { source: event.source, status: "error", errorCode: "missing_whisper_settings" });
       setError("请先在设置中填写 whisper.cpp 可执行文件和模型路径。");
       return;
     }
 
+    emitPipelineEvent(runId, "capture_end", { source: event.source, status: "ok" });
+    emitPipelineEvent(runId, "asr_start", { source: event.source, status: "confirmed" });
     const asrStartedAt = new Date();
     try {
       const response = await fetch("/api/local-transcribe", {
@@ -72,6 +100,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           audioPath: event.path,
+          runId,
           source: event.source,
           startMs: event.startMs,
           endMs: event.endMs,
@@ -87,6 +116,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       if (!response.ok || !isTranscribePayload(payload)) {
         throw new Error(isErrorPayload(payload) ? payload.error : "本地转写失败");
       }
+      emitPipelineEvent(runId, "asr_end", { source: event.source, status: "confirmed" });
       if (!payload.text.trim()) return;
 
       const asrEndedAt = new Date();
@@ -128,9 +158,10 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       ].sort(compareChunks));
       setError(null);
     } catch (caught) {
+      emitPipelineEvent(runId, "asr_end", { source: event.source, status: "error", errorCode: "local_transcribe_failed" });
       setError(caught instanceof Error ? caught.message : "本地转写失败");
     }
-  }, []);
+  }, [emitPipelineEvent]);
 
   const enqueueChunk = useCallback((event: AudioChunkReadyEvent): void => {
     if (seenChunkIdsRef.current.has(event.id)) return;
@@ -145,6 +176,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       setError("本地转写队列已满，已丢弃最旧的待处理音频片段。");
     }
     queueRef.current.push(event);
+    // Capture begins when the helper announces a completed audio window to the renderer.
     if (processingRef.current) return;
     processingRef.current = true;
     void (async () => {
@@ -247,6 +279,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
     resumeRecording: unsupportedControl,
     flushCurrentChunk: unsupportedControl,
     latencySamples,
+    pipelineEvents,
   };
 }
 
@@ -275,4 +308,8 @@ function isErrorPayload(value: unknown): value is { error: string } {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function monotonicNow(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 }

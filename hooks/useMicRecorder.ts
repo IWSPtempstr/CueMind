@@ -15,6 +15,12 @@ import {
   shouldSendPartial,
   type PartialThrottleState,
 } from "@/lib/partial-transcript";
+import {
+  appendPipelineEvent,
+  createPipelineEvent,
+  type PipelineEvent,
+  type RequestTimelineEventName,
+} from "@/lib/request-timeline";
 import type { TranscriptChunk } from "@/types/session";
 
 const MIN_TRANSCRIBE_BYTES = 1000;
@@ -35,6 +41,9 @@ interface Segment {
   parts: Blob[];
   startedAt: Date;
   peakLevel: number;
+  runId: string;
+  asrTraced: boolean;
+  asrEnded: boolean;
 }
 
 interface UploadMediaChunkResponse { text: string }
@@ -56,6 +65,7 @@ interface UseMicRecorderResult {
   resumeRecording: () => void;
   flushCurrentChunk: () => void;
   error: string | null;
+  pipelineEvents: PipelineEvent[];
 }
 
 function isTranscribeSuccess(value: unknown): value is UploadMediaSuccessResponse {
@@ -74,13 +84,14 @@ function pickMimeType(): string | undefined {
 }
 
 /** confirmed 与 partial 请求共用的 /api/upload-media FormData 组装（同一契约，避免重复）。 */
-function buildTranscribeFormData(blob: Blob, settings: ReturnType<typeof loadCueMindSettings>): FormData {
+function buildTranscribeFormData(blob: Blob, settings: ReturnType<typeof loadCueMindSettings>, runId: string): FormData {
   const formData = new FormData();
   formData.append("media", blob, TRANSCRIBE_UPLOAD_FILENAME);
   if (settings.localWhisperLanguage !== "auto") formData.append("language", settings.localWhisperLanguage);
   formData.append("whisperPath", settings.localWhisperPath);
   formData.append("whisperModelPath", settings.localWhisperModelPath);
-  formData.append("uploadId", crypto.randomUUID());
+  formData.append("uploadId", runId);
+  formData.append("runId", runId);
   return formData;
 }
 
@@ -92,6 +103,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
   const [transcriptChunks, setTranscriptState] = useState<TranscriptChunk[]>([]);
   const [partialText, setPartialText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
 
   const streamRef = useRef<MediaStream | null>(null);
   const segmentsRef = useRef(new Set<Segment>());
@@ -110,6 +122,21 @@ export default function useMicRecorder(): UseMicRecorderResult {
   const partialThrottleRef = useRef<PartialThrottleState>({ lastSentAt: 0, inFlight: false });
   // 当前 partial 循环的属主 segment（轮换/flush 换主后旧循环随之作废）。
   const partialSegmentRef = useRef<Segment | null>(null);
+  const pipelineEventsRef = useRef<PipelineEvent[]>([]);
+  const pipelineByRunRef = useRef(new Map<string, PipelineEvent[]>());
+
+  const emitPipelineEvent = useCallback((runId: string, name: RequestTimelineEventName, metadata?: unknown): void => {
+    try {
+      const event = createPipelineEvent(runId, name, monotonicNow(), metadata);
+      const runEvents = pipelineByRunRef.current.get(runId) ?? [];
+      appendPipelineEvent(runEvents, event);
+      pipelineByRunRef.current.set(runId, runEvents);
+      pipelineEventsRef.current.push(event);
+      setPipelineEvents([...pipelineEventsRef.current]);
+    } catch {
+      // Telemetry is best-effort and must never interrupt recording/transcription.
+    }
+  }, []);
 
   const setTranscriptChunks = useCallback((chunks: TranscriptChunk[]): void => {
     setTranscriptState(chunks);
@@ -147,10 +174,10 @@ export default function useMicRecorder(): UseMicRecorderResult {
   }, [clearRotationTimers, cleanupMeter]);
 
   /** 单次转写请求（confirmed 与 partial 共用）；抛错由调用方决定重试或静默。 */
-  const transcribeBlobOnce = useCallback(async (blob: Blob): Promise<string> => {
+  const transcribeBlobOnce = useCallback(async (blob: Blob, runId: string): Promise<string> => {
     const response = await fetch("/api/upload-media", {
       method: "POST",
-      body: buildTranscribeFormData(blob, loadCueMindSettings()),
+      body: buildTranscribeFormData(blob, loadCueMindSettings(), runId),
     });
     const payload: unknown = await response.json();
     if (!response.ok) throw new Error(isTranscribeError(payload) ? payload.error : "Transcription failed");
@@ -159,9 +186,13 @@ export default function useMicRecorder(): UseMicRecorderResult {
       : "";
   }, []);
 
-  const transcribeBlob = useCallback(async (blob: Blob, timestamp: Date, attempt = 1): Promise<void> => {
+  const transcribeBlob = useCallback(async (blob: Blob, timestamp: Date, segment: Segment, attempt = 1): Promise<void> => {
+    if (!segment.asrTraced) {
+      segment.asrTraced = true;
+      emitPipelineEvent(segment.runId, "asr_start", { source: "microphone", status: "confirmed" });
+    }
     try {
-      const text = await transcribeBlobOnce(blob);
+      const text = await transcribeBlobOnce(blob, segment.runId);
       if (text) {
         setTranscriptState((previous) => [
           ...previous,
@@ -173,22 +204,28 @@ export default function useMicRecorder(): UseMicRecorderResult {
       partialThrottleRef.current = onConfirmed(partialThrottleRef.current);
       setPartialText(null);
       setError(null);
+      if (!segment.asrEnded) {
+        segment.asrEnded = true;
+        emitPipelineEvent(segment.runId, "asr_end", { source: "microphone", status: "confirmed" });
+      }
     } catch (caught) {
       if (attempt >= MAX_RETRY_ATTEMPTS) {
+        segment.asrEnded = true;
+        emitPipelineEvent(segment.runId, "asr_end", { source: "microphone", status: "error", errorCode: "retry_exhausted" });
         setError(caught instanceof Error ? `${caught.message} (audio kept through 4 retries)` : "Transcription failed after retries.");
         return;
       }
       setRetryCount((count) => count + 1);
       const timer = window.setTimeout(() => {
         retryTimersRef.current.delete(timer);
-        void transcribeBlob(blob, timestamp, attempt + 1).finally(() => {
+        void transcribeBlob(blob, timestamp, segment, attempt + 1).finally(() => {
           setRetryCount((count) => Math.max(0, count - 1));
         });
       }, 1000 * 2 ** (attempt - 1));
       retryTimersRef.current.add(timer);
       setError(`Transcription paused by a hiccup — retry ${attempt} queued.`);
     }
-  }, [transcribeBlobOnce]);
+  }, [emitPipelineEvent, transcribeBlobOnce]);
 
   /**
    * partial 转写（决策 66）：进行中 segment 的临时文本，尽力而为——失败静默丢弃、
@@ -209,7 +246,11 @@ export default function useMicRecorder(): UseMicRecorderResult {
     partialThrottleRef.current = { ...partialThrottleRef.current, inFlight: true };
     try {
       const blob = new Blob(segment.parts, { type: mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME });
-      const text = await transcribeBlobOnce(blob);
+      if (!segment.asrTraced) {
+        segment.asrTraced = true;
+        emitPipelineEvent(segment.runId, "asr_start", { source: "microphone", status: "partial" });
+      }
+      const text = await transcribeBlobOnce(blob, segment.runId);
       // 只有时序仍一致的当前主 segment 才允许更新 partial（旧 segment/已停止则丢弃）。
       if (!isStoppingRef.current && segment.recorder.state === "recording" && primarySegmentRef.current === segment) {
         setPartialText(text || null);
@@ -219,7 +260,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
     } finally {
       partialThrottleRef.current = { ...partialThrottleRef.current, inFlight: false };
     }
-  }, [transcribeBlobOnce]);
+  }, [emitPipelineEvent, transcribeBlobOnce]);
 
   /** 每个 segment 创建时起一个 partial 调度循环：每 1s tick，由 shouldSendPartial 节流（两段式：首 2s、后续 4s）。 */
   const schedulePartialRef = useRef<(segment: Segment) => void>(() => undefined);
@@ -241,18 +282,20 @@ export default function useMicRecorder(): UseMicRecorderResult {
       partialSegmentRef.current = null;
     }
     const blob = new Blob(segment.parts, { type: mimeTypeRef.current ?? AUDIO_WEBM_FALLBACK_MIME });
+    emitPipelineEvent(segment.runId, "capture_end", { source: "microphone", status: "ok" });
     if (blob.size >= MIN_TRANSCRIBE_BYTES && segment.peakLevel >= SILENCE_RMS_THRESHOLD) {
-      void transcribeBlob(blob, segment.startedAt);
+      void transcribeBlob(blob, segment.startedAt, segment);
     }
     if (isStoppingRef.current && segmentsRef.current.size === 0) cleanupStream();
-  }, [cleanupStream, clearPartialTimer, transcribeBlob]);
+  }, [cleanupStream, clearPartialTimer, emitPipelineEvent, transcribeBlob]);
 
   const createSegment = useCallback((stream: MediaStream): Segment | null => {
     try {
       const recorder = mimeTypeRef.current
         ? new MediaRecorder(stream, { mimeType: mimeTypeRef.current })
         : new MediaRecorder(stream);
-      const segment: Segment = { recorder, parts: [], startedAt: new Date(), peakLevel: analyserRef.current ? 0 : 1 };
+      const segment: Segment = { recorder, parts: [], startedAt: new Date(), peakLevel: analyserRef.current ? 0 : 1, runId: crypto.randomUUID(), asrTraced: false, asrEnded: false };
+      emitPipelineEvent(segment.runId, "capture_start", { source: "microphone", status: "recording" });
       recorder.ondataavailable = (event) => { if (event.data.size > 0) segment.parts.push(event.data); };
       recorder.onerror = () => setError("Recording error.");
       recorder.onstop = () => finalizeSegment(segment);
@@ -265,7 +308,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
       setError("Could not create MediaRecorder for this device.");
       return null;
     }
-  }, [finalizeSegment]);
+  }, [emitPipelineEvent, finalizeSegment]);
 
   const scheduleRotationRef = useRef<(segment: Segment) => void>(() => undefined);
   scheduleRotationRef.current = (segment: Segment): void => {
@@ -407,5 +450,9 @@ export default function useMicRecorder(): UseMicRecorderResult {
     for (const timer of retryTimersRef.current) window.clearTimeout(timer);
   }, [clearRotationTimers, clearPartialTimer, cleanupMeter]);
 
-  return { isRecording, isPaused, micLevel, retryCount, transcriptChunks, partialText, setTranscriptChunks, startRecording, stopRecording, pauseRecording, resumeRecording, flushCurrentChunk, error };
+  return { isRecording, isPaused, micLevel, retryCount, transcriptChunks, partialText, setTranscriptChunks, startRecording, stopRecording, pauseRecording, resumeRecording, flushCurrentChunk, error, pipelineEvents };
+}
+
+function monotonicNow(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 }
