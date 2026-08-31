@@ -25,6 +25,8 @@
 
 **2026-08-30 执行记录：** 本地视频集已扩展至 15 个视频；CUDA Whisper 完成新增 9 个视频转录，阶段 1 bundle `reports/finetune/local-video-v2` 共生成 950 个 30 秒窗口。窗口仍为 `unlabeled`，下一步是按视频划分并进行人工 `show/skip`、关键词和解释标注。
 
+**2026-08-31 人工确认记录：** 用户确认 `reports/finetune/annotations-v2/error-analysis/` 下 5 份 v2 文件全部为人工确认记录。新增 `scripts/merge-confirmed-error-analysis.ts` 只读重建转录窗口并导出至本地 `confirmed-error-analysis` 目录：59 条 trigger、27 条 keyword、40 条 explanation、40 条 DPO preference；166 条记录仅含 `train/eval`，`freezeExcluded=0`，并通过窗口 ID、videoId、重复项校验。原始输入和标注文件保持不变，导出数据不纳入 Git。
+
 ### 阶段 2：卡片出现时机 SFT
 
 **状态：待执行。**

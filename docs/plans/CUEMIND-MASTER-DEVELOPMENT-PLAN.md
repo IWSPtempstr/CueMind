@@ -325,6 +325,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 **视频扩展记录：** `scripts/transcribe-videos.ts` 支持 CUDA Whisper 断点续跑；新增 9 个视频已完成转录，累计 15 个视频、950 个 30 秒窗口，bundle 位于 `reports/finetune/local-video-v2`。数据仍需人工标注后才能训练。
 
+**2026-08-31 人工确认增量：** 用户确认 error-analysis v2 五份标注文件全部可用于训练。`scripts/merge-confirmed-error-analysis.ts` 已完成只读校验与导出，产生 59 条 trigger、27 条 keyword、40 条 explanation 和 40 条 DPO preference；仅接受 `train/eval`，拒绝 `freeze`，并验证窗口 ID、videoId 与重复项。原始 `annotations/`、`annotations-v2/` 和输入转录保持不变，导出目录属于本地报告，不提交 Git。
+
 ### 阶段 8：实时稳定性与本地可观测性
 
 **状态：基础重放与 Trace 已完成，长时间压力和真实硬件观测待执行。**
