@@ -454,6 +454,26 @@ EAGLE3、KV cache、不同量化档位、更强 GPU或蒸馏模型都只能作�
 - 在每个档位注入一次可恢复的请求超时、短暂网络失败或服务重启，记录检测时间、在途请求终态、后续请求恢复时间和是否影响 ASR；服务重启只能通过现有 systemd 操作；
 - 验收：压力不导致数据损坏、请求无限阻塞或静默失败；每个失败有 `timeout/degraded/model_failed/recovered` 等终态；恢复探针连续通过后才结束该档位；报告明确“观测压力”与“未执行 OOM 压测”的边界。
 
+#### 常驻 streaming `partial → confirmed` 替代方案
+
+**状态：计划已登记；当前生产默认仍为 whisper.cpp CLI 分段调用。**
+**目标：** 在不改变“partial 仅展示、confirmed 才入账并触发卡片”的产品语义下，引入常驻 Whisper worker，降低重复加载模型的开销，并提供稳定前缀确认、VAD 收尾和故障恢复证据。
+**切换原则：** 新 worker 与现有 `/api/local-transcribe` CLI 路径并行存在；只有在冻结视频实时回放、长时稳定性、断流恢复和 confirmed 去重全部通过后，才允许人工切换默认模式。任何失败均可回滚到 CLI。
+
+**阶段 0：协议与状态机冻结。** 定义 `runId`、`segmentId`、时间戳以及 `partial`、`confirmed`、`final`、`error`、`recovered` 事件；新增 `lib/realtime-asr-contract.ts` 和契约测试，覆盖空文本、乱序、重复 confirmed、未知事件和跨 run 数据；明确 `TranscriptChunk` 只接受 confirmed，并以 feature flag 保留 CLI fallback。
+
+**阶段 1：常驻 worker 与 PCM 输入。** 新增常驻 worker，启动时加载一次 Whisper 模型，持续接收 16 kHz 单声道 PCM；新增 `lib/realtime-asr-client.ts` 对接本地 IPC/HTTP，记录 worker 健康、队列、模型哈希和设备参数；worker 不可用时只对新片段回退 CLI，不重复提交已确认文本。
+
+**阶段 2：partial 流与前端隔离。** 每 200–500ms 解码最近 4–8 秒滑动窗口，输出带 ID 和时间戳的 partial；扩展麦克风/桌面 hook 及 streaming API，通过 SSE 或本地 WebSocket 推送；partial 只更新临时 UI，不写 `transcriptChunks`、候选账本或卡片链路；覆盖分片、取消和慢消费者测试。
+
+**阶段 3：LocalAgreement-2 confirmed 水位。** 比较最近两次解码结果，将最长稳定前缀转为 confirmed，维护不可回退的 `confirmedUntilMs`；对重叠窗口做文本去重和时间裁剪，VAD 结束时执行 final decode；仅 confirmed 触发关键词/卡片，并测量首 partial、首 confirmed 和最终确认延迟。
+
+**阶段 4：VAD、重启与恢复。** 增加 `silence → speech → trailing → finalized` 状态机；worker 崩溃、IPC 断开、GPU 初始化失败和超时按最后 confirmed 水位重连，丢弃未确认 partial；新增正常语音、静音切分、断流、重启、慢消费者和重复包 replay 测试，记录恢复时间并 fail-closed。
+
+**阶段 5：真实回放、压力和人工发布。** 用 `dataset/` 有音频视频按原速回放，对 CLI/streaming 做 A/B，记录首 partial、首 confirmed、最终延迟、RTF、吞吐、资源、重复/漏段和卡片触发数；执行 10/30 分钟及 1/2 路受控并发，不执行 OOM；冻结协议、模型和参数，经人工 release/rollback 后才可切换默认模式。
+
+**共同验收：** Trace 只保存 ID、时间戳、状态、耗时和错误码，不保存原始音频、完整转录或模型 payload；阶段 2 以前不得改变生产默认链路；每阶段独立测试、报告和本地 commit，任一门禁失败均保留 CLI 默认。
+
 **执行顺序与提交：**
 
 1. 先以 fixture/纯函数测试锁定时间线和 ASR/模型 timing 解析契约；
