@@ -9,6 +9,8 @@ import {
 } from "@/lib/model-provider";
 import { InsufficientSearchSourcesError, searchKeywordSources, type SearchKeywordOutcome, type SearchResult } from "@/lib/search";
 import type { ContextCard, ContextCardDemoTrace } from "@/types/suggestions";
+import { getKnowledgeMemoryStore } from "@/lib/knowledge-memory-store";
+import type { MemoryHit } from "@/lib/knowledge-memory";
 
 export const runtime = "nodejs";
 
@@ -62,11 +64,11 @@ interface TraceEvent {
   type: "model_decision" | "tool_call" | "tool_result" | "card_generation" | "terminal";
   durationMs?: number;
   decision?: "search" | "skip";
-  tool?: "search_web";
+  tool?: "search_web" | "local_memory";
   query?: string;
   resultCount?: number;
   retryCount?: number;
-  provider?: "tavily" | "bing" | "serpapi" | "agent-reach" | "vertical";
+  provider?: "tavily" | "bing" | "serpapi" | "agent-reach" | "vertical" | "vault";
   fallbackUsed?: boolean;
   verticalHit?: boolean;
 }
@@ -184,6 +186,25 @@ export async function POST(
     });
   }
 
+  // Local history is a bounded, non-authoritative hint. It is intentionally
+  // queried before network search so recurring meetings can reuse prior cards
+  // without adding an embedding model or delaying the fail-closed source gate.
+  let localMemoryHits: MemoryHit[] = [];
+  const localMemoryStarted = performance.now();
+  try {
+    localMemoryHits = getKnowledgeMemoryStore().search({ query: keyword, limit: 3 });
+  } catch {
+    localMemoryHits = [];
+  }
+  traceEvents.push({
+    step: traceEvents.length + 1,
+    type: "tool_result",
+    tool: "local_memory",
+    resultCount: localMemoryHits.length,
+    durationMs: Math.round(performance.now() - localMemoryStarted),
+    provider: "vault",
+  });
+
   const searchStarted = performance.now();
   let sources: SearchResult[];
   let searchExecution: SearchKeywordOutcome | null = null;
@@ -241,6 +262,19 @@ export async function POST(
         parsed.recentTranscript,
         "</meeting_transcript_untrusted>",
         `<keyword>${keyword}</keyword>`,
+        ...(localMemoryHits.length > 0 ? [
+          "<local_memory_untrusted>",
+          ...localMemoryHits.map((hit, index) => [
+            `<memory index="${index + 1}">`,
+            `kind: ${hit.kind}`,
+            `title: ${limitPromptText(hit.title, 300)}`,
+            `content: ${limitPromptText(hit.content, 1_200)}`,
+            `origin_meeting: ${limitPromptText(hit.originMeeting, 200)}`,
+            `updated_at: ${hit.updatedAt}`,
+            "</memory>",
+          ].join("\n")).join("\n"),
+          "</local_memory_untrusted>",
+        ] : []),
         "<search_evidence_untrusted>",
         sources.slice(0, 2).map((source, index) => [
           `<source index="${index + 1}">`,
