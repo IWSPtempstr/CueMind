@@ -175,3 +175,18 @@ trigger → keyword → keyPoints/whyNow → DPO 偏好
 - 无重复 windowId；
 - 无音频、密钥、Trace 或原始敏感字段进入训练文件；
 - Schema、JSONL、来源和标注人字段完整。
+
+## 8. 训练与发布交接
+
+由已确认的标注和错误分析数据生成以下训练文件：
+
+```text
+trigger-sft.jsonl
+keyword-sft.jsonl
+explanation-sft.jsonl
+explanation-dpo.jsonl
+```
+
+执行顺序固定为：触发 SFT → 关键词 SFT → 解释 SFT → 解释 DPO。训练只使用 `train`，模型选择和超参数比较只使用 `eval`；`freeze` 集保持隔离，直到所有训练完成后才进行一次冻结集对比。
+
+冻结集对比完成后，候选 adapter 必须进入影子运行。影子运行应记录质量、Schema、延迟、缓存、资源和失败终态。最终由人工作出发布、保留当前版本或回滚决定，并记录模型哈希、数据版本、代码提交和责任人；禁止自动换模或自动覆盖正式 adapter。

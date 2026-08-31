@@ -35,6 +35,7 @@
 **异常矩阵归属：** 误触发、漏报、重复卡片、Schema 失败、partial 误触发和延迟回归。
 **测评依据：** show precision/recall、误触发率、漏报率、重复率、JSON 有效率、单窗口延迟。
 **验收：** 不降低 confirmed 一致性、缓存命中率、服务恢复能力和正常回答延迟；未达标则不进入下一阶段。
+**训练产物与执行：** 使用人工确认的 `trigger-sft.jsonl` 训练独立的卡片触发 adapter。训练完成后只在 `eval` 集评估；`freeze` 集保持隔离，不参与训练、调参或 Prompt 修改。
 
 ### 阶段 3：关键词 SFT
 
@@ -44,6 +45,7 @@
 **异常矩阵归属：** 关键词漂移、过短/过泛、同义词不一致、检索未命中和 cacheKey miss。
 **测评依据：** 规范化完全匹配、同义词命中率、重复一致率、检索命中率、cacheKey 一致率。
 **验收：** 关键词一致性和检索命中改善，且不增加 Schema 失败、延迟或误触发。
+**训练产物与执行：** 使用人工确认的 `keyword-sft.jsonl` 训练独立的关键词 adapter。评估仅使用 `eval` 集，记录重复采样下的关键词和 `cacheKey` 稳定性；`freeze` 集继续隔离。
 
 ### 阶段 4：解释 SFT 与 DPO
 
@@ -53,6 +55,7 @@
 **异常矩阵归属：** 编造事实、无证据回答、冗余、答非所问、拒答错误、JSON 失败和检索/生成归因混淆。
 **测评依据：** 事实一致性、证据覆盖率、上下文相关性、关键点完整性、冗余率、正确拒答率、JSON 有效率和人工偏好胜率。
 **验收：** DPO 相对 base/SFT 有冻结集证据改善，且不降低延迟、Schema、缓存和 ASR 链路指标。
+**训练产物与执行：** 先使用人工确认的 `explanation-sft.jsonl` 训练解释 adapter，再使用人工确认的 `explanation-dpo.jsonl` 执行解释偏好优化。SFT/DPO 的训练和调参只允许使用 `train`；阶段性选择只看 `eval`，不得提前查看或反复使用 `freeze` 结果。
 
 ### 阶段 5：影子运行与人工发布
 
@@ -62,5 +65,6 @@
 **异常矩阵归属：** 模型加载失败、OOM、超时、质量回退、影子偏差、发布中断和回滚失败。
 **测评依据：** `lib/model-release.ts`、模型基线 manifest、阶段 8 重放 Trace 和冻结集对照报告。
 **验收：** 无线上自动换模、自动改 Prompt 或自动改权重；发布、回滚和责任人均有审计记录。
+**发布门禁：** 三个 SFT adapter 和解释 DPO 完成 `eval` 评估后，统一在冻结集执行一次对照；随后进行影子运行。只有冻结集对比和影子运行证据齐全，才由人工决定发布、灰度保留或回滚；不得自动替换线上 adapter。
 
-**执行顺序：** `工程基线 → CueMind trigger SFT → AMI 补充 → keyword SFT → DialogSum/真实数据解释 SFT → 解释 DPO → 影子运行 → 人工发布`。
+**执行顺序：** `工程基线 → trigger-sft.jsonl/触发 adapter → keyword-sft.jsonl/关键词 adapter → explanation-sft.jsonl/解释 adapter → explanation-dpo.jsonl/解释 DPO → eval 评估 → freeze 一次性对比 → 影子运行 → 人工发布或回滚`。

@@ -308,7 +308,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 **阶段 7.1–7.8：**
 
 - **7.1–7.4 知识治理：** Vault 追加版本、来源等级、冲突待审、高风险审批、撤回和审计；MCP 仅提供关键词、当前版本和历史版本读取。
-- **7.5–7.6 训练数据与候选模型：** CueMind 人工裁决数据主导，公开数据仅补充；离线 SFT/DPO、冻结集评估和影子运行。
+- **7.5–7.6 训练数据与候选模型：** CueMind 人工裁决数据主导，公开数据仅补充；按 `trigger-sft.jsonl`、`keyword-sft.jsonl`、`explanation-sft.jsonl`、`explanation-dpo.jsonl` 依次执行离线训练；训练仅用 `train`，仅在 `eval` 集评估，`freeze` 集保持隔离，完成冻结集一次性对比和影子运行后由人工决定发布或回滚。
 - **7.7 ASR 可靠性：** confirmed 不回退/不重复，断流和重启可恢复，记录吞吐、确认延迟、错误率和恢复时间。
 - **7.8 模型基线与一键交接：** 固定 4B/8B、量化、KV cache、GPU 参数，提供本地 Trace、Docker 和一键评测/回滚流程。
 
