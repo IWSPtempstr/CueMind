@@ -180,8 +180,21 @@ function runSuite(): void {
   const contentH1 = readFileSync(filePathH1, "utf8");
   assert.ok(existsSync(`${filePathH1}.timeline.json`), "meeting timeline sidecar should be written");
   assert.ok(existsSync(`${filePathH1}.redaction-manifest.json`), "redaction manifest sidecar should be written");
-  const timelineSidecar = JSON.parse(readFileSync(`${filePathH1}.timeline.json`, "utf8")) as { version: string };
+  const timelineSidecar = JSON.parse(readFileSync(`${filePathH1}.timeline.json`, "utf8")) as {
+    version: string;
+    entries: Array<{ kind: string; id: string }>;
+  };
   assert.equal(timelineSidecar.version, "timeline-v1");
+  assert.ok(timelineSidecar.entries.some((entry) => entry.kind === "transcript" && entry.id === "c1"));
+  assert.ok(timelineSidecar.entries.some((entry) => entry.kind === "card" && entry.id === "cand-1"));
+  assert.ok(timelineSidecar.entries.some((entry) => entry.kind === "report" && entry.id === "meeting-report"));
+
+  const rootHWithAsk = newRoot("meeting-with-ask");
+  const savedHWithAsk = exportMeetingToVault(rootHWithAsk, { ...BASE_MEETING, id: "meeting-with-ask", asks: ASK_HISTORY });
+  assert.equal(savedHWithAsk.outcome, "saved");
+  const askTimeline = JSON.parse(readFileSync(path.join(rootHWithAsk, savedHWithAsk.file + ".timeline.json"), "utf8")) as { entries: Array<{ kind: string; id: string }> };
+  assert.ok(askTimeline.entries.some((entry) => entry.kind === "ask" && entry.id === "ask-1"));
+  assert.ok(askTimeline.entries.some((entry) => entry.kind === "ask" && entry.id === "ask-2"));
   const replayedH = exportMeetingToVault(rootH, { ...BASE_MEETING, transcriptChunks: [...BASE_CHUNKS, { id: "c3", text: "补充转写", startMs: 20000, endMs: 25000, source: "microphone" }] });
   assert.equal(replayedH.outcome, "skipped", "同 meetingId 重放 → skipped（落盘后不可变）");
   assert.ok(replayedH.outcome === "skipped" && replayedH.reason === "already-exported");

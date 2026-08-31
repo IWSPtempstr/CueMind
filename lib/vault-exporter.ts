@@ -447,11 +447,19 @@ export function exportMeetingToVault(root: string, meeting: MeetingMarkdownArgs)
   }
 
   writeFileSync(path.join(dir, fileName), content, "utf8");
-  const timeline = meeting.timeline ?? buildTimeline({ transcriptChunks: meeting.transcriptChunks.map((chunk, index) => ({
-    id: chunk.id ?? `chunk-${index + 1}`,
-    startMs: chunk.startMs,
-    endMs: chunk.endMs,
-  })) });
+  // Keep the sidecar useful for replay even though cards/asks may not have
+  // their own timestamps in the current Vault contract. Their stable IDs are
+  // still preserved so a later player can resolve them against session data.
+  const timeline = meeting.timeline ?? buildTimeline({
+    transcriptChunks: meeting.transcriptChunks.map((chunk, index) => ({
+      id: chunk.id ?? `chunk-${index + 1}`,
+      startMs: chunk.startMs,
+      endMs: chunk.endMs,
+    })),
+    cards: (meeting.cards ?? []).map((card) => ({ candidateId: card.candidateId })),
+    asks: (meeting.asks ?? []).map((_, index) => ({ id: `ask-${index + 1}` })),
+    report: meeting.meetingReport ? { id: "meeting-report" } : undefined,
+  });
   writeFileSync(path.join(dir, `${fileName}.timeline.json`), `${JSON.stringify(timeline, null, 2)}\n`, "utf8");
   const redactionManifest = meeting.redactionManifest ?? {
     ruleVersion: "redaction-v1" as const,
