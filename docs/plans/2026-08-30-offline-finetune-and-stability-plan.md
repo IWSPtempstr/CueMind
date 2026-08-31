@@ -1,9 +1,9 @@
 # CueMind 工程稳定性与微调实验计划
 
 **状态：阶段 0–1 已实现；阶段 2–5 依赖代码已就绪，真实训练与公开数据下载按需执行。**
-**目标：** 先建立不微调的可重复基线，再使用 AMI 和 DialogSum 补充训练，单独验证卡片触发、关键词提取和解释内容，最终通过影子运行和人工决策发布。
+**目标：** 以 15–30 个本地视频作为领域核心，结合受控公开数据补足通用会议与表达能力，单独验证卡片触发、关键词提取和解释内容，最终通过影子运行和人工决策发布。
 
-**数据与约束：** AMI Meeting Corpus（CC BY 4.0）用于会议窗口和重点候选；DialogSum（CC BY-NC-SA 4.0）仅用于解释表达补充。公开数据不超过训练数据 40%，CueMind 真实转录、卡片、失败轨迹和人工裁决不少于 60%；冻结集按视频/会议划分且永不训练。
+**数据与约束：** 目标为 15–30 个本地视频；AMI Meeting Corpus（CC BY 4.0）用于会议窗口和重点候选，DialogSum（CC BY-NC-SA 4.0）仅用于解释表达补充。公开数据不超过训练数据 40%，CueMind 真实转录、卡片、失败轨迹和人工裁决不少于 60%；冻结集按视频/会议划分且永不训练，公开数据不得进入 freeze。
 
 ### 阶段 0：工程稳定性基线
 
@@ -72,6 +72,8 @@
 ### 服务器训练实施与样本规模门禁（2026-08-31）
 
 当前人工确认增量为 trigger 59、keyword 27、explanation 40、DPO 40 对，足以走通训练流程和验证指标记录，但不足以稳定改变 7B/8B 模型的泛化行为。建议正式实验最低规模为 trigger 500–1,000（show/skip/重复/拒答均衡）、keyword 300–600、explanation 500–1,000，DPO 300–1,000 对；理想规模为 trigger 2,000–5,000、keyword 1,000–3,000、explanation 2,000–5,000、DPO 1,000–5,000 对，并保持每个视频/会议完整划分。
+
+**推荐执行顺序：** 保留现有 15 个视频及转录；先将 CueMind 人工 trigger 补至至少 500 条，再引入 AMI 1,000–1,500 个会议窗口；使用 DialogSum 约 1,000 条补充 explanation 表达；DPO 优先使用 CueMind 人工偏好对，公开偏好数据仅补充至 300–500 对。混合数据中 CueMind 占比至少 60%，公开数据最多 40%。若 15 个视频无法达到 explanation/DPO 门槛，再扩展至 30 个视频；不以盲目增加视频数替代人工裁决。
 
 仓库新增 `training/` 离线训练工具链：`validate_data.py` 强制人工确认和 train/eval 边界；`train_sft.py` 使用 4-bit NF4 QLoRA；`train_dpo.py` 使用 TRL DPO；`merge_adapter.py` 将 adapter 合并为独立 Transformers 模型，输出新目录并保留基础模型不变。推荐服务器为 A100 80GB（最低 40GB）、64GB RAM、150GB NVMe；7B/8B 训练使用 batch 1、梯度累积 8、上下文 512、gradient checkpointing，三组超参应串行运行。真实训练前须锁定 `requirements.txt`、基础模型权重及 SHA-256；训练只读 `train`，评估只读 `eval`，所有 adapter 完成 eval 后才允许一次性读取 freeze。
 

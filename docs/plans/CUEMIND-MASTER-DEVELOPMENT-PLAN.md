@@ -309,6 +309,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3000/
 
 - **7.1–7.4 知识治理：** Vault 追加版本、来源等级、冲突待审、高风险审批、撤回和审计；MCP 仅提供关键词、当前版本和历史版本读取。
 - **7.5–7.6 训练数据与候选模型：** CueMind 人工裁决数据主导，公开数据仅补充；按 `trigger-sft.jsonl`、`keyword-sft.jsonl`、`explanation-sft.jsonl`、`explanation-dpo.jsonl` 依次执行离线训练；训练仅用 `train`，仅在 `eval` 集评估，`freeze` 集保持隔离，完成冻结集一次性对比和影子运行后由人工决定发布或回滚。
+
+- **训练数据规模口径：** 目标为 15–30 个本地视频加受控公开数据。CueMind 数据至少占混合训练集 60%，AMI 用于会议窗口/触发补充，DialogSum 仅用于解释表达，公开数据最多占 40%，且不得进入 freeze。推荐顺序为：保留现有 15 个视频 → CueMind trigger 补至至少 500 条 → 加入 AMI 1,000–1,500 条 → 加入 DialogSum 约 1,000 条 → 以人工偏好为主补齐 DPO 300–500 对；只有 explanation/DPO 仍不足时才扩展到 30 个视频。
 - **7.7 ASR 可靠性：** confirmed 不回退/不重复，断流和重启可恢复，记录吞吐、确认延迟、错误率和恢复时间。
 - **7.8 模型基线与一键交接：** 固定 4B/8B、量化、KV cache、GPU 参数，提供本地 Trace、Docker 和一键评测/回滚流程。
 
