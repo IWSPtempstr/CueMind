@@ -26,6 +26,7 @@ function revive(session: SessionSnapshot): SessionSnapshot {
     postmeetingTranscript: session.postmeetingTranscript
       ? { ...session.postmeetingTranscript, generatedAt: new Date(session.postmeetingTranscript.generatedAt) }
       : undefined,
+    contextSummary: session.contextSummary ? { ...session.contextSummary, updatedAt: new Date(session.contextSummary.updatedAt).toISOString() } : undefined,
   };
 }
 

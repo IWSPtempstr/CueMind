@@ -2,6 +2,7 @@ export interface TranscriptWindow { id: string; text: string; timestampMs: numbe
 export interface CardContextState { recentTranscript: string; shownKeywords: string[]; currentTopics: string[]; unresolvedTopics: string[] }
 export interface AskContextSummary { topics: string[]; answeredQuestions: string[]; unresolvedQuestions: string[]; referencedCardIds: string[]; referencedDecisionIds: string[]; referencedSourceUrls: string[]; summaryVersion: string }
 export interface CompressionMetrics { originalChars: number; compactedChars: number; originalTokens: number; compactedTokens: number; trigger: "token_threshold" | "ask_turn_count" | "meeting_duration" | "manual"; status: "ok" | "fallback" | "failed" }
+export interface ContextSummaryRecord { sessionId: string; summary: AskContextSummary; metrics: CompressionMetrics; updatedAt: string; }
 export interface AskHistoryEntry { question: string; answer: string; cardIds?: string[]; decisionIds?: string[]; sourceUrls?: string[] }
 export interface AskContext { currentQuestion: string; recentTranscript: string; recentTurns: AskHistoryEntry[]; summary: AskContextSummary; evidence: string[] }
 
@@ -23,5 +24,6 @@ export function validateAskContextSummary(summary: unknown): summary is AskConte
   if (!isRecord(summary) || typeof summary.summaryVersion !== "string") return false;
   return ["topics", "answeredQuestions", "unresolvedQuestions", "referencedCardIds", "referencedDecisionIds", "referencedSourceUrls"].every((key) => Array.isArray(summary[key]) && (summary[key] as unknown[]).every((item) => typeof item === "string"));
 }
+export function createContextSummaryRecord(sessionId: string, summary: AskContextSummary, metrics: CompressionMetrics): ContextSummaryRecord { if (!sessionId.trim() || !validateAskContextSummary(summary)) throw new Error("invalid context summary"); return { sessionId: sessionId.trim(), summary: { ...summary }, metrics: { ...metrics }, updatedAt: new Date().toISOString() }; }
 function trimHistory(history: readonly AskHistoryEntry[], maxChars: number): AskHistoryEntry[] { const result: AskHistoryEntry[] = []; let size = 0; for (let i = history.length - 1; i >= 0; i -= 1) { const item = history[i]; const itemSize = item.question.length + item.answer.length; if (result.length > 0 && size + itemSize > maxChars) break; result.unshift({ ...item }); size += itemSize; } return result; }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }

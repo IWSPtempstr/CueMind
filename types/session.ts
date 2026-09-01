@@ -2,6 +2,7 @@ import type { ChatMessage } from "@/types/chat";
 import type { SuggestionBatch } from "@/types/suggestions";
 import type { SpeakerRole } from "@/lib/speaker-attributes";
 import type { MeetingDecisionRecord } from "@/lib/knowledge-memory";
+import type { ContextSummaryRecord } from "@/lib/realtime-context-memory";
 
 export type AudioSource = "system" | "microphone" | "upload";
 
@@ -65,4 +66,5 @@ export interface SessionSnapshot {
   /** 会后人工确认的会议决定；只保存显式决定，不从整段转写自动推断。 */
   decisions?: MeetingDecisionRecord[];
   postmeetingTranscript?: PostmeetingTranscriptArtifact;
+  contextSummary?: ContextSummaryRecord;
 }
