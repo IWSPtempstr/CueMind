@@ -6,6 +6,7 @@ import type { LatencySample } from "@/lib/telemetry";
 import type { TranscriptChunk } from "@/types/session";
 import type { ContextCard, ContextCardFailure } from "@/types/suggestions";
 import { appendPipelineEvent, createPipelineEvent, persistPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
+import { buildCardContext } from "@/lib/realtime-context-memory";
 
 type ContextCardTrace = NonNullable<ContextCard["demoTrace"]> & {
   finalState: NonNullable<ContextCard["demoTrace"]>["finalState"] | "suppressed_as_duplicate";
@@ -77,6 +78,7 @@ export default function useContextCards({ transcriptChunks, isRecording, session
     const runId = chunks.find((chunk) => chunk.pipelineRunId)?.pipelineRunId ?? crypto.randomUUID();
     setIsLoading(true);
     const knownKeywords = cardsRef.current.map((card) => card.keyword);
+    const cardContext = buildCardContext(transcriptChunks.map((chunk) => ({ id: chunk.id, text: chunk.text, timestampMs: chunk.timestamp.getTime() })), knownKeywords, [], []);
     const knownCandidates = cardsRef.current.map(({ candidateId, keyword }) => ({ candidateId, keyword }));
     try {
       const response = await fetch("/api/context-cards", {
@@ -86,6 +88,7 @@ export default function useContextCards({ transcriptChunks, isRecording, session
           ...(sessionId ? { sessionId } : {}),
           runId,
           recentTranscript: chunks.slice(-8).map((chunk) => chunk.text).join("\n"),
+          cardContext,
           knownKeywords,
           knownCandidates,
           transcriptChunkIds: chunks.slice(-8).map((chunk) => chunk.id),

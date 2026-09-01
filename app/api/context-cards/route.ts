@@ -13,6 +13,7 @@ import { getKnowledgeMemoryStore } from "@/lib/knowledge-memory-store";
 import type { MemoryHit } from "@/lib/knowledge-memory";
 import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
 import { appendPipelineEvents } from "@/lib/pipeline-event-store";
+import type { CardContextState } from "@/lib/realtime-context-memory";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,7 @@ interface ContextCardRequest {
   contextStartMs: number;
   contextEndMs: number;
   recentTranscript: string;
+  cardContext?: CardContextState;
   knownKeywords: string[];
   knownCandidates?: Array<{ candidateId: string; keyword: string }>;
   transcriptChunkIds: string[];
@@ -133,7 +135,7 @@ export async function POST(
     const keywordStarted = performance.now();
     const result = await generateProviderJson<KeywordResponse>(provider, {
       system: "从技术会议转写中识别一个此刻最值得补充背景的具体技术关键词。只返回 JSON：{\"keyword\":\"...\"}。不要返回泛化词。",
-      prompt: `已知关键词：${parsed.knownKeywords.join(", ") || "无"}\n最近转写：${parsed.recentTranscript}`,
+      prompt: `已知关键词：${parsed.cardContext?.shownKeywords.join(", ") || parsed.knownKeywords.join(", ") || "无"}\n当前主题：${parsed.cardContext?.currentTopics.join(", ") || "无"}\n未解决主题：${parsed.cardContext?.unresolvedTopics.join(", ") || "无"}\n最近转写：${parsed.cardContext?.recentTranscript || parsed.recentTranscript}`,
       timeoutMs: 5_000,
     });
     keywordMs = Math.round(performance.now() - keywordStarted);
@@ -589,6 +591,7 @@ function parseRequest(value: unknown): ContextCardRequest | null {
     contextStartMs,
     contextEndMs,
     recentTranscript: value.recentTranscript.slice(-12_000),
+    ...(isRecord(value.cardContext) ? { cardContext: value.cardContext as unknown as CardContextState } : {}),
     knownKeywords: value.knownKeywords,
     knownCandidates: (value.knownCandidates ?? []).map((candidate) => ({
       candidateId: candidate.candidateId.trim(),
