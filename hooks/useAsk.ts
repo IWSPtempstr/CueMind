@@ -9,6 +9,7 @@ import { loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
 import type { TranscriptChunk } from "@/types/session";
 import type { AskSource, ChatMessage } from "@/types/chat";
+import type { AskContextSummary } from "@/lib/realtime-context-memory";
 
 export type AskPhase =
   | "idle"
@@ -38,6 +39,7 @@ interface UseAskArgs {
   transcriptChunks: TranscriptChunk[];
   /** 会话归属（可选）：随请求透传，服务端仅用于日志/落库关联。 */
   sessionId?: string | null;
+  contextSummary?: AskContextSummary | null;
 }
 
 // 隐私红线：外发仅问题 + 提取关键词；最近转写只作为本地生成上下文。
@@ -112,7 +114,7 @@ function extractDeltaContent(data: unknown): string | null {
   return content;
 }
 
-export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): UseAskResult {
+export default function useAsk({ transcriptChunks, sessionId, contextSummary }: UseAskArgs): UseAskResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [phase, setPhase] = useState<AskPhase>("idle");
   const [busy, setBusy] = useState(false);
@@ -123,6 +125,8 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
   const sessionIdRef = useRef<string | null>(sessionId ?? null);
   const busyRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const contextSummaryRef = useRef<AskContextSummary | null>(contextSummary ?? null);
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   useEffect(() => {
     transcriptChunksRef.current = transcriptChunks;
@@ -131,6 +135,8 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
   useEffect(() => {
     sessionIdRef.current = sessionId ?? null;
   }, [sessionId]);
+  useEffect(() => { contextSummaryRef.current = contextSummary ?? null; }, [contextSummary]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   const setMessagesFromSession = useCallback((next: ChatMessage[]): void => {
     setMessages(
@@ -366,6 +372,10 @@ export default function useAsk({ transcriptChunks, sessionId }: UseAskArgs): Use
             recentTranscript,
             ...(termHint !== "" ? { termHint } : {}),
             ...(sessionIdValue ? { sessionId: sessionIdValue } : {}),
+            askContext: {
+              summary: contextSummaryRef.current,
+              recentTurns: messagesRef.current.filter((message) => message.role === "user" || message.role === "assistant").slice(-8).map((message) => ({ role: message.role, content: message.content })),
+            },
             settings: {
               askPrompt: settings.askPrompt,
               searchApiKey: settings.searchApiKey,

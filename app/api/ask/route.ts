@@ -7,6 +7,7 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import type { AskContextSummary } from "@/lib/realtime-context-memory";
 import {
   cappedPrompt,
   cappedText,
@@ -114,6 +115,7 @@ export async function POST(
 
   // Local-only generation context. Never forwarded to the search layer.
   const recentTranscript = cappedText(record.recentTranscript, MAX_CONTEXT_CHARS);
+  const askContext = parseAskContext(record.askContext);
 
   const settingsRecord =
     typeof record.settings === "object" &&
@@ -346,6 +348,7 @@ export async function POST(
               question,
               sources,
               recentTranscript,
+              askContext,
             }),
             upstreamSignal: upstream.signal,
             bumpIdleTimer,
@@ -494,6 +497,7 @@ function buildAskMessages(args: {
   question: string;
   sources: SearchResult[];
   recentTranscript: string;
+  askContext?: { summary: AskContextSummary | null; recentTurns: Array<{ role: string; content: string }> };
 }): Array<{ role: string; content: string }> {
   const sourceLines = args.sources
     .slice(0, ASK_MAX_SOURCES_IN_PROMPT)
@@ -511,6 +515,9 @@ function buildAskMessages(args: {
     args.recentTranscript.trim() !== ""
       ? `\n<recent_transcript_untrusted>\n${args.recentTranscript}\n</recent_transcript_untrusted>`
       : "";
+  const compactBlock = args.askContext
+    ? `\n<compact_context_untrusted>\n${args.askContext.summary ? JSON.stringify(args.askContext.summary) : ""}\n${args.askContext.recentTurns.slice(-8).map((turn) => `${turn.role}: ${turn.content.slice(0, 2000)}`).join("\n")}\n</compact_context_untrusted>`
+    : "";
 
   return [
     { role: "system", content: args.askPromptText },
@@ -523,9 +530,19 @@ function buildAskMessages(args: {
     {
       role: "user",
       content:
-        `问题：${args.question}\n\n<search_sources_untrusted>\n${sourceLines}\n</search_sources_untrusted>${transcriptBlock}`,
+        `问题：${args.question}\n\n<search_sources_untrusted>\n${sourceLines}\n</search_sources_untrusted>${transcriptBlock}${compactBlock}`,
     },
   ];
+}
+
+function parseAskContext(value: unknown): { summary: AskContextSummary | null; recentTurns: Array<{ role: string; content: string }> } | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const recentTurns = Array.isArray(record.recentTurns)
+    ? record.recentTurns.filter((turn): turn is { role: string; content: string } => typeof turn === "object" && turn !== null && typeof (turn as Record<string, unknown>).role === "string" && typeof (turn as Record<string, unknown>).content === "string").slice(-8)
+    : [];
+  const summary = typeof record.summary === "object" && record.summary !== null && !Array.isArray(record.summary) ? record.summary as AskContextSummary : null;
+  return { summary, recentTurns };
 }
 
 // Streams one OpenAI-compatible chat completion (JSON mode) and returns the
