@@ -18,6 +18,7 @@ export function buildAskContext(currentQuestion: string, chunks: readonly Transc
 
 export function estimateContextTokens(value: string): number { return Math.max(1, Math.ceil(value.length / 4)); }
 export function shouldCompact(promptTokens: number, contextWindowTokens: number, askTurns: number, meetingDurationMs: number): boolean { return promptTokens >= contextWindowTokens * 0.6 || askTurns >= 5 || meetingDurationMs >= 10 * 60 * 1000; }
+export function chooseCompressionTrigger(input: { promptTokens: number; contextWindowTokens: number; askTurns: number; meetingDurationMs: number; manual?: boolean }): CompressionMetrics["trigger"] | null { if (input.manual) return "manual"; if (input.promptTokens >= input.contextWindowTokens * 0.6) return "token_threshold"; if (input.askTurns >= 5) return "ask_turn_count"; if (input.meetingDurationMs >= 10 * 60 * 1000) return "meeting_duration"; return null; }
 export function compactAskHistory(history: readonly AskHistoryEntry[], maxChars: number): AskHistoryEntry[] { return trimHistory(history, maxChars); }
 export function fallbackTrimAskHistory(history: readonly AskHistoryEntry[], maxChars: number): AskHistoryEntry[] { return trimHistory(history, maxChars); }
 export function validateAskContextSummary(summary: unknown): summary is AskContextSummary {

@@ -511,6 +511,8 @@ EAGLE3、KV cache、不同量化档位、更强 GPU或蒸馏模型都只能作�
 
 **2026-08-31 执行记录：** 阶段 0–4 已实现并分别提交：`1f9a3af`、`a8263c0`、`1f9bde6`、`5282242`、`e354970`。契约、worker 队列/生命周期、SSE/LocalAgreement-2、final decode 与恢复回放定向测试，以及每阶段 `tsc`/lint 均通过。阶段 5 的真实 dataset 回放、10/30 分钟压力和资源采样未执行；用户随后明确授权将 streaming 设为生产默认，已通过配置提交切换，保留 `CUEMIND_REALTIME_ASR=cli` 回滚。自动门禁仍未通过，证据记录于 `reports/performance-resilience/realtime-asr-20260831/`；`dataset/` 未加入 Git。
 
+**2026-09-01 实时上下文记忆压缩记录：** 已新增 bounded card/Ask context 契约、摘要指标持久化、压缩触发策略和确定性三策略评测；卡片仅使用短窗口，Ask 保留当前问题与最近问答，原始转录不可变。未执行真实长会议质量、来源正确率或生产延迟评测，报告位于 `reports/context-compaction/context-compaction-20260901/`。
+
 **共同验收：** Trace 只保存 ID、时间戳、状态、耗时和错误码，不保存原始音频、完整转录或模型 payload；阶段 2 以前不得改变生产默认链路；每阶段独立测试、报告和本地 commit，任一门禁失败均保留 CLI 默认。
 
 **执行顺序与提交：**
