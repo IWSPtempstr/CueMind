@@ -12,6 +12,13 @@ import {
   type StoredChatMessage,
 } from "@/lib/chat-store";
 
+const MAX_MESSAGES = 20;
+const MAX_MESSAGE_CONTENT_CHARS = 8_000;
+const MAX_MESSAGE_SOURCES = 8;
+const MAX_MESSAGE_KEYWORDS = 20;
+const MAX_SOURCE_FIELD_CHARS = 1_000;
+const MAX_KEYWORD_CHARS = 200;
+
 export const runtime = "nodejs";
 
 export async function GET(
@@ -32,16 +39,34 @@ function parseChatMessage(
   const record = item as Record<string, unknown>;
   if (typeof record.id !== "string" || record.id.length === 0) return null;
   if (record.role !== "user" && record.role !== "assistant") return null;
-  if (typeof record.content !== "string") return null;
-  if (typeof record.createdAt !== "string" || record.createdAt.length === 0) return null;
+  if (typeof record.content !== "string" || record.content.length > MAX_MESSAGE_CONTENT_CHARS) return null;
+  if (typeof record.createdAt !== "string" || record.createdAt.length === 0 || record.createdAt.length > 80) return null;
+  if (record.sources !== undefined && (!Array.isArray(record.sources) || record.sources.length > MAX_MESSAGE_SOURCES)) return null;
+  if (record.keywords !== undefined && (!Array.isArray(record.keywords) || record.keywords.length > MAX_MESSAGE_KEYWORDS)) return null;
+  let sources: StoredChatMessage["sources"];
+  if (Array.isArray(record.sources)) {
+    sources = [];
+    for (const item of record.sources) {
+      if (typeof item !== "object" || item === null || Array.isArray(item)) return null;
+      const source = item as Record<string, unknown>;
+      if (typeof source.title !== "string" || typeof source.url !== "string" || source.title.length > MAX_SOURCE_FIELD_CHARS || source.url.length > MAX_SOURCE_FIELD_CHARS) return null;
+      if (source.sourceType !== undefined && (typeof source.sourceType !== "string" || source.sourceType.length > 100)) return null;
+      sources.push({ title: source.title, url: source.url, ...(typeof source.sourceType === "string" ? { sourceType: source.sourceType } : {}) });
+    }
+  }
+  let keywords: string[] | undefined;
+  if (Array.isArray(record.keywords)) {
+    if (!record.keywords.every((item): item is string => typeof item === "string" && item.length <= MAX_KEYWORD_CHARS)) return null;
+    keywords = record.keywords;
+  }
   return {
     id: record.id,
     role: record.role,
     content: record.content,
     isDetail: record.isDetail === true,
     createdAt: record.createdAt,
-    sources: Array.isArray(record.sources) ? record.sources.filter((item): item is { title: string; url: string; sourceType?: string } => typeof item === "object" && item !== null && typeof (item as Record<string, unknown>).title === "string" && typeof (item as Record<string, unknown>).url === "string") : undefined,
-    keywords: Array.isArray(record.keywords) ? record.keywords.filter((item): item is string => typeof item === "string") : undefined,
+    sources,
+    keywords,
     finalState: typeof record.finalState === "string" ? record.finalState : undefined,
   };
 }
@@ -68,6 +93,9 @@ export async function POST(
   if (accessDenied) return accessDenied;
   if (!Array.isArray(record.messages)) {
     return NextResponse.json({ error: "messages must be an array" }, { status: 400 });
+  }
+  if (record.messages.length > MAX_MESSAGES) {
+    return NextResponse.json({ error: "Too many messages" }, { status: 413 });
   }
 
   const messages: StoredChatMessage[] = [];

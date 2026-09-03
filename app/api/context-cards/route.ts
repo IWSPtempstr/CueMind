@@ -19,6 +19,12 @@ import type { CardContextState } from "@/lib/realtime-context-memory";
 
 export const runtime = "nodejs";
 
+const MAX_CONTEXT_KEYWORDS = 40;
+const MAX_CONTEXT_CANDIDATES = 40;
+const MAX_CONTEXT_CHUNK_IDS = 120;
+const MAX_CONTEXT_ITEM_CHARS = 500;
+const MAX_CONTEXT_ID_CHARS = 160;
+
 interface ContextCardRequest {
   runId?: string;
   candidateId: string;
@@ -505,11 +511,13 @@ function parseRequest(value: unknown): ContextCardRequest | null {
     !isRecord(value.settings)
   ) return null;
   if (
-    !value.knownKeywords.every(isString) ||
-    (value.knownCandidates !== undefined && (!Array.isArray(value.knownCandidates) || !value.knownCandidates.every((candidate) =>
-      isRecord(candidate) && isNonEmptyString(candidate.candidateId) && isString(candidate.keyword)
+    value.knownKeywords.length > MAX_CONTEXT_KEYWORDS ||
+    value.transcriptChunkIds.length > MAX_CONTEXT_CHUNK_IDS ||
+    (value.knownCandidates !== undefined && (!Array.isArray(value.knownCandidates) || value.knownCandidates.length > MAX_CONTEXT_CANDIDATES || !value.knownCandidates.every((candidate) =>
+      isRecord(candidate) && isNonEmptyString(candidate.candidateId) && isString(candidate.keyword) && candidate.candidateId.length <= MAX_CONTEXT_ID_CHARS && candidate.keyword.length <= MAX_CONTEXT_ITEM_CHARS
     ))) ||
-    !value.transcriptChunkIds.every(isString)
+    !value.knownKeywords.every((item) => isString(item) && item.length <= MAX_CONTEXT_ITEM_CHARS) ||
+    !value.transcriptChunkIds.every((item) => isString(item) && item.length <= MAX_CONTEXT_ID_CHARS)
   ) return null;
 
   // 实时简单模式（live-simple）：应用内 hook 不携带窗口元数据。仅当 candidateId 与
