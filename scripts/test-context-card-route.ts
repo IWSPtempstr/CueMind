@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import { NextRequest } from "next/server";
 import { POST } from "@/app/api/context-cards/route";
 import { POST as createSession } from "@/app/api/sessions/route";
 import {
@@ -180,8 +181,11 @@ function makeRequest(body: unknown): Request {
 }
 
 async function bootstrapSessions(): Promise<void> {
-  for (const id of ["m2-route-card-shown", "m2-route-dup", "m2-live-simple", "m2-bypass-probe"]) {
-    const response = await createSession(new Request("http://localhost/api/sessions", {
+  // 安全加固后路由要求所有 context-cards 请求携带 sessionId + X-Session-Token：
+  // - m2-context-suite：baseBody() 的默认授权 session（用例可用 overrides 覆盖）。
+  // - m2-live-nometa：live-simple 无窗口元数据用例的授权 session。
+  for (const id of ["m2-route-card-shown", "m2-route-dup", "m2-live-simple", "m2-live-nometa", "m2-context-suite", "m2-bypass-probe"]) {
+    const response = await createSession(new NextRequest("http://localhost/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, title: id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),
@@ -208,6 +212,9 @@ function settings(overrides: Record<string, unknown> = {}): Record<string, unkno
 
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    // 生产契约：context-cards 要求授权 session（缺 sessionId → 400）。默认落到
+    // 统一 bootstrap 的 m2-context-suite；需要专用账本归属的用例显式覆盖。
+    sessionId: "m2-context-suite",
     candidateId: "candidate-demo-001",
     datasetVersion: "demo-manifest-v1",
     windowingVersion: "candidate-window-v1",
@@ -530,8 +537,9 @@ async function testMissingCandidateIdIsRejected(): Promise<void> {
   assert.equal(countCandidates(), rowsBefore, "missing candidateId（invalid_request）不新增账本行");
 }
 
-// 实时简单模式：仅携带 hook 发送的四个字段（knownKeywords 校验保持必填，与线上一致），
+// 实时简单模式：仅携带 hook 发送的字段（knownKeywords 校验保持必填，与线上一致），
 // 不含 candidateId/时间元数据时应在服务端合成元数据并走通完整流程。
+// 生产契约要求授权 session（缺 sessionId → 400），故本用例携带 m2-live-nometa。
 async function testLiveSimpleBodyWithoutMetadataGeneratesCard(): Promise<void> {
   let calls = 0;
   const { server, baseUrl } = await startMockServer((_req, res) => {
@@ -548,6 +556,7 @@ async function testLiveSimpleBodyWithoutMetadataGeneratesCard(): Promise<void> {
   });
   try {
     const response = await POST(makeRequest({
+      sessionId: "m2-live-nometa",
       recentTranscript: "我们讨论一下 KV Cache 对推理吞吐的影响",
       knownKeywords: [],
       transcriptChunkIds: ["chunk-live-1"],
@@ -563,11 +572,12 @@ async function testLiveSimpleBodyWithoutMetadataGeneratesCard(): Promise<void> {
     assert.equal(payload.card.keyword, "KV Cache");
     assert.equal(payload.trace.finalState, "card_shown");
     assert.equal(calls, 2);
-    // M2-a：live-simple 无 sessionId → 账本归属 "unassigned"。
-    const unassignedRows = getCandidatesBySession("unassigned");
+    // M2-a：无窗口元数据的 live-simple + 授权 session → 账本按传入 sessionId 归属。
+    // （安全加固后路由拒绝无 sessionId 请求，账本 "unassigned" 分支经 HTTP 不可达。）
+    const nometaRows = getCandidatesBySession("m2-live-nometa");
     assert.ok(
-      unassignedRows.some((row) => row.candidateId === payload.trace.candidateId && row.finalState === "card_shown"),
-      "live-simple 未携带 sessionId 时账本应记 unassigned",
+      nometaRows.some((row) => row.candidateId === payload.trace.candidateId && row.finalState === "card_shown"),
+      "live-simple 合成 candidateId 应落 m2-live-nometa 账本",
     );
   } finally {
     await stopMockServer(server);
@@ -887,7 +897,7 @@ async function runBypassProbe(): Promise<void> {
   const probeDataPath = process.env.CUEMIND_DATA_DIR;
   const authDataDir = mkdtempSync(path.join(tmpdir(), "cuemind-route-auth-"));
   process.env.CUEMIND_DATA_DIR = authDataDir;
-  const authResponse = await createSession(new Request("http://localhost/api/sessions", {
+  const authResponse = await createSession(new NextRequest("http://localhost/api/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: "m2-bypass-probe", title: "m2-bypass-probe", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),

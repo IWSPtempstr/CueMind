@@ -188,7 +188,7 @@ async function bootstrapSessions(): Promise<void> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, title: id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),
-    }));
+    }) as unknown as NextRequest);
     assert.equal(response.status, 200);
     sessionTokens.set(id, (await response.json() as { sessionAccessToken: string }).sessionAccessToken);
   }
