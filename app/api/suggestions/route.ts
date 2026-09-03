@@ -20,6 +20,7 @@ import {
   SUGGESTIONS_PROMPT,
 } from "@/lib/prompts";
 import type { Suggestion, SuggestionType } from "@/types/suggestions";
+import { requireSessionAccess } from "@/lib/session-route";
 
 const SUGGESTIONS_TIMEOUT_MS = 60_000;
 
@@ -101,6 +102,9 @@ export async function POST(
   }
 
   const record = body as Record<string, unknown>;
+  const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
   const recentTranscript = cappedText(record.recentTranscript, MAX_SUGGESTION_INPUT_CHARS);
   const earlierSummary = cappedText(record.earlierSummary, MAX_SUGGESTION_INPUT_CHARS);
   const previousSuggestions = cappedText(record.previousSuggestions, MAX_SUGGESTION_INPUT_CHARS);

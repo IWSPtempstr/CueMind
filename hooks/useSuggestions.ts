@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
 import { normalizeSuggestionAnchor } from "@/lib/suggestion-anchor";
+import { withSessionHeaders } from "@/lib/client-session-auth";
 import type { TranscriptChunk } from "@/types/session";
 import type { Suggestion, SuggestionBatch } from "@/types/suggestions";
 
@@ -12,6 +13,7 @@ export type SuggestionFeedback = "dismiss" | "down" | "pin";
 interface UseSuggestionsArgs {
   transcriptChunks: TranscriptChunk[];
   isRecording: boolean;
+  sessionId?: string | null;
 }
 
 interface SummarizeSuccessResponse { summary: string }
@@ -32,7 +34,7 @@ function buildContextStrings(chunks: readonly TranscriptChunk[], recentChars: nu
   return { recentText, earlierText: earlierPart.slice(-earlierChars) };
 }
 
-export default function useSuggestions({ transcriptChunks, isRecording }: UseSuggestionsArgs): {
+export default function useSuggestions({ transcriptChunks, isRecording, sessionId }: UseSuggestionsArgs): {
   batches: SuggestionBatch[];
   setBatches: (batches: SuggestionBatch[]) => void;
   isLoading: boolean;
@@ -79,8 +81,8 @@ export default function useSuggestions({ transcriptChunks, isRecording }: UseSug
       if (earlierText) {
         const response = await fetch("/api/summarize", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ earlierTranscript: earlierText, summarizationPrompt: settings.summarizationPrompt }),
+          headers: withSessionHeaders(sessionId, { "Content-Type": "application/json" }),
+          body: JSON.stringify({ sessionId, earlierTranscript: earlierText, summarizationPrompt: settings.summarizationPrompt }),
         });
         const payload: unknown = await response.json();
         if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Summarization failed");
@@ -92,8 +94,8 @@ export default function useSuggestions({ transcriptChunks, isRecording }: UseSug
       const previousSuggestions = [...latestPreviews, ...dismissedPreviewsRef.current.slice(-12)].join("\n");
       const response = await fetch("/api/suggestions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recentTranscript: recentText, earlierSummary, previousSuggestions, suggestionsPrompt: settings.suggestionsPrompt }),
+        headers: withSessionHeaders(sessionId, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ sessionId, recentTranscript: recentText, earlierSummary, previousSuggestions, suggestionsPrompt: settings.suggestionsPrompt }),
       });
       const payload: unknown = await response.json();
       if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Suggestions failed");
@@ -120,7 +122,7 @@ export default function useSuggestions({ transcriptChunks, isRecording }: UseSug
       isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, []);
+  }, [sessionId]);
 
   const triggerRefresh = useCallback((): void => {
     const interval = loadCueMindSettings().suggestionRefreshSeconds * 1000;

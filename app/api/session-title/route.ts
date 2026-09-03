@@ -7,6 +7,7 @@ import { resolveLocalProvider } from "@/lib/llama-cpp";
 import { enforceRateLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { buildSessionTitle } from "@/lib/session-title";
+import { MAX_MESSAGE_CHARS } from "@/lib/prompts";
 
 export const runtime = "nodejs";
 
@@ -37,7 +38,7 @@ export async function POST(
   }
 
   const record = body as Record<string, unknown>;
-  const transcript = typeof record.transcript === "string" ? record.transcript : "";
+  const transcript = typeof record.transcript === "string" ? record.transcript.slice(-MAX_MESSAGE_CHARS) : "";
   const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
   const accessDenied = requireSessionAccess(request, sessionId);
   if (accessDenied) return accessDenied;

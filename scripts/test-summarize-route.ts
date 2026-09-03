@@ -12,8 +12,9 @@ import {
   type ServerResponse,
 } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 import { POST } from "@/app/api/summarize/route";
+import { POST as createSession } from "@/app/api/sessions/route";
 import {
   extractAskExchanges,
   formatAskExchangesOneLine,
@@ -28,6 +29,8 @@ const POLISH_PROMPT_MARKER = "转写文本整理助手";
 // --- mock local provider (OpenAI-compatible /v1/chat/completions) ---
 
 const providerBodies: string[] = [];
+const SESSION_ID = "summarize-test-session";
+let sessionToken = "";
 
 function startMockProvider(): Promise<{ server: Server; baseUrl: string }> {
   return new Promise((resolve) => {
@@ -70,15 +73,16 @@ function stopMockServer(server: Server): Promise<void> {
 }
 
 function makeRequest(body: unknown): NextRequest {
-  return new Request("http://localhost/api/summarize", {
+  return new NextRequest("http://localhost/api/summarize", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Session-Id": SESSION_ID, "X-Session-Token": sessionToken },
     body: JSON.stringify(body),
-  }) as unknown as NextRequest;
+  });
 }
 
 function summarizeBody(baseUrl: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    sessionId: SESSION_ID,
     earlierTranscript: "会议正在讨论推理优化与 KV cache。",
     summarizationPrompt: SUMMARIZE_PROMPT_MARKER,
     polish: true,
@@ -228,6 +232,13 @@ function testExtractAskExchangesSkipsDegraded(): void {
 // --- main ---
 
 async function main(): Promise<void> {
+  const sessionResponse = await createSession(new NextRequest("http://localhost/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: SESSION_ID, title: "summary test", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),
+  }));
+  assert.equal(sessionResponse.status, 200);
+  sessionToken = (await sessionResponse.json() as { sessionAccessToken: string }).sessionAccessToken;
   {
     const { server, baseUrl } = await startMockProvider();
     try {

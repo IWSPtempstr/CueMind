@@ -128,7 +128,7 @@ export default function Home(): ReactElement {
     getTranscriptChunks: () => recorder.transcriptChunks,
   });
   const isCardFlowActive = (recorder.isRecording && !recorder.isPaused) || uploader.isProcessing;
-  const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive });
+  const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive, sessionId: activeSessionId });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [meetingReport, setMeetingReport] = useState<MeetingReport | null>(null);
   const [postmeetingTranscript, setPostmeetingTranscript] = useState<PostmeetingTranscriptArtifact | null>(null);
@@ -476,8 +476,8 @@ export default function Home(): ReactElement {
       const askHistory = extractAskExchanges(askMessagesRef.current).map(({ question, answer }) => ({ question, answer }));
       void fetch("/api/summarize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ earlierTranscript: transcriptRef.current.map((chunk) => chunk.text).join("\n"), summarizationPrompt: END_OF_MEETING_PROMPT, polish: true, askHistory }),
+        headers: withSessionHeaders(activeSessionIdRef.current, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ sessionId: activeSessionIdRef.current, earlierTranscript: transcriptRef.current.map((chunk) => chunk.text).join("\n"), summarizationPrompt: END_OF_MEETING_PROMPT, polish: true, askHistory }),
       }).then(async (response) => {
         const payload: unknown = await response.json();
         if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Could not build the meeting report");

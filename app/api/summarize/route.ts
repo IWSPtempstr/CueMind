@@ -24,6 +24,7 @@ import {
   SUMMARIZATION_TEMPERATURE,
 } from "@/lib/prompts";
 import { polishTranscript } from "@/lib/transcript-polish";
+import { requireSessionAccess } from "@/lib/session-route";
 import {
   formatAskExchangesOneLine,
   MAX_ASK_CONTEXT_CHARS,
@@ -91,6 +92,9 @@ export async function POST(
   }
 
   const record = body as Record<string, unknown>;
+  const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
 
   const earlierTranscript = cappedText(
     record.earlierTranscript,
