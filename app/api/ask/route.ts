@@ -10,8 +10,8 @@ import { NextResponse } from "next/server";
 import type { AskContextSummary } from "@/lib/realtime-context-memory";
 import {
   cappedPrompt,
-  cappedText,
   enforceRateLimit,
+  readJsonBodyWithLimit,
 } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { askCacheGet, askCacheSet } from "@/lib/ask-cache";
@@ -59,6 +59,19 @@ const ASK_SOURCE_SNIPPET_CHARS = 800;
 const ASK_MIN_CITED_SOURCES = 1;
 const ASK_MAX_CITED_SOURCES = 5;
 const ASK_ANSWER_CHUNK_CHARS = 24;
+// Security plan §6.1/§6.2: request boundary. The body gate rejects oversized
+// payloads with 413 before parsing; field limits below reject (never truncate)
+// client-controlled strings with 400.
+const ASK_BODY_MAX_BYTES = 256 * 1024;
+const ASK_TERM_HINT_CHARS = 200;
+const ASK_RUN_ID_CHARS = 160;
+const ASK_CACHE_KEY_CHARS = 200;
+const ASK_CONTEXT_MAX_TURNS = 32;
+const ASK_CONTEXT_TURN_CONTENT_CHARS = 8_000;
+const ASK_CONTEXT_TURN_ROLE_CHARS = 40;
+const ASK_CONTEXT_SUMMARY_ARRAY_MAX = 50;
+const ASK_CONTEXT_SUMMARY_ITEM_CHARS = 500;
+const ASK_CONTEXT_SUMMARY_VERSION_CHARS = 40;
 
 interface AskCitedSource {
   title: string;
@@ -80,15 +93,11 @@ export async function POST(
   const limited = enforceRateLimit(request, "ask", 30);
   if (limited) return limited;
 
-  let body: unknown;
-  try {
-    body = (await request.json()) as unknown;
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 },
-    );
+  const parsedBody = await readJsonBodyWithLimit(request, ASK_BODY_MAX_BYTES);
+  if (!parsedBody.ok) {
+    return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
   }
+  const body: unknown = parsedBody.body;
 
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return NextResponse.json(
@@ -98,27 +107,59 @@ export async function POST(
   }
 
   const record = body as Record<string, unknown>;
-  const question = cappedText(record.question, MAX_MESSAGE_CHARS).trim();
-  if (question === "") {
+  // Reject (not truncate) oversized client-controlled fields (plan §6.2).
+  if (typeof record.question !== "string" || record.question.trim().length === 0) {
     return NextResponse.json(
       { error: "Question is required" },
       { status: 400 },
     );
   }
+  if (record.question.length > MAX_MESSAGE_CHARS) {
+    return NextResponse.json(
+      { error: "Question exceeds the length limit" },
+      { status: 400 },
+    );
+  }
+  const question = record.question.trim();
 
-  const termHint = cappedText(record.termHint, 200).trim();
-  const runId = typeof record.runId === "string" && record.runId.trim().length > 0
-    ? record.runId.trim().slice(0, 160)
-    : crypto.randomUUID();
+  if (
+    record.termHint !== undefined &&
+    (typeof record.termHint !== "string" || record.termHint.length > ASK_TERM_HINT_CHARS)
+  ) {
+    return NextResponse.json({ error: "termHint exceeds the length limit" }, { status: 400 });
+  }
+  const termHint = typeof record.termHint === "string" ? record.termHint.trim() : "";
+  if (
+    record.runId !== undefined &&
+    (typeof record.runId !== "string" || record.runId.trim().length === 0 || record.runId.length > ASK_RUN_ID_CHARS)
+  ) {
+    return NextResponse.json({ error: "runId exceeds the length limit" }, { status: 400 });
+  }
+  const runId = typeof record.runId === "string" ? record.runId.trim() : crypto.randomUUID();
   const cacheMode = record.cacheMode === "cold" || record.cacheMode === "hot" ? record.cacheMode : "default";
-  const cacheKey = cappedText(record.cacheKey, 200).trim();
+  if (
+    record.cacheKey !== undefined &&
+    (typeof record.cacheKey !== "string" || record.cacheKey.length > ASK_CACHE_KEY_CHARS)
+  ) {
+    return NextResponse.json({ error: "cacheKey exceeds the length limit" }, { status: 400 });
+  }
+  const cacheKey = typeof record.cacheKey === "string" ? record.cacheKey.trim() : "";
   const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
   const accessDenied = requireSessionAccess(request, sessionId);
   if (accessDenied) return accessDenied;
 
   // Local-only generation context. Never forwarded to the search layer.
-  const recentTranscript = cappedText(record.recentTranscript, MAX_CONTEXT_CHARS);
+  if (
+    record.recentTranscript !== undefined &&
+    (typeof record.recentTranscript !== "string" || record.recentTranscript.length > MAX_CONTEXT_CHARS)
+  ) {
+    return NextResponse.json({ error: "recentTranscript exceeds the length limit" }, { status: 400 });
+  }
+  const recentTranscript = typeof record.recentTranscript === "string" ? record.recentTranscript : "";
   const askContext = parseAskContext(record.askContext);
+  if (askContext === null) {
+    return NextResponse.json({ error: "Invalid askContext" }, { status: 400 });
+  }
 
   const settingsRecord =
     typeof record.settings === "object" &&
@@ -538,13 +579,41 @@ function buildAskMessages(args: {
   ];
 }
 
-function parseAskContext(value: unknown): { summary: AskContextSummary | null; recentTurns: Array<{ role: string; content: string }> } | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+// Strict askContext validation (plan §6.2): undefined → not provided; any
+// shape/size violation → null (caller returns 400). Bounded client input here
+// closes the prompt-amplification surface; prompt building still slices turns.
+function parseAskContext(value: unknown): { summary: AskContextSummary | null; recentTurns: Array<{ role: string; content: string }> } | null | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const recentTurns = Array.isArray(record.recentTurns)
-    ? record.recentTurns.filter((turn): turn is { role: string; content: string } => typeof turn === "object" && turn !== null && typeof (turn as Record<string, unknown>).role === "string" && typeof (turn as Record<string, unknown>).content === "string").slice(-8)
-    : [];
-  const summary = typeof record.summary === "object" && record.summary !== null && !Array.isArray(record.summary) ? record.summary as AskContextSummary : null;
+  const recentTurns: Array<{ role: string; content: string }> = [];
+  if (record.recentTurns !== undefined) {
+    if (!Array.isArray(record.recentTurns) || record.recentTurns.length > ASK_CONTEXT_MAX_TURNS) return null;
+    for (const turn of record.recentTurns) {
+      if (typeof turn !== "object" || turn === null || Array.isArray(turn)) return null;
+      const entry = turn as Record<string, unknown>;
+      if (
+        typeof entry.role !== "string" || entry.role.length > ASK_CONTEXT_TURN_ROLE_CHARS ||
+        typeof entry.content !== "string" || entry.content.length > ASK_CONTEXT_TURN_CONTENT_CHARS
+      ) return null;
+      recentTurns.push({ role: entry.role, content: entry.content });
+    }
+  }
+  let summary: AskContextSummary | null = null;
+  if (record.summary !== undefined) {
+    if (typeof record.summary !== "object" || record.summary === null || Array.isArray(record.summary)) return null;
+    const candidate = record.summary as Record<string, unknown>;
+    if (typeof candidate.summaryVersion !== "string" || candidate.summaryVersion.length > ASK_CONTEXT_SUMMARY_VERSION_CHARS) return null;
+    const validated: Record<string, unknown> = { summaryVersion: candidate.summaryVersion };
+    for (const field of ["topics", "answeredQuestions", "unresolvedQuestions", "referencedCardIds", "referencedDecisionIds", "referencedSourceUrls"] as const) {
+      const items = candidate[field];
+      if (items === undefined) continue;
+      if (!Array.isArray(items) || items.length > ASK_CONTEXT_SUMMARY_ARRAY_MAX) return null;
+      if (!items.every((item) => typeof item === "string" && item.length <= ASK_CONTEXT_SUMMARY_ITEM_CHARS)) return null;
+      validated[field] = items;
+    }
+    summary = validated as unknown as AskContextSummary;
+  }
   return { summary, recentTurns };
 }
 

@@ -6,23 +6,46 @@
 // (transcript never leaves via the search layer), askPrompt legacy migration.
 
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
 import {
   createServer,
   type IncomingMessage,
   type Server,
   type ServerResponse,
 } from "node:http";
+import { tmpdir } from "node:os";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import type { NextRequest } from "next/server";
 import { POST } from "@/app/api/ask/route";
+import { POST as createSession } from "@/app/api/sessions/route";
 import { askCacheClear } from "@/lib/ask-cache";
 import { loadCueMindSettings } from "@/hooks/useSettings";
-import { ASK_PROMPT, LEGACY_DEFAULT_CHAT_PROMPT } from "@/lib/prompts";
+import { ASK_PROMPT, LEGACY_DEFAULT_CHAT_PROMPT, MAX_CONTEXT_CHARS, MAX_MESSAGE_CHARS } from "@/lib/prompts";
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
 
 const realFetch = globalThis.fetch;
+
+// 会话授权夹具（安全加固后 ask 路由要求 sessionId + X-Session-Token）。
+// CUEMIND_DATA_DIR 未设时指向临时目录，避免污染开发 .data。
+if (!process.env.CUEMIND_DATA_DIR?.trim()) {
+  process.env.CUEMIND_DATA_DIR = mkdtempSync(path.join(tmpdir(), "cuemind-ask-route-test-"));
+}
+
+const sessionTokens = new Map<string, string>();
+const ASK_TEST_SESSION = "ask-route-suite";
+
+async function bootstrapSession(): Promise<void> {
+  const response = await createSession(new Request("http://localhost/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: ASK_TEST_SESSION, title: ASK_TEST_SESSION, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),
+  }) as unknown as NextRequest);
+  assert.equal(response.status, 200);
+  sessionTokens.set(ASK_TEST_SESSION, (await response.json() as { sessionAccessToken: string }).sessionAccessToken);
+}
 
 // --- outbound call recording (privacy red line evidence) ---
 
@@ -150,17 +173,34 @@ function stopMockServer(server: Server): Promise<void> {
 
 // --- request / SSE helpers ---
 
-function makeRequest(body: unknown): NextRequest {
-  // 路由只消费 headers/json/signal，Request 运行时形状足够；类型上收敛到 NextRequest。
+interface RequestOptions {
+  /** 覆盖/追加请求头（如注入错误 token）。 */
+  headers?: Record<string, string>;
+  /** 跳过自动附加 X-Session-Token（测缺失 token 401）。 */
+  noAuth?: boolean;
+}
+
+function makeRequest(body: unknown, options: RequestOptions = {}): NextRequest {
+  // 路由只消费 headers/text/signal，Request 运行时形状足够；类型上收敛到 NextRequest。
+  const sessionId = typeof body === "object" && body !== null && typeof (body as { sessionId?: unknown }).sessionId === "string"
+    ? (body as { sessionId: string }).sessionId
+    : undefined;
+  const token = sessionId && !options.noAuth ? sessionTokens.get(sessionId) : undefined;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { "X-Session-Token": token } : {}),
+    ...(options.headers ?? {}),
+  };
   return new Request("http://localhost/api/ask", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   }) as unknown as NextRequest;
 }
 
 function askBody(baseUrl: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    sessionId: ASK_TEST_SESSION,
     question: "KV cache 为什么能加速自回归解码？",
     recentTranscript: "会议正在讨论推理优化。",
     settings: {
@@ -470,11 +510,84 @@ function testAlreadyMigratedLegacyDefaultSelfHeals(): void {
   }
 }
 
+// --- 安全边界（plan §6.2）：session 授权 + 字段/请求体上限 ---
+
+async function testSessionBoundaryRejections(baseUrl: string): Promise<void> {
+  // 缺 sessionId（有效 body 其余部分）→ 400
+  const noSession = askBody(baseUrl);
+  delete (noSession as Record<string, unknown>).sessionId;
+  assert.equal((await POST(makeRequest(noSession))).status, 400, "缺 sessionId 应 400");
+
+  // 有 sessionId、缺 token → 401
+  assert.equal(
+    (await POST(makeRequest(askBody(baseUrl), { noAuth: true }))).status,
+    401,
+    "缺 X-Session-Token 应 401",
+  );
+
+  // 错 token → 401
+  assert.equal(
+    (await POST(makeRequest(askBody(baseUrl), { headers: { "X-Session-Token": "definitely-wrong-token" } }))).status,
+    401,
+    "错误 token 应 401",
+  );
+}
+
+async function testFieldLimitRejections(baseUrl: string): Promise<void> {
+  // question 超长 → 400（拒绝，不截断）
+  assert.equal(
+    (await POST(makeRequest(askBody(baseUrl, { question: "q".repeat(MAX_MESSAGE_CHARS + 1) })))).status,
+    400,
+    "question 超长应 400",
+  );
+  // recentTranscript 超长 → 400
+  assert.equal(
+    (await POST(makeRequest(askBody(baseUrl, { recentTranscript: "t".repeat(MAX_CONTEXT_CHARS + 1) })))).status,
+    400,
+    "recentTranscript 超长应 400",
+  );
+  // askContext.recentTurns > 32 → 400
+  const turns = Array.from({ length: 33 }, (_, index) => ({ role: "user", content: `turn ${index}` }));
+  assert.equal(
+    (await POST(makeRequest(askBody(baseUrl, { askContext: { recentTurns: turns } })))).status,
+    400,
+    "askContext.recentTurns 超限应 400",
+  );
+  // askContext 嵌套违规（turn content 非字符串）→ 400
+  assert.equal(
+    (await POST(makeRequest(askBody(baseUrl, { askContext: { recentTurns: [{ role: "user", content: 42 }] } })))).status,
+    400,
+    "askContext 形状违规应 400",
+  );
+}
+
+async function testOversizeBodyRejected413(baseUrl: string): Promise<void> {
+  // >256KB body（content-length 头同步超限）→ 413，且不得进入 SSE 流程
+  const response = await POST(makeRequest(askBody(baseUrl, { question: "q".repeat(300 * 1024) })));
+  assert.equal(response.status, 413, "超限请求体应 413");
+  const payload = await response.json() as { error?: string };
+  assert.match(payload.error ?? "", /too large/i);
+}
+
 // --- main ---
 
 async function main(): Promise<void> {
   installSearchMock();
+  await bootstrapSession();
   try {
+    // 0) 安全边界（plan §6.2）：session 400/401 + 字段上限 400 + 413
+    {
+      tavilyResultCount = 2;
+      const { server, baseUrl } = await startMockProvider({ keywords: ["KV Cache"], generationContent: "边界用例不进入生成" });
+      try {
+        await testSessionBoundaryRejections(baseUrl);
+        await testFieldLimitRejections(baseUrl);
+        await testOversizeBodyRejected413(baseUrl);
+      } finally {
+        await stopMockServer(server);
+      }
+      console.log("0) 安全边界（缺 sessionId 400 / 缺 token 401 / 错 token 401 / 字段超限 400 / 超限请求体 413）通过");
+    }
     // a) 来源 ≥2 → answered + sources 结构
     {
       askCacheClear();

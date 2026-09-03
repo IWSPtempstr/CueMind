@@ -166,13 +166,23 @@ if (!process.env.CUEMIND_DATA_DIR?.trim()) {
 
 const sessionTokens = new Map<string, string>();
 
-function makeRequest(body: unknown): Request {
+interface RequestOptions {
+  /** 覆盖/追加请求头（如注入错误 token）。 */
+  headers?: Record<string, string>;
+  /** 跳过自动附加 X-Session-Token（测缺失 token 401）。 */
+  noAuth?: boolean;
+}
+
+function makeRequest(body: unknown, options: RequestOptions = {}): Request {
   const sessionId = typeof body === "object" && body !== null && typeof (body as { sessionId?: unknown }).sessionId === "string"
     ? (body as { sessionId: string }).sessionId
     : undefined;
-  const headers = new Headers({ "Content-Type": "application/json" });
-  const token = sessionId ? sessionTokens.get(sessionId) : undefined;
-  if (token) headers.set("X-Session-Token", token);
+  const token = sessionId && !options.noAuth ? sessionTokens.get(sessionId) : undefined;
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    ...(token ? { "X-Session-Token": token } : {}),
+    ...(options.headers ?? {}),
+  });
   return new Request("http://localhost/api/context-cards", {
     method: "POST",
     headers,
@@ -969,6 +979,72 @@ function runBypassChildSuite(): void {
   console.log("context-card route bypass probe passed (child process)");
 }
 
+// --- 安全边界（plan §6.3）：session 授权 + cardContext 校验 + 请求体上限 ---
+
+async function testSessionBoundaryRejections(): Promise<void> {
+  // 有效 body 但缺 sessionId → 400（requireSessionAccess）
+  const noSession = baseBody();
+  delete (noSession as Record<string, unknown>).sessionId;
+  assert.equal((await POST(makeRequest(noSession))).status, 400, "缺 sessionId 应 400");
+  // 缺 token → 401
+  assert.equal(
+    (await POST(makeRequest(baseBody(), { noAuth: true }))).status,
+    401,
+    "缺 X-Session-Token 应 401",
+  );
+  // 错 token → 401
+  assert.equal(
+    (await POST(makeRequest(baseBody(), { headers: { "X-Session-Token": "definitely-wrong-token" } }))).status,
+    401,
+    "错误 token 应 401",
+  );
+}
+
+async function testCardContextValidation(): Promise<void> {
+  // cardContext 形状违规（嵌套对象）→ 400 invalid_request
+  const nested = baseBody({ cardContext: { recentTranscript: "x", shownKeywords: [{ bad: true }], currentTopics: [], unresolvedTopics: [] } });
+  const nestedResponse = await POST(makeRequest(nested));
+  assert.equal(nestedResponse.status, 400);
+  assert.equal((await readPayload(nestedResponse)).trace.finalState, "invalid_request");
+  // cardContext 数组超限 → 400 invalid_request
+  const tooMany = baseBody({ cardContext: { recentTranscript: "x", shownKeywords: Array.from({ length: 41 }, (_, i) => `k${i}`), currentTopics: [], unresolvedTopics: [] } });
+  assert.equal((await POST(makeRequest(tooMany))).status, 400, "cardContext 数组超限应 400");
+  // 合法 cardContext → 照常走通（卡片生成两次 mock 调用）
+  let calls = 0;
+  const { server, baseUrl } = await startMockServer((_req, res) => {
+    calls += 1;
+    if (calls === 1) {
+      writeJson(res, 200, chatCompletion({ keyword: "KV Cache" }));
+    } else {
+      writeJson(res, 200, chatCompletion({
+        keyword: "KV Cache",
+        keyPoints: ["要点一。", "要点二。"],
+        whyNow: "现在相关。",
+      }));
+    }
+  });
+  try {
+    const response = await POST(makeRequest(baseBody({
+      settings: settings({ llamaCppBaseUrl: baseUrl, llamaCppModel: "qwen3" }),
+      cardContext: { recentTranscript: "我们讨论一下 KV Cache", shownKeywords: ["RAG"], currentTopics: ["推理"], unresolvedTopics: [] },
+    })));
+    assert.equal(response.status, 200);
+    assert.equal((await readPayload(response)).trace.finalState, "card_shown", "合法 cardContext 不应影响链路");
+  } finally {
+    await stopMockServer(server);
+  }
+}
+
+async function testOversizeBodyRejected413(): Promise<void> {
+  // >256KB body → 413，且不产生账本行（在解析前拒绝）
+  const rowsBefore = countCandidates();
+  const response = await POST(makeRequest(baseBody({ recentTranscript: "x".repeat(300 * 1024) })));
+  assert.equal(response.status, 413, "超限请求体应 413");
+  const payload = (await response.json()) as { error?: string };
+  assert.match(payload.error ?? "", /too large/i);
+  assert.equal(countCandidates(), rowsBefore, "413 路径不产生账本行");
+}
+
 async function main(): Promise<void> {
   // 子进程探针模式：只跑旁路用例后直接退出。
   if (process.env.CUEMIND_ROUTE_BYPASS_PROBE === "1") {
@@ -979,6 +1055,8 @@ async function main(): Promise<void> {
   installSearchMock();
   try {
     await testInvalidRequest();
+    await testSessionBoundaryRejections();
+    await testOversizeBodyRejected413();
     await testLocalProviderSelected();
     await testRemoteProviderSelected();
     await testProviderFailureWithoutSilentFallback();
@@ -993,6 +1071,7 @@ async function main(): Promise<void> {
     await testLiveSimpleBodyWithoutMetadataGeneratesCard();
     await testLiveSimpleWithSessionIdAttributesLedger();
     await testPartialMetadataIsStillRejected();
+    await testCardContextValidation();
     await testTavilyFallsBackToAgentReachWhenKeyMissing();
     await testAgentReachUnavailableReplacesMissingKeyFailure();
     await testAgentReachFallbackCanBeDisabled();

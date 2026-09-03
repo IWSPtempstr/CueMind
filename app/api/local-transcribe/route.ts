@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/api-security";
+import { enforceRateLimit, readJsonBodyWithLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { ensureWarmedUp, transcribeWithWhisperCpp } from "@/lib/local-asr";
 import { parseLocalTranscribeRequest } from "@/lib/local-transcribe-contract";
@@ -7,17 +7,20 @@ import { resolveVadModelPath, resolveWhisperModelPath, resolveWhisperPath } from
 
 export const runtime = "nodejs";
 
+// Security plan §6.5: the request carries an audioPath reference, not audio
+// data — a small ceiling is enough; reject oversize with 413 before parsing.
+const LOCAL_TRANSCRIBE_BODY_MAX_BYTES = 64 * 1024;
+
 export async function POST(
   request: Request,
 ): Promise<NextResponse<LocalTranscribeResponse | { error: string }>> {
   const limited = enforceRateLimit(request, "local-transcribe", 12);
   if (limited) return limited;
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  const parsedBody = await readJsonBodyWithLimit(request, LOCAL_TRANSCRIBE_BODY_MAX_BYTES);
+  if (!parsedBody.ok) {
+    return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
   }
+  const body: unknown = parsedBody.body;
 
   const parsed = parseLocalTranscribeRequest(body);
   if (!parsed) {

@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/api-security";
+import { enforceRateLimit, readJsonBodyWithLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { encodeSseEvent, LocalAgreement2 } from "@/lib/realtime-agreement";
 
 const MAX_SNAPSHOTS = 240;
 const MAX_SNAPSHOT_TEXT_CHARS = 12_000;
+// Security plan §6.5: 240 snapshots × 12k chars ≈ 2.9MB upper bound; 4MB
+// rejects oversized bodies with 413 before parsing.
+const REALTIME_TRANSCRIBE_BODY_MAX_BYTES = 4 * 1024 * 1024;
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request): Promise<Response> {
   const limited = enforceRateLimit(request, "realtime-transcribe", 30);
   if (limited) return limited;
-  let body: unknown;
-  try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
+  const parsedBody = await readJsonBodyWithLimit(request, REALTIME_TRANSCRIBE_BODY_MAX_BYTES);
+  if (!parsedBody.ok) return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+  const body = parsedBody.body;
   if (!isRecord(body) || typeof body.runId !== "string" || !body.runId.trim() || body.runId.length > 160 || !Array.isArray(body.snapshots)) return NextResponse.json({ error: "runId and snapshots are required" }, { status: 400 });
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   const accessDenied = requireSessionAccess(request, sessionId);

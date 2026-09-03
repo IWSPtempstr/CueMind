@@ -1,16 +1,22 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/api-security";
+import { enforceRateLimit, readJsonBodyWithLimit } from "@/lib/api-security";
 import { createPostmeetingTranscript } from "@/lib/postmeeting-transcript";
 import { requireSessionAccess } from "@/lib/session-route";
 
 export const runtime = "nodejs";
 
+// Security plan §6.5: the effective transcript ceiling is 32k chars; 2MB of
+// raw body is a generous envelope (chunks carry timestamps etc.) — reject
+// anything larger with 413 before parsing.
+const POSTMEETING_BODY_MAX_BYTES = 2 * 1024 * 1024;
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const limited = enforceRateLimit(request, "postmeeting-transcript", 10);
   if (limited) return limited;
-  let body: unknown;
-  try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
+  const parsedBody = await readJsonBodyWithLimit(request, POSTMEETING_BODY_MAX_BYTES);
+  if (!parsedBody.ok) return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+  const body: unknown = parsedBody.body;
   if (typeof body !== "object" || body === null || Array.isArray(body)) return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   const record = body as Record<string, unknown>;
   const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";

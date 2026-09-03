@@ -9,7 +9,7 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/api-security";
+import { enforceRateLimit, readJsonBodyWithLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { getCandidate } from "@/lib/candidate-store";
 import type { AskExchange } from "@/lib/ask-history";
@@ -38,6 +38,10 @@ const MAX_ASKS = 200;
 const MAX_ASK_QUESTION_CHARS = 500;
 const MAX_ASK_ANSWER_CHARS = 2_000;
 const MAX_DECISIONS = 100;
+// Security plan §6.1: meeting snapshots legitimately carry full transcripts,
+// so this route keeps the largest ceiling; still reject (413) anything beyond
+// it before parsing instead of silently consuming unbounded memory.
+const VAULT_EXPORT_BODY_MAX_BYTES = 8 * 1024 * 1024;
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
@@ -217,12 +221,11 @@ export async function POST(
   const limited = enforceRateLimit(request, "vault-export", 30);
   if (limited !== null) return limited;
 
-  let body: unknown;
-  try {
-    body = (await request.json()) as unknown;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  const parsedBody = await readJsonBodyWithLimit(request, VAULT_EXPORT_BODY_MAX_BYTES);
+  if (!parsedBody.ok) {
+    return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
   }
+  const body: unknown = parsedBody.body;
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }

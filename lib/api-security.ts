@@ -74,3 +74,33 @@ export function cappedPrompt(
     ? value.slice(0, maxChars)
     : fallback;
 }
+
+/**
+ * Shared HTTP body-size gate (security plan §6.1): reject, never truncate.
+ * Checks content-length first when present, then the actual byte length after
+ * reading, so missing/frankenstein headers cannot bypass the ceiling. Returns
+ * a stable 413 response before any parsing or downstream work on overflow.
+ */
+export async function readJsonBodyWithLimit(
+  request: Pick<Request, "headers" | "text">,
+  maxBytes: number,
+): Promise<{ ok: true; body: unknown } | { ok: false; status: 400 | 413; error: string }> {
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    return { ok: false, status: 413, error: "Request body too large" };
+  }
+  let raw: string;
+  try {
+    raw = await request.text();
+  } catch {
+    return { ok: false, status: 400, error: "Invalid JSON body" };
+  }
+  if (Buffer.byteLength(raw, "utf8") > maxBytes) {
+    return { ok: false, status: 413, error: "Request body too large" };
+  }
+  try {
+    return { ok: true, body: JSON.parse(raw) as unknown };
+  } catch {
+    return { ok: false, status: 400, error: "Invalid JSON body" };
+  }
+}

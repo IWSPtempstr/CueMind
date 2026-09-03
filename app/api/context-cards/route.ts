@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { appendCandidates } from "@/lib/candidate-store";
-import { enforceRateLimit } from "@/lib/api-security";
+import { enforceRateLimit, readJsonBodyWithLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { askCacheSet } from "@/lib/ask-cache";
 import { generateLlamaCppJson, withCardInflight } from "@/lib/llama-cpp";
@@ -24,6 +24,14 @@ const MAX_CONTEXT_CANDIDATES = 40;
 const MAX_CONTEXT_CHUNK_IDS = 120;
 const MAX_CONTEXT_ITEM_CHARS = 500;
 const MAX_CONTEXT_ID_CHARS = 160;
+// Security plan §6.1/§6.3: the whole-body gate rejects oversized payloads with
+// 413 before parsing; cardContext below is strictly shape- and size-checked so
+// the free-form payload cannot amplify the prompt.
+const CONTEXT_CARDS_BODY_MAX_BYTES = 256 * 1024;
+const MAX_CARD_CONTEXT_RECENT_CHARS = 32_000;
+const MAX_CARD_CONTEXT_ARRAY_ITEMS = 40;
+const MAX_CARD_CONTEXT_ITEM_CHARS = 500;
+const MAX_CARD_CONTEXT_SERIALIZED_CHARS = 64_000;
 
 interface ContextCardRequest {
   runId?: string;
@@ -115,7 +123,12 @@ export async function POST(
   const started = performance.now();
   let traceId = crypto.randomUUID();
   let runId = traceId;
-  const body = await readJson(request);
+  // 413 在进入解析/账本前直接拒绝；JSON 解析失败沿用 invalid_request 路径。
+  const parsedBody = await readJsonBodyWithLimit(request, CONTEXT_CARDS_BODY_MAX_BYTES);
+  if (!parsedBody.ok && parsedBody.status === 413) {
+    return NextResponse.json({ error: parsedBody.error }, { status: 413 }) as unknown as NextResponse<ContextCardResponse>;
+  }
+  const body = parsedBody.ok ? parsedBody.body : null;
   const parsed = parseRequest(body);
   const traceEvents: TraceEvent[] = [];
   const pipelineEvents: PipelineEvent[] = [];
@@ -494,14 +507,6 @@ function normalizeKeyword(keyword: string): string {
   return keyword.trim().toLowerCase();
 }
 
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
-}
-
 function parseRequest(value: unknown): ContextCardRequest | null {
   if (
     !isRecord(value) ||
@@ -519,6 +524,15 @@ function parseRequest(value: unknown): ContextCardRequest | null {
     !value.knownKeywords.every((item) => isString(item) && item.length <= MAX_CONTEXT_ITEM_CHARS) ||
     !value.transcriptChunkIds.every((item) => isString(item) && item.length <= MAX_CONTEXT_ID_CHARS)
   ) return null;
+
+  // cardContext（plan §6.3）：提供即必须严格合法（扁平形状 + 尺寸上限），
+  // 违规拒绝整个请求；strict shape 同时封死任意嵌套深度。
+  let cardContext: CardContextState | undefined;
+  if (value.cardContext !== undefined) {
+    const validatedCardContext = parseCardContext(value.cardContext);
+    if (validatedCardContext === null) return null;
+    cardContext = validatedCardContext;
+  }
 
   // 实时简单模式（live-simple）：应用内 hook 不携带窗口元数据。仅当 candidateId 与
   // 四个时间字段全部缺失时，在服务端合成元数据；部分缺失视为 mixed，仍然拒绝。
@@ -606,7 +620,7 @@ function parseRequest(value: unknown): ContextCardRequest | null {
     contextStartMs,
     contextEndMs,
     recentTranscript: value.recentTranscript.slice(-12_000),
-    ...(isRecord(value.cardContext) ? { cardContext: value.cardContext as unknown as CardContextState } : {}),
+    ...(cardContext !== undefined ? { cardContext } : {}),
     knownKeywords: value.knownKeywords,
     knownCandidates: (value.knownCandidates ?? []).map((candidate) => ({
       candidateId: candidate.candidateId.trim(),
@@ -630,6 +644,27 @@ function parseRequest(value: unknown): ContextCardRequest | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Strict cardContext validation (plan §6.3): flat CardContextState shape with
+ * per-field ceilings plus a serialized-size cap. Any nesting or oversize →
+ * null (caller rejects the request).
+ */
+function parseCardContext(value: unknown): CardContextState | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.recentTranscript !== "string" || value.recentTranscript.length > MAX_CARD_CONTEXT_RECENT_CHARS) return null;
+  const stringArray = (field: unknown): string[] | null => {
+    if (!Array.isArray(field) || field.length > MAX_CARD_CONTEXT_ARRAY_ITEMS) return null;
+    return field.every((item) => isString(item) && item.length <= MAX_CARD_CONTEXT_ITEM_CHARS) ? field as string[] : null;
+  };
+  const shownKeywords = stringArray(value.shownKeywords);
+  const currentTopics = stringArray(value.currentTopics);
+  const unresolvedTopics = stringArray(value.unresolvedTopics);
+  if (shownKeywords === null || currentTopics === null || unresolvedTopics === null) return null;
+  const cardContext: CardContextState = { recentTranscript: value.recentTranscript, shownKeywords, currentTopics, unresolvedTopics };
+  if (JSON.stringify(cardContext).length > MAX_CARD_CONTEXT_SERIALIZED_CHARS) return null;
+  return cardContext;
 }
 
 function isString(value: unknown): value is string {
