@@ -1,0 +1,12 @@
+{
+  "evaluator": "asr-latency-evaluator-v1",
+  "generatedAt": "2026-08-31T11:25:36.412Z",
+  "inputDir": "/home/work/asr/CueMind/dataset",
+  "inputCount": 15,
+  "whisperPath": "/home/work/asr/whisper.cpp/build-cuda/bin/whisper-cli",
+  "modelPath": "/home/work/asr/.runtime/models/ggml-small.bin",
+  "language": "zh",
+  "executionMode": "real_local_whisper_cpp",
+  "partialConfirmedMode": "unavailable_in_cli_per_request_mode",
+  "evidenceBoundary": "Real local whisper.cpp process timing and segment integrity. CLI per-request execution does not prove resident streaming partial/confirmed latency."
+}

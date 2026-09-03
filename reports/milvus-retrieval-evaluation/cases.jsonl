@@ -1,2 +1,0 @@
-{"id":"milvus-q-001","queryText":"How does RAG ground generated answers in a knowledge base?","status":"complete","latencyMs":272,"resultCount":0,"fallbackRequired":true,"fallbackReason":"no_results","relevant":false,"results":[]}
-{"id":"milvus-q-002","queryText":"Why does KV Cache reduce repeated computation during decoding?","status":"complete","latencyMs":130,"resultCount":0,"fallbackRequired":true,"fallbackReason":"no_results","relevant":false,"results":[]}

@@ -1,0 +1,20 @@
+{
+  "id": "b8dbed17f",
+  "name": "production build",
+  "command": "npm run build",
+  "description": "run production build",
+  "status": "completed",
+  "outputPath": ".pi/tasks/session-115495-115495/b8dbed17f.output",
+  "cwd": "/home/work/asr/CueMind",
+  "startTime": 1788427364727,
+  "endTime": 1788427441684,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 452904,
+  "bytesWritten": 3345,
+  "isAgent": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 180
+}

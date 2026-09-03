@@ -1,0 +1,11 @@
+{
+  "evaluator": "llama-timing-evaluator-v1",
+  "generatedAt": "2026-08-31T11:26:41.326Z",
+  "baseUrl": "http://127.0.0.1:8082",
+  "model": "/home/work/models/cuemind/Qwen3-8B-Q4_K_M.gguf",
+  "runsPerQuestion": 3,
+  "questionCount": 8,
+  "executionMode": "real_llama_cpp_sse",
+  "timingFieldPolicy": "server_timings_only",
+  "evidenceBoundary": "Real llama.cpp SSE timing for a fixed prompt set; firstToken is upstream SSE content when exposed, while buffered application answer bytes are not TTFT."
+}

@@ -17,11 +17,11 @@ stays separate from knowledge retrieval.
 
 **Live demo:** https://cuemind-live-suggestions-jet.vercel.app/
 
-You need **Node 18+** and a **Groq API key**. You can enter the key in Settings, or set `GROQ_API_KEY` in the server environment so browsers never need a copy.
+You need **Node 18+**, a local **llama.cpp** server (`llama-server`, OpenAI-compatible) and a local **whisper.cpp** build (`whisper-cli`). This is a local-first setup: audio, transcription, and card generation stay on your machine; web search is the only outbound call (an explicit, sourced enhancement). A remote OpenAI-compatible API is available as an explicitly configured alternative — there is no silent cloud default and no API key required for local use.
 1. Clone the repo and install dependencies: `npm install`
-2. Start the app: `npm run dev`
-3. Open **Settings** (gear icon, top right) and paste your Groq API key
-4. Click the mic and start talking
+2. Start your local `llama-server` (see `docs/deployment/qwen3-4b-llama-cpp.md`)
+3. Start the app: `npm run dev`
+4. Upload a meeting recording (**Upload**) or click the mic and start talking
 5. Transcript chunks and live suggestions refresh automatically every ~30s
 6. Click any suggestion card to open it in chat (instant preview + streamed answer)
 7. Export the full session as JSON for machines or Markdown for humans
@@ -30,11 +30,11 @@ You need **Node 18+** and a **Groq API key**. You can enter the key in Settings,
 
 ## Security upgrades: the bouncer got a clipboard 🛡️
 
-The API no longer trusts a browser merely because it asked nicely. Chat context has a hard **32,000-character server ceiling**, every editable context setting is bounded, and large audio is rejected before it is parsed. Audio must also fit Groq’s 25 MB limit and carry a real WebM header.
+The API no longer trusts a browser merely because it asked nicely. Chat context has a hard **32,000-character server ceiling**, every editable context setting is bounded, and large audio is rejected before it is parsed. Uploaded media must carry a real container header (WebM/WAV) and is transcoded to 16k mono WAV server-side before the local whisper.cpp pass.
 
 Each API route now has a small per-IP burst limiter. It is a useful first fence for a single function instance; a large multi-region deployment should add Vercel Firewall or a shared limiter too. Responses also ship with CSP, clickjacking, MIME-sniffing, referrer, and microphone-permission headers.
 
-The Groq key now lives in exactly one place. Old keys are migrated once and removed, while Settings offers browser, tab-session, or memory-only storage. A deployment can instead use `GROQ_API_KEY` server-side, and the new **Test key** button catches a bad key before a meeting does. In short: fewer loose keys, smaller inputs, and fewer surprise bills.
+The Groq-era key machinery has been retired with the move to local llama.cpp; the same one-place storage discipline now applies to the optional remote-API and search keys (browser, tab-session, or memory-only).
 
 ## Feature & UX upgrades: fewer “wait, did it hear that?” moments ✨
 
@@ -50,19 +50,19 @@ The fun part is that none of these features need a database: the browser keeps a
 
 ## Stack & Architecture
 
-**Next.js 15 (App Router)** — I chose this because route handlers are a natural place to sit between the browser and Groq: the client never needs a hardcoded secret in the bundle, and a Vercel deploy is mostly “connect repo, set nothing exotic, go.” The App Router also keeps the UI and API colocated in a way that matches how I think about the product: pages compose panels; `/api/*` composes providers.
+**Next.js 15 (App Router)** — I chose this because route handlers are a natural place to sit between the browser and the model providers (local llama.cpp by default): the client never needs a hardcoded secret in the bundle. The App Router also keeps the UI and API colocated in a way that matches how I think about the product: pages compose panels; `/api/*` composes providers.
 
 **Tailwind CSS** — No component library. I wanted speed and a dark, dense UI without fighting a design system I didn’t own. Tailwind let me iterate on spacing and borders until the three columns *felt* like a control room, not a slide deck.
 
-**No database, no auth** — Live state stays in React and recent session snapshots autosave to browser storage. A refresh offers to resume the last meeting, without introducing account or database machinery.
+**No cloud AI, no auth** — Live state stays in React and recent session snapshots autosave to browser storage; post-meeting follow-up chat persists to server-side SQLite (better-sqlite3, WAL). A refresh offers to resume the last meeting.
 
-**Three Groq call families** — The architecture lines up like this:
+**Local-first model providers** — The architecture lines up like this:
 
-1. **Whisper** (via Groq’s OpenAI-compatible transcription endpoint) for chunked speech-to-text.
-2. **GPT-OSS 120B** for **summarization + live suggestions** — a small summarize hop, then structured suggestion batches in the middle column.
-3. **GPT-OSS 120B** again for **chat**—longer answers when a suggestion isn’t enough.
+1. **whisper.cpp** (local subprocess) for chunked speech-to-text — mic segments and uploaded media alike, with a domain-glossary prompt bias.
+2. **llama.cpp** (`llama-server`, OpenAI-compatible) for **summarization + live suggestions + session topic titles** — a small summarize hop, then structured suggestion batches in the middle column.
+3. **llama.cpp** again for **chat** and **context cards** — sourced Chinese explanation cards are the product core: keyword detection → vertical-source search (arXiv / Hacker News / GitHub / Stack Overflow) → generic web search fallback → card generation, all traced per candidate.
 
-Transcription, the suggestion pipeline (summarize + suggest), and streaming chat are all live against Groq.
+A remote OpenAI-compatible API is an explicitly configured alternative provider; Groq has been fully removed. The Milvus/vector-retrieval path has been deleted — retrieval is deterministic keyword search, not embeddings.
 
 ---
 
@@ -104,7 +104,7 @@ The browser’s **MediaRecorder** runs on a configurable cycle on the same `Medi
 
 **We skip audio conversion** because WebM/Opus is already what Whisper accepts in practice, and every conversion step adds latency and failure modes. This keeps the transcription path short and debuggable. If mobile Safari constraints force a format bridge later, I will add it with clear justification.
 
-**Groq key storage is a choice.** Browser storage is convenient, session storage is safer on shared machines, and memory-only mode forgets the key on reload. A hosted instance can set `GROQ_API_KEY` server-side and leave the browser field empty entirely.
+**Groq key storage is a choice.** *(Historical note — Groq has since been fully removed in favor of local llama.cpp; the same three storage modes now apply to the optional remote-API key.)*
 
 **React owns live state; browser storage owns recovery.** Autosaved snapshots keep the last ten sessions and restore Date values explicitly, so refresh is recoverable without making live updates depend on storage writes.
 
@@ -132,7 +132,7 @@ The desktop MVP moves beyond browser microphone capture by using a Windows helpe
 桌面 MVP 的定位是“本地推理 + 联网增强”：音频、转写和 llama.cpp 推理留在本机，检索时只发送关键词以获取来源；也可显式配置远端 OpenAI-compatible API。开发环境可运行 `npm run desktop:dev`；Windows 打包前先执行 `npm run helper:build`，再执行 `npm run desktop:build`。当前 Windows helper、whisper.cpp 模型、真实搜索卡片和 NSIS 安装包仍需要在 Windows 10 22H2/Windows 11 x64 上完成验收。
 
 ### One-sided transcription in virtual meetings
-The app captures microphone input only. In an in-person meeting this works well — the mic picks up everyone in the room. In a virtual meeting (Zoom, Google Meet), only the local speaker's voice is captured; the remote participant's audio comes through speakers but isn't reliably transcribed.
+The app captures microphone input only. In an in-person meeting this works well — the mic picks up everyone in the room. In a virtual meeting (Zoom, Google Meet), only the local speaker's voice is captured; the remote participant's audio comes through speakers but isn't reliably transcribed. *(In browser mode this is a platform limitation; the desktop Windows helper — WASAPI loopback double-track capture, currently code-complete but pending on-machine acceptance — is the documented path to two-way capture.)*
 
 We explored getDisplayMedia-based tab audio capture to mix both mic and system audio into a single MediaRecorder stream via the Web Audio API's AudioContext. It works for standard browser tab audio (YouTube, etc.) but fails for virtual meeting tools like Google Meet because WebRTC routes received audio through a separate internal pipeline that tab capture doesn't intercept. This is a known platform-level limitation, not a code bug.
 

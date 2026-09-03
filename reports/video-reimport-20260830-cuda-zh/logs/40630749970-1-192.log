@@ -1,0 +1,57 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 8187 MiB):
+  Device 0: NVIDIA GeForce RTX 4060 Ti, compute capability 8.9, VMM: yes, VRAM: 8187 MiB
+whisper_init_from_file_with_params_no_state: loading model from '/home/work/asr/.runtime/models/ggml-small.bin'
+whisper_init_with_params_no_state: use gpu    = 1
+whisper_init_with_params_no_state: flash attn = 1
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_init_with_params_no_state: devices    = 2
+whisper_init_with_params_no_state: backends   = 2
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 768
+whisper_model_load: n_audio_head  = 12
+whisper_model_load: n_audio_layer = 12
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 768
+whisper_model_load: n_text_head   = 12
+whisper_model_load: n_text_layer  = 12
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 3 (small)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:        CUDA0 total size =   487.01 MB
+whisper_model_load: model size    =  487.01 MB
+whisper_backend_init_gpu: device 0: CUDA0 (type: 1)
+whisper_backend_init_gpu: found GPU device 0: CUDA0 (type: 1, cnt: 0)
+whisper_backend_init_gpu: using CUDA0 backend
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   23.38 MB
+whisper_init_state: compute buffer (encode) =   33.85 MB
+whisper_init_state: compute buffer (cross)  =    6.20 MB
+whisper_init_state: compute buffer (decode) =   98.21 MB
+read_audio_data: reading audio data from 'reports/video-reimport-20260830-cuda/audio/40630749970-1-192.wav' ...
+read_audio_data: trying to decode with miniaudio
+
+system_info: n_threads = 4 / 8 | WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | CUDA : ARCHS = 890 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | OPENMP = 1 | REPACK = 1 | 
+
+main: processing 'reports/video-reimport-20260830-cuda/audio/40630749970-1-192.wav' (16270315 samples, 1016.9 sec), 4 threads, 1 processors, 5 beams + best of 5, lang = zh, task = transcribe, timestamps = 0 ...
+
+
+Hello 各位小伙伴们 该好啊今天要给大家去讲解的是大模型算法后训练项目的第四阶段完成SFT和DPO的训练30秒讲一下这个项目是什么它是选择了一个参数量比较小比如说0.9B或者4B的这样的一个大模型完成整个后训练包括SFT和强化学习的这样的一个训练这意味着其实你不用担心印进的知识你的轻薄本的办公机一定能够跑这样的一个项目在训练阶段我们其实是在远端去租卡我已经替大家试过了整个租卡的成本不高于20块钱所以这就意味着这个项目是所有人都能够去跑所有人都能够自己动手去完成一整套大模型后训练的一个项目好这个项目怎么用或者说适合谁呢首先它特别适合你自己的目标岗位是大模型开发或者是说大模型全站也就是说对你的开发开发能力和算法能力都有一定要求的这样的一些岗位这一套思路其实我从去年12月份面试的时候就开始用我面试去年面试大模型开发岗位的时候我告诉面试官我的这个Agent的项目其实我用的是本地的模型我做了一些算法相关的东西怎么怎么样怎么怎么样也就是说这样的一套项目你如果能够消化吸收里面的每一个环节从模型的选型到训练到推理部署到整个迭代然后拿到一些数据指标的提升来说一定相对于这些岗位第一个这些岗位其实对算法来说问的不是特别深可能是面试官自己对算法都没有太多的一个理解包括你的竞争对手都是开发出身他们通常没有一些训练那些能力所以对于这样这样的一些岗位来说这个项目你消化透就完全够了可以增加你的竞争力从另一个角度上来说如果你的目标就是要去做一些蠢算法或者是蠢训练那些岗位那我的建议是这样的一个项目是你的起点而不是终点你可以在这个基础上能够去用一些更高级的算法比如说jrpo去设置一些讲义函数去训练一些模型包括你可以去训练更加大的层次量更大的一些大模型来做的更加深入那我个人的建议啊如果是说你的时间表感你也没有任何的算法的基础那我觉得你就算了因为算法其实门槛还是相对来说高一些的但是如果来说你就是比如说你现在才研一或者说是大学大二这样子的你的目标感为就是要去做训练那你可以从这个项目开始慢慢的去往训练这条道路上去学习作为你的入门项目好这个阶段是如何完成的呢这个阶段我们完成的是sfg和dpo每一个阶段你其实就看阶段下面的log.md就行了我们这里把html打开内容和log.md是一样的就是我觉得这个展示流程或者更清晰那这个阶段的目标就是完成这样的一个训练首先它是如何完成的呢其实也是一样的之前我们都是用superpowers来完成的这个阶段最大的一个区别就是之前的阶段ai是可以自己去完成整个代码然后去进行单元测试也好命令行的验证也好你只用去进行验收但是在这样的一个阶段它一定依赖于你中途的人工的一个介入就是你要去租对应的GPU去自己去进行训练这个是ai代替不了你完成的所以整个阶段就是分为三个阶段第一个阶段ai就是设计方你的训练怎么去训练然后写代码这里有哪些代码呢就是说你要进行这个sfg和dpo的训练超参数怎么设置你的yamo文件怎么设设然后怎么把整个流程串起来因为我们既要训练sft要训练dpo然后要训练不同的一个模型对吧所以有几组这样的一个不同的配置通过代码给它串起来第二其实还有一个dry rundry run什么意思就是我不希望我到了远端平台上然后去运行的时候还会有一些编译的错误所以我在本地其实我的cpu跑的可能很慢那我就跑一个轮子所以这是第一个阶段当ai写好了以后就告诉我们自己开始去租gpu我是使用的autodl的这样的一个平台去租的重备很低然后其实也很简单后面会给它去讲你自己去远端去进行训练训练以后你要下载你的产物产物包括什么呢就是包括你这个日治因为你要去分析你这种损伤函数整个曲线对吧所以你要把日治拿回来第二个当然就是你训练的最终结果这个结果其实是模型的权重又通过这个权重加上击模你就可以拼出来你最终的训练后的一个模型拿回这些东西然后这是第二第二步你要做的事第三步呢就是ai去读取这样的一些结果在本地去运行最后给到你一个结论比如说我们可以看到ai去运行然后告诉你你比如说你训练所以第三步呢就是去分析所以这个阶段是通过这三个步骤我来完成的好这个阶段我给你的建议啊就是如果你要自己做首先呢其实它现在没有什么门槛是让superpowers一切ai指导你你作为一个机械的去执行你都能够完成但是我建议在这个过程中比如说superpowers跟你去确定头脑风暴把目标约束关键问题弄清楚的时候你多看一下它的文档比如说它为什么去建议你使用dpo或者说这个参数为什么这样的设置一切平台到底选哪个这样的一些原因和流程我希望你再跟它使用它的时候看清楚因为我们现在已经不看代码了那这个过程中就是你的学习的过程第二个呢我的建议就是你去去多问AI除了审核它的文档以外就是你去多问AI一些具体的内容比如说AI去建议你使用比如说RTX 4090 24GB就已经足够了这个时候你完全能够停下来你问它RTX 4090为什么已经足够了那你能不能告诉我我怎么样子确定不同的模型以及训练的方法下面我应该使用那样的一些卡来去进行训练呢可能会告诉你怎么样去算你需要的一些GPU的这样一些显存那这些其实都是你在学知识的这样的一个过程所以在这个自己做下来我相信你能够收获很多好如果你不想做那我看看你愿不愿意手动运行如果你想要手动运行的话有几个地方你可以去试第一个呢就是Dry Run我刚才说了其实你可以跑在本地上用CPU跑一次极小规模的一个空跑来看整个过程是如何组织的包括你可以看你对应的渲染的这样的一些超参数是怎么样去设置整个流程是如何跑起来的那你在这个阶段下去连行这样的一个东西第二个呢如果你想要去进行训练感受一下训练的过程那我整个数据都已经准备好了我是用的AutoDare所以其实这块呢是我自己写的一些操作的一个固种其实你整个过程让问AI就可以了就是包括AutoDL去选哪样的一些GPU都是让它作为导师帮我去做其实我现在用的是Cloud Sonic 5其实已经很够了我都不需要用Ophos所以它说的内容其实都是正确的所以它指导你然后如何去装这样的一个镜像然后去检查你的GPU其中这样的一个数据在这个其中的数据以后有很多日制啊我当时是让日制输出了以后即时告诉他一边训练我一边让他帮我去分析日制因为这是你一个学习的过程中我还是希望大家能够更多的去介入因为我们已经不从代码来去学习东西了然后最终打包参数让他来去给你去进行一下分析那这个是你自己可以在这个阶段去做的一些实验好如果说你连实验也不想跑好吧那你就学习理论部分吧虽然我后面也会总结更具体的这个项目的一个八股但是你按照阶段性的学习你后面更加来会更轻松那本小节重点的一个学习内容啊一个就是整体的一个工作流程你虽然不看代码但是你应该知道整个训练到底发生了什么吧所以我们分为两条路一个是sft一个是dpo那首先那你要关注的一个点就是训练一定要有参数参数通常是写在yamo page里面我们写了一个base sft和base dpo的这样子的一个文件然后因为我们要训练不同这个就是通用的一些参数但我们有不同的模型比如说千万零点六个b和千万一点7b他有一些自己不一样的地方那就是通过这两个分一个共享的部分和特定的部分去合并通过rander.config合并成最终的一个yamo文件然后这个就是你训练的一个参数的一个配置第二个呢我们是用什么东西去训练的呢我们使用的训练框件是lama factory用这个框架通常来说你不用写很多的代码因为它其实封装的比较好所以你直接用它的style id train就可以去训练你为给它的就是你自己的一个配置文件包括你的数据擠在哪里在data process为零点一字里面下面然后通过这样的一个命令就可以真正真正地去训练训练完了以后它会把结果放在modeladaptors里面包括训练的日治啊以及一些模型的一个权重但是我们写了一个collect artifact把所有的日治相当于打包的整理最终呢放在experiment下面的一个这是最终的结果所以你如果想要自己去运行知道这些训练的一个权重在哪里的话那其实就是在这个你下代码仓库里面的experiment里面就有不同的这样子相当于里面有权重你可以通过这里恢复出训练的一个模型包括一些训练的一个参数好然后有一些关键的好像说ron matrix.sh他写了一个脚本就是把你整个训练的过程中串起来也就是说我们训练其实要训练很多一个是sft那可能有几个模型然后dpo也有几个模型包括有不同的参数就是通过这个脚本把整套流程串起来你就只用运行一次然后拿训练所有然后接下来其实还有一些脚本就是评估评估也就是说真真真正我们有了实验结果以后还要用这个模型去进行跑我们的评估数月级吧评估数月级是在第二阶段大家可以直接去看就是你跑了评估数月级你才知道你训练后的结果达到了一些那些目标有哪些提升对吧所以其实就是还有评估这样的一个阶段它的流程是大概experiments run然后起本地一些服务hacking phase后端加在base加lar这个是什么意思就是我们训练完了是统是满足hacking phase然后要把这个模型去恢复通过hacking phase的这样的一个协议来去进行模型一个推理然后跑我们的评估级最后写结果然后六组跑完了以后做一个收尾的分析就是六组就是我们训练了六次比如说sft的结果dpo的结果然后不同参数的结果大概有六组然后最后把他们整合成为一个最终的一个表格其实表格大概已经看到了就是这些一二三四五六就是我们训练的一个结果把它汇总然后这个就是我们训练的最终的结果对吧其实这里我有一点想说就是你其实可以不用在本地上api聚集服务因为太慢了就是你本地要跑这么多可能要几个小时两个小时吧这主要是受限于你是cpu上吧你cpu跑的真的很慢那你如果这一套其实你可以用在远端让它更好的应急好 第二个我觉得你需要关注的就是各种参数的一个分析啊我这可以总结的因为面试的过程中就是超参数怎么设置里面的各种细节其实是面试常问的你看这里面有比如说Laura的超参数比如说学习力Laura rank到底怎么设置以及dpo的相关的参数以及Laura相关的比如说Laura的这个Ranker以及Target包括这些超参数学习LouisAppleBatchSize等等以及还有你像这些EnableSync就是你需不需要训练模型的这种思考的能力以及你训练的一些数据格式这种损身函数到底是使用哪一个这些东西其实就是重点我觉得你可以去问一下AI到底是怎么样设置这里面是什么有些人说去做模型训练其实就是挑参那哪些参数是什么样子的一定就是我们需要重点关注的内容然后最后是实验结果的分析你也需要关注的就是我们首先有基础的模型就是没有训练的效果它大概是怎么样这一些的训练级 试验级的评估的方法其实是我们二阶段去做的我们四阶段只把它跑了一遍我们训练其实有一六个产物千问三系列的SFT和DPO的不同的参数以及千问三的1.7B系列所以它分别取得了一些什么能力我们直观的去分析一下就是训练前这是第一行和训练后在准决率上有显著的提升说明我们训练是有效果的但是我们仍然能看到51个case我们只过了24个是不是我们能够让它的通过率更高这是第一个一问第二个一问就是DPO其实是在SFT的训练基础上再训练的我们是希望它的效果能够变好的但是你其实可以看到DPO相比于它前面的一个SFT的基础它的效果是有一点点下降甚至是或者说持平这样的一个角度所以为什么呢就DPO我觉得并没有做得太好所以这个是我分析这一次的主要的一个原因然后后面其实还有一些损失函数的这个是损失函数图的训练那这个是DPO里面的相关的一个训练的一个参数也就是说这个值其实越高越好但是其实我们一个可以看到对于DPO来说它先变高但是后面用变低了其实也可以看出来反映出来我们DPO其实并没有达到一个特别好的一个效果所以做这种曲线的分析失败以及怎么改进其实也是非常重要的但是我这块并没有分析特别的深入因为是我是这块有一个出户的结论大家可以去看一下我没有深入的去分析去解决是为什么的因为在我们项目的为大家打开项目其实还有第六阶段就是专门做迭代的什么意思就是专门去分析哪里不足去改进我之前也分析面试官特别喜欢关注你在这个过程中遇到了一些问题你是如何改进的所以第六阶段也是非常有韩定量的然后第五阶段其实就是把这个模型去做一些压缩因为它的推理的时间其实有点长所以这是后面两个阶段其实到后面两个阶段来说基本上整个项目到第五阶段做完其实整个项目基本上就做完了所以我是希望你能够一点一点的去学习现在项目已经完成了60%你基本上整个项目的精髓已经掌握了这样子等我做完了你就能够更加武奉地去学习这样的一个项目好这个就是本期视频的全部内容希望本期视频能够对大家有所帮助谢谢大家output_txt: saving output to 'reports/video-reimport-20260830-cuda-zh/transcripts/40630749970-1-192.txt'
+output_json: saving output to 'reports/video-reimport-20260830-cuda-zh/transcripts/40630749970-1-192.json'
+
+whisper_print_timings:     load time =   421.98 ms
+whisper_print_timings:     fallbacks =   0 p /   1 h
+whisper_print_timings:      mel time =   686.40 ms
+whisper_print_timings:   sample time = 13160.60 ms / 21720 runs (     0.61 ms per run)
+whisper_print_timings:   encode time =   718.62 ms /    34 runs (    21.14 ms per run)
+whisper_print_timings:   decode time =   212.00 ms /    38 runs (     5.58 ms per run)
+whisper_print_timings:   batchd time = 28632.69 ms / 21516 runs (     1.33 ms per run)
+whisper_print_timings:   prompt time =   429.79 ms /  4356 runs (     0.10 ms per run)
+whisper_print_timings:    total time = 44730.72 ms

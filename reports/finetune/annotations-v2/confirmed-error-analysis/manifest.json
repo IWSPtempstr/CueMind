@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-08-31T02:21:10.674Z",
+  "humanConfirmed": true,
+  "sourceFiles": [
+    "missed-trigger.jsonl",
+    "false-positive-trigger.jsonl",
+    "keyword-drift.jsonl",
+    "poor-explanation.jsonl",
+    "dpo-preference-pairs.jsonl"
+  ],
+  "transcriptDir": "/home/work/asr/CueMind/reports/video-reimport-20260830-cuda-zh/transcripts",
+  "datasetVersion": "local-video-v2",
+  "freezeExcluded": 0,
+  "counts": {
+    "trigger": 59,
+    "keyword": 27,
+    "explanation": 40,
+    "dpo": 40
+  },
+  "splits": {
+    "train": 121,
+    "eval": 45
+  }
+}

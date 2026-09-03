@@ -803,3 +803,10 @@ sha256sum /home/work/models/cuemind/qwen3-8b-q4_k_m.gguf \
 ```
 
 执行顺序：先跑挑战者 1 的冻结集对比并记录五项指标；达标即切换并更新基线记录；不达标再拉挑战者 2 复测。结果写入 `/home/work/reports/cuemind/` 评估报告（含 model_sha256 与 llama.cpp commit，沿用第 15 节模板）。
+
+### 16.5 基线切换记录（2026-08-29 锁定）
+
+- **8B 达标，已切换为当前基线。** 官方 `Qwen/Qwen3-8B-GGUF` 为 gated 仓库（无 HF token），改用 `unsloth/Qwen3-8B-GGUF`（`Qwen3-8B-Q4_K_M.gguf`）。
+- model_sha256：`120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4`；llama.cpp commit：`1729ed5`。
+- 五项指标（4B → 8B）：触发 F1 0.667 → 0.667；schema 合法率 1.0 → 1.0；卡片 P95 3628 → 3080ms；询问首字节 P95 926 → 599ms；显存峰值 4359 → 6422 MiB（≤7.5GB，无 OOM）。
+- 当前 `cuemind-llama.service` 的 `-m` 指向 `Qwen3-8B-Q4_K_M.gguf`；回退只需换回 4B 路径重启。

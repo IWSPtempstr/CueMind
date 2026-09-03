@@ -17,6 +17,7 @@ import path from "node:path";
 import type { NextRequest } from "next/server";
 import { POST as POST_ASK } from "@/app/api/ask/route";
 import { POST as POST_CARD } from "@/app/api/context-cards/route";
+import { POST as createSession } from "@/app/api/sessions/route";
 
 // 账本旁路写入指向临时目录，避免污染开发 .data（store 懒初始化）。
 if (!process.env.CUEMIND_DATA_DIR?.trim()) {
@@ -151,8 +152,11 @@ function cardBody(baseUrl: string, phase: string, index: number): Record<string,
   };
 }
 
+const sessionTokens = new Map<string, string>();
+
 function askBody(baseUrl: string, index: number): Record<string, unknown> {
   return {
+    sessionId: "concurrency-conc",
     question: `并发询问 ${index}：KV cache 相关问题？`,
     recentTranscript: "会议正在讨论推理优化。",
     settings: {
@@ -165,12 +169,29 @@ function askBody(baseUrl: string, index: number): Record<string, unknown> {
 }
 
 function makeRequest(pathname: string, body: unknown): NextRequest {
-  // 路由只消费 headers/json/signal，Request 运行时形状足够；类型上收敛到 NextRequest。
+  const sessionId = typeof body === "object" && body !== null && typeof (body as { sessionId?: unknown }).sessionId === "string"
+    ? (body as { sessionId: string }).sessionId
+    : undefined;
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const token = sessionId ? sessionTokens.get(sessionId) : undefined;
+  if (token) headers.set("X-Session-Token", token);
   return new Request(`http://localhost${pathname}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   }) as unknown as NextRequest;
+}
+
+async function bootstrapSessions(): Promise<void> {
+  for (const id of ["concurrency-base", "concurrency-conc"]) {
+    const response = await createSession(new Request("http://localhost/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, title: id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),
+    }));
+    assert.equal(response.status, 200);
+    sessionTokens.set(id, (await response.json() as { sessionAccessToken: string }).sessionAccessToken);
+  }
 }
 
 async function runCardRequest(baseUrl: string, phase: string, index: number): Promise<number> {
@@ -205,6 +226,7 @@ const ASK_CONCURRENCY = 6;
 const P95_REGRESSION_TOLERANCE = 1.3; // P95 差值 < 30%
 
 async function main(): Promise<void> {
+  await bootstrapSessions();
   installSearchMock();
   const { server, baseUrl } = await startMockProvider();
   try {

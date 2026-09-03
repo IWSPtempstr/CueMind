@@ -1,0 +1,406 @@
+{
+	"systeminfo": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | CUDA : ARCHS = 890 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | OPENMP = 1 | REPACK = 1 | ",
+	"model": {
+		"type": "small",
+		"multilingual": true,
+		"vocab": 51865,
+		"audio": {
+			"ctx": 1500,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"text": {
+			"ctx": 448,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"mels": 80,
+		"ftype": 1
+	},
+	"params": {
+		"model": "/home/work/asr/.runtime/models/ggml-small.bin",
+		"language": "en",
+		"translate": false
+	},
+	"result": {
+		"language": "en"
+	},
+	"transcription": [
+		{
+			"timestamps": {
+				"from": "00:00:00,000",
+				"to": "00:00:30,000"
+			},
+			"offsets": {
+				"from": 0,
+				"to": 30000
+			},
+			"text": " Hello, guys."
+		},
+		{
+			"timestamps": {
+				"from": "00:00:30,000",
+				"to": "00:01:00,000"
+			},
+			"offsets": {
+				"from": 30000,
+				"to": 60000
+			},
+			"text": " We are actually in the far corner of Zuka. I've already tried the entire cost of Zuka for everyone. It's less than 20 yuan. So this means that everyone in this project can run. Everyone can do a set of project that will be done by themselves. Okay, how do you use this project? Or who does it suit? First of all, it is especially suitable for your goal. It is to develop or expand the project."
+		},
+		{
+			"timestamps": {
+				"from": "00:01:00,000",
+				"to": "00:01:30,000"
+			},
+			"offsets": {
+				"from": 60000,
+				"to": 90000
+			},
+			"text": " I started using this idea last year when I was doing my 12th interview. Last year, when I was doing my first interview for a large model project, I told the interviewer that I was using the model of this project. I did some things related to the algorithm. What do you think? What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:01:30,000",
+				"to": "00:02:00,000"
+			},
+			"offsets": {
+				"from": 90000,
+				"to": 120000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:02:00,000",
+				"to": "00:02:30,000"
+			},
+			"offsets": {
+				"from": 120000,
+				"to": 150000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:02:30,000",
+				"to": "00:03:00,000"
+			},
+			"offsets": {
+				"from": 150000,
+				"to": 180000
+			},
+			"text": " Okay, what do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:03:00,000",
+				"to": "00:03:30,000"
+			},
+			"offsets": {
+				"from": 180000,
+				"to": 210000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:03:30,000",
+				"to": "00:04:00,000"
+			},
+			"offsets": {
+				"from": 210000,
+				"to": 240000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:04:00,000",
+				"to": "00:04:30,000"
+			},
+			"offsets": {
+				"from": 240000,
+				"to": 270000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:04:30,000",
+				"to": "00:05:00,000"
+			},
+			"offsets": {
+				"from": 270000,
+				"to": 300000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:05:00,000",
+				"to": "00:05:30,000"
+			},
+			"offsets": {
+				"from": 300000,
+				"to": 330000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:05:30,000",
+				"to": "00:06:00,000"
+			},
+			"offsets": {
+				"from": 330000,
+				"to": 360000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:06:00,000",
+				"to": "00:06:30,000"
+			},
+			"offsets": {
+				"from": 360000,
+				"to": 390000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:06:30,000",
+				"to": "00:07:00,000"
+			},
+			"offsets": {
+				"from": 390000,
+				"to": 420000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:07:00,000",
+				"to": "00:07:30,000"
+			},
+			"offsets": {
+				"from": 420000,
+				"to": 450000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:07:30,000",
+				"to": "00:08:00,000"
+			},
+			"offsets": {
+				"from": 450000,
+				"to": 480000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:08:00,000",
+				"to": "00:08:30,000"
+			},
+			"offsets": {
+				"from": 480000,
+				"to": 510000
+			},
+			"text": " What do you think?"
+		},
+		{
+			"timestamps": {
+				"from": "00:08:30,000",
+				"to": "00:09:00,000"
+			},
+			"offsets": {
+				"from": 510000,
+				"to": 540000
+			},
+			"text": " Okay, if you don't even want to run, then you should learn the theory part. Although I will summarize the more specific of this project,"
+		},
+		{
+			"timestamps": {
+				"from": "00:09:00,000",
+				"to": "00:09:30,000"
+			},
+			"offsets": {
+				"from": 540000,
+				"to": 570000
+			},
+			"text": " But according to the period, you will be more relaxed later. That's the important information of this project. One is the whole process. Although you don't look at the code, you should know what happened to the whole training. So we divided into two ways. One is SFT, the other is DPO. The first point you should pay attention to is that the training must have parameters. The parameters are written in the YAML page. We wrote a base SFT and base DPO."
+		},
+		{
+			"timestamps": {
+				"from": "00:09:30,000",
+				"to": "00:10:00,000"
+			},
+			"offsets": {
+				"from": 570000,
+				"to": 600000
+			},
+			"text": " The second one is LAMAFACTORY GANG CLI."
+		},
+		{
+			"timestamps": {
+				"from": "00:10:00,000",
+				"to": "00:10:30,000"
+			},
+			"offsets": {
+				"from": 600000,
+				"to": 630000
+			},
+			"text": " The third one is the data process."
+		},
+		{
+			"timestamps": {
+				"from": "00:10:30,000",
+				"to": "00:11:00,000"
+			},
+			"offsets": {
+				"from": 630000,
+				"to": 660000
+			},
+			"text": " The second one is the collect, the artifact. The whole process of the whole process should be in the experiment. So if you want to know where the whole training is, you should know that the experiment in the code warehouse has different parameters. You can restore the model of the training here, including the parameters of the training."
+		},
+		{
+			"timestamps": {
+				"from": "00:11:00,000",
+				"to": "00:11:30,000"
+			},
+			"offsets": {
+				"from": 660000,
+				"to": 690000
+			},
+			"text": " The fourth one is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:11:30,000",
+				"to": "00:12:00,000"
+			},
+			"offsets": {
+				"from": 690000,
+				"to": 720000
+			},
+			"text": " The second part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:12:00,000",
+				"to": "00:12:30,000"
+			},
+			"offsets": {
+				"from": 720000,
+				"to": 750000
+			},
+			"text": " The third part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:12:30,000",
+				"to": "00:13:00,000"
+			},
+			"offsets": {
+				"from": 750000,
+				"to": 780000
+			},
+			"text": " The fourth part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:13:00,000",
+				"to": "00:13:30,000"
+			},
+			"offsets": {
+				"from": 780000,
+				"to": 810000
+			},
+			"text": " The second part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:13:30,000",
+				"to": "00:14:00,000"
+			},
+			"offsets": {
+				"from": 810000,
+				"to": 840000
+			},
+			"text": " The third part of the experiment is the run matrix. The fourth part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:14:00,000",
+				"to": "00:14:30,000"
+			},
+			"offsets": {
+				"from": 840000,
+				"to": 870000
+			},
+			"text": " The fourth part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:14:30,000",
+				"to": "00:15:00,000"
+			},
+			"offsets": {
+				"from": 870000,
+				"to": 900000
+			},
+			"text": " The second part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:15:00,000",
+				"to": "00:15:30,000"
+			},
+			"offsets": {
+				"from": 900000,
+				"to": 930000
+			},
+			"text": " The third part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:15:30,000",
+				"to": "00:16:00,000"
+			},
+			"offsets": {
+				"from": 930000,
+				"to": 960000
+			},
+			"text": " The fourth part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:16:00,000",
+				"to": "00:16:30,000"
+			},
+			"offsets": {
+				"from": 960000,
+				"to": 990000
+			},
+			"text": " The fifth part of the experiment is the run matrix."
+		},
+		{
+			"timestamps": {
+				"from": "00:16:30,000",
+				"to": "00:17:00,000"
+			},
+			"offsets": {
+				"from": 990000,
+				"to": 1020000
+			},
+			"text": " The fifth part of the experiment is the run matrix. The fifth part of the experiment is the run matrix."
+		}
+	]
+}

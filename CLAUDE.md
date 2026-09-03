@@ -19,6 +19,7 @@ Verification chain: `npx tsc --noEmit` → `npm run lint` → `npm run build` �
 ## Runtime environment notes
 
 - **Trae 沙箱无 GPU**：沙箱命名空间未绑定 `/dev/nvidia*`（白名单配置无法修复）。**模型服务由 systemd 管理**：`cuemind-llama.service`（开机自启、崩溃自重启、沙箱外拉起带 `-ngl 99`），应用连 `127.0.0.1:8082` 零改动。管理命令：`systemctl restart/stop/status cuemind-llama`。`scripts/llama-gpu-start.sh` / `llama-gpu-stop.sh` 仅作 systemd 不可用时的手动回退。判断 GPU 是否生效：`nvidia-smi` 进程列表含 llama-server 且日志无 `ggml_cuda_init: failed`。
+- **当前本地模型基线（2026-08-29 起）**：`Qwen3-8B-Q4_K_M.gguf`（`unsloth/Qwen3-8B-GGUF`，sha256 `120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4`，8.19B / Q4_K_M / n_ctx 8192，llama.cpp commit `1729ed5`），经 A/B 达标由 4B 切换（触发 F1 与 schema 合法率持平、卡片 P95 与询问首字节更优、显存峰值 6.42GB ≤7.5GB）。回退：把 `cuemind-llama.service` 的 `-m` 换回 `Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf` 重启即可。
 - **build 前停 :3000 dev server**（turbopack 与 build 共写 `.next` 会产物损坏 ENOENT）。
 
 ## Big-picture architecture

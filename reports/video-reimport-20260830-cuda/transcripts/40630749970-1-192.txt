@@ -1,0 +1,34 @@
+Hello, guys.
+We are actually in the far corner of Zuka. I've already tried the entire cost of Zuka for everyone. It's less than 20 yuan. So this means that everyone in this project can run. Everyone can do a set of project that will be done by themselves. Okay, how do you use this project? Or who does it suit? First of all, it is especially suitable for your goal. It is to develop or expand the project.
+I started using this idea last year when I was doing my 12th interview. Last year, when I was doing my first interview for a large model project, I told the interviewer that I was using the model of this project. I did some things related to the algorithm. What do you think? What do you think?
+What do you think?
+What do you think?
+Okay, what do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+What do you think?
+Okay, if you don't even want to run, then you should learn the theory part. Although I will summarize the more specific of this project,
+But according to the period, you will be more relaxed later. That's the important information of this project. One is the whole process. Although you don't look at the code, you should know what happened to the whole training. So we divided into two ways. One is SFT, the other is DPO. The first point you should pay attention to is that the training must have parameters. The parameters are written in the YAML page. We wrote a base SFT and base DPO.
+The second one is LAMAFACTORY GANG CLI.
+The third one is the data process.
+The second one is the collect, the artifact. The whole process of the whole process should be in the experiment. So if you want to know where the whole training is, you should know that the experiment in the code warehouse has different parameters. You can restore the model of the training here, including the parameters of the training.
+The fourth one is the run matrix.
+The second part of the experiment is the run matrix.
+The third part of the experiment is the run matrix.
+The fourth part of the experiment is the run matrix.
+The second part of the experiment is the run matrix.
+The third part of the experiment is the run matrix. The fourth part of the experiment is the run matrix.
+The fourth part of the experiment is the run matrix.
+The second part of the experiment is the run matrix.
+The third part of the experiment is the run matrix.
+The fourth part of the experiment is the run matrix.
+The fifth part of the experiment is the run matrix.
+The fifth part of the experiment is the run matrix. The fifth part of the experiment is the run matrix.

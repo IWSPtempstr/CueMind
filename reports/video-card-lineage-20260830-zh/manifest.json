@@ -1,0 +1,10 @@
+{
+  "evaluator": "video-card-lineage-v1",
+  "generatedAt": "2026-08-30T07:56:48.787Z",
+  "transcriptDir": "/home/work/asr/CueMind/reports/video-reimport-20260830-cuda-zh/transcripts",
+  "baseUrl": "http://localhost:3000",
+  "videoCount": 6,
+  "windowCount": 30,
+  "source": "CUDA whisper.cpp transcript JSON",
+  "evidenceBoundary": "Representative 5-window sample per video; cards and asks use live APIs; no claim of full-window card coverage."
+}

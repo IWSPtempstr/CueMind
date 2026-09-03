@@ -1,0 +1,166 @@
+{"file":"missed-trigger.jsonl","windowId":"37544067530-1-192:750000-780000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"37726521437-1-192:1530000-1560000","videoId":"37726521437-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"37726521437-1-192:1560000-1590000","videoId":"37726521437-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"38319360791-1-192:570000-600000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"38516621409-1-192:1950000-1980000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"38516621409-1-192:2040000-2070000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39482362497-1-192:630000-660000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39482362497-1-192:750000-780000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39482362497-1-192:1320000-1350000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39482362497-1-192:2070000-2100000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39482362497-1-192:2340000-2370000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39482362497-1-192:2400000-2430000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39482362497-1-192:2430000-2460000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39682051264-1-192:1530000-1560000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"39712261369-1-192:720000-750000","videoId":"39712261369-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"40323254981-1-192:90000-120000","videoId":"40323254981-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"40323254981-1-192:510000-540000","videoId":"40323254981-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"40323254981-1-192:780000-810000","videoId":"40323254981-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"40630749970-1-192:420000-450000","videoId":"40630749970-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"41105034468-1-192:180000-210000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"41228698583-1-192:510000-540000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"41228698583-1-192:720000-750000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:0-30000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:2460000-2490000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"missed-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:2490000-2520000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"37544067530-1-192:180000-210000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"37544067530-1-192:720000-750000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"37544067530-1-192:1170000-1200000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"38319360791-1-192:540000-570000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"38319360791-1-192:1740000-1770000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"38516621409-1-192:1770000-1800000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"38516621409-1-192:1890000-1920000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39482362497-1-192:780000-810000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39482362497-1-192:1290000-1320000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39482362497-1-192:2010000-2040000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39482362497-1-192:2280000-2310000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39482362497-1-192:2370000-2400000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39682051264-1-192:1380000-1410000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39682051264-1-192:1950000-1980000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"39682051264-1-192:2370000-2400000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"40630749970-1-192:30000-60000","videoId":"40630749970-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"40630749970-1-192:630000-660000","videoId":"40630749970-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"40630749970-1-192:720000-750000","videoId":"40630749970-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41105034468-1-192:540000-570000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41228698583-1-192:150000-180000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41228698583-1-192:450000-480000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41228698583-1-192:690000-720000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41228698583-1-192:750000-780000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41299413525-1-192:240000-270000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41299413525-1-192:330000-360000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"41299413525-1-192:570000-600000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:240000-270000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:480000-510000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1020000-1050000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1290000-1320000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1380000-1410000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1590000-1620000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1710000-1740000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"false-positive-trigger.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1980000-2010000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"37544067530-1-192:720000-750000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"37544067530-1-192:1170000-1200000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"38319360791-1-192:540000-570000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"38319360791-1-192:1740000-1770000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"38516621409-1-192:1890000-1920000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39482362497-1-192:690000-720000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39482362497-1-192:780000-810000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39482362497-1-192:1110000-1140000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39482362497-1-192:1560000-1590000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39482362497-1-192:2010000-2040000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39482362497-1-192:2280000-2310000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39482362497-1-192:2370000-2400000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39682051264-1-192:720000-750000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"39682051264-1-192:1380000-1410000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"40630749970-1-192:720000-750000","videoId":"40630749970-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"41105034468-1-192:540000-570000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"41228698583-1-192:150000-180000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"41228698583-1-192:690000-720000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"41228698583-1-192:750000-780000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"41299413525-1-192:120000-150000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"41299413525-1-192:330000-360000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:240000-270000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:480000-510000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1380000-1410000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1590000-1620000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1710000-1740000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"keyword-drift.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1980000-2010000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"37544067530-1-192:720000-750000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"37544067530-1-192:1170000-1200000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"37726521437-1-192:570000-600000","videoId":"37726521437-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"38319360791-1-192:540000-570000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"38319360791-1-192:1560000-1590000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"38319360791-1-192:1740000-1770000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"38516621409-1-192:630000-660000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"38516621409-1-192:990000-1020000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"38516621409-1-192:1890000-1920000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"38516621409-1-192:2250000-2280000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:600000-630000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:690000-720000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:780000-810000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:1110000-1140000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:1560000-1590000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:2010000-2040000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:2280000-2310000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39482362497-1-192:2370000-2400000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39682051264-1-192:720000-750000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39682051264-1-192:1020000-1050000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39682051264-1-192:1380000-1410000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39682051264-1-192:1410000-1440000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"39682051264-1-192:1500000-1530000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"40323254981-1-192:60000-90000","videoId":"40323254981-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"40630749970-1-192:720000-750000","videoId":"40630749970-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41105034468-1-192:150000-180000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41105034468-1-192:540000-570000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41105034468-1-192:1200000-1230000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41228698583-1-192:150000-180000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41228698583-1-192:690000-720000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41228698583-1-192:750000-780000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41299413525-1-192:120000-150000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41299413525-1-192:330000-360000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"41299413525-1-192:420000-450000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:240000-270000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:480000-510000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1380000-1410000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1590000-1620000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1710000-1740000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"poor-explanation.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1980000-2010000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"37544067530-1-192:720000-750000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"37544067530-1-192:1170000-1200000","videoId":"37544067530-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"37726521437-1-192:570000-600000","videoId":"37726521437-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"38319360791-1-192:540000-570000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"38319360791-1-192:1560000-1590000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"38319360791-1-192:1740000-1770000","videoId":"38319360791-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"38516621409-1-192:630000-660000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"38516621409-1-192:990000-1020000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"38516621409-1-192:1890000-1920000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"38516621409-1-192:2250000-2280000","videoId":"38516621409-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:600000-630000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:690000-720000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:780000-810000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:1110000-1140000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:1560000-1590000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:2010000-2040000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:2280000-2310000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39482362497-1-192:2370000-2400000","videoId":"39482362497-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39682051264-1-192:720000-750000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39682051264-1-192:1020000-1050000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39682051264-1-192:1380000-1410000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39682051264-1-192:1410000-1440000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"39682051264-1-192:1500000-1530000","videoId":"39682051264-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"40323254981-1-192:60000-90000","videoId":"40323254981-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"40630749970-1-192:720000-750000","videoId":"40630749970-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41105034468-1-192:150000-180000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41105034468-1-192:540000-570000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41105034468-1-192:1200000-1230000","videoId":"41105034468-1-192","split":"eval","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41228698583-1-192:150000-180000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41228698583-1-192:690000-720000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41228698583-1-192:750000-780000","videoId":"41228698583-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41299413525-1-192:120000-150000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41299413525-1-192:330000-360000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"41299413525-1-192:420000-450000","videoId":"41299413525-1-192","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:240000-270000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:480000-510000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1380000-1410000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1590000-1620000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1710000-1740000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}
+{"file":"dpo-preference-pairs.jsonl","windowId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig:1980000-2010000","videoId":"【十字路口】探秘 Claude Code，搞懂 Agent Harness｜对谈来新璐【视频播客】 - Orig","split":"train","humanConfirmed":true}

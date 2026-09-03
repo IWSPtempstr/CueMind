@@ -1,0 +1,7 @@
+{"concurrency":1,"index":0,"status":"answered","elapsedMs":7332.636689}
+{"concurrency":2,"index":0,"status":"answered","elapsedMs":3011.5490470000004}
+{"concurrency":2,"index":1,"status":"answered","elapsedMs":5704.6329559999995}
+{"concurrency":4,"index":0,"status":"answered","elapsedMs":3528.531457000001}
+{"concurrency":4,"index":1,"status":"answered","elapsedMs":5768.330034999999}
+{"concurrency":4,"index":2,"status":"answered","elapsedMs":8240.547524999998}
+{"concurrency":4,"index":3,"status":"answered","elapsedMs":10504.569218}

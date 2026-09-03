@@ -1,0 +1,20 @@
+{
+  "evaluator": "resource-pressure-evaluator-v1",
+  "status": "complete",
+  "denominator": {
+    "tiers": 2,
+    "requests": 3,
+    "failures": 0
+  },
+  "recovery": [
+    {
+      "concurrency": 1,
+      "status": "health_http_404"
+    },
+    {
+      "concurrency": 2,
+      "status": "health_http_404"
+    }
+  ],
+  "evidenceBoundary": "Controlled short-duration request concurrency and local nvidia-smi/process observations. This is not an artificial OOM or sustained production load test."
+}

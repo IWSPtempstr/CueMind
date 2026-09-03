@@ -1,0 +1,29 @@
+{
+  "evaluator": "llama-timing-evaluator-v1",
+  "status": "complete",
+  "denominator": {
+    "total": 8,
+    "succeeded": 8,
+    "failed": 0,
+    "timingAvailable": 8
+  },
+  "summary": {
+    "total": 8,
+    "succeeded": 8,
+    "failed": 0,
+    "firstEventP50Ms": 71.78763000000072,
+    "firstEventP95Ms": 927.977912,
+    "firstTokenP50Ms": 71.79527700000017,
+    "firstTokenP95Ms": 927.989348,
+    "completionP50Ms": 656.3354410000002,
+    "completionP95Ms": 1970.5448190000002,
+    "timing": {
+      "count": 8,
+      "tokensPerSecondP50": 47.69868308272253,
+      "tokensPerSecondP95": 48.06637339212756,
+      "promptMsP50": 32.866,
+      "generationMsP50": 584.769
+    }
+  },
+  "evidenceBoundary": "Real llama.cpp SSE timing for a fixed prompt set; firstToken is upstream SSE content when exposed, while buffered application answer bytes are not TTFT."
+}

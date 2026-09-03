@@ -1,0 +1,6 @@
+{"id":"exact","query":"KV Cache","expectedId":"card-kv-cache","returnedIds":["card-kv-cache"],"matchedBy":"exact","latencyMs":0.61,"passed":true}
+{"id":"alias","query":"键值缓存","kind":"knowledge_card","expectedId":"card-kv-cache","returnedIds":["card-kv-cache"],"matchedBy":"alias","latencyMs":0.31,"passed":true}
+{"id":"fts","query":"长序列推理","expectedId":"card-kv-cache","returnedIds":["card-kv-cache"],"matchedBy":"fts","latencyMs":0.12,"passed":true}
+{"id":"decision","query":"Q4 量化","kind":"meeting_decision","expectedId":"decision-q4","returnedIds":["decision-q4"],"matchedBy":"fts","latencyMs":0.13,"passed":true}
+{"id":"superseded-filter","query":"Q2 量化","kind":"meeting_decision","expectedId":null,"returnedIds":[],"matchedBy":null,"latencyMs":0.08,"passed":true}
+{"id":"empty","query":"不存在的主题","expectedId":null,"returnedIds":[],"matchedBy":null,"latencyMs":0.04,"passed":true}

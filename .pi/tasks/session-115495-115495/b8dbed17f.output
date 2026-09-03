@@ -1,0 +1,104 @@
+
+> cuemind@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.15
+   - Environments: .env
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings in 1455ms
+
+./lib/candidate-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/candidate-store.ts
+./app/api/vault-export/route.ts
+
+./lib/candidate-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/candidate-store.ts
+./app/api/vault-export/route.ts
+
+./lib/chat-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/chat-store.ts
+./app/api/chat-messages/route.ts
+
+./lib/chat-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/chat-store.ts
+./app/api/chat-messages/route.ts
+
+./lib/knowledge-memory-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/knowledge-memory-store.ts
+./app/api/local-memory/route.ts
+
+./lib/knowledge-memory-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/knowledge-memory-store.ts
+./app/api/local-memory/route.ts
+
+./lib/session-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/session-store.ts
+./app/api/sessions/route.ts
+
+./lib/session-store.ts
+module.createRequire failed parsing argument.
+
+Import trace for requested module:
+./lib/session-store.ts
+./app/api/sessions/route.ts
+
+ ✓ Compiled successfully in 38.0s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/20) ...
+   Generating static pages (5/20) 
+   Generating static pages (10/20) 
+   Generating static pages (15/20) 
+ ✓ Generating static pages (20/20)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    26.4 kB         170 kB
+├ ○ /_not-found                            993 B         103 kB
+├ ƒ /api/ask                               156 B         102 kB
+├ ƒ /api/chat-messages                     156 B         102 kB
+├ ƒ /api/context-cards                     156 B         102 kB
+├ ƒ /api/local-memory                      156 B         102 kB
+├ ƒ /api/local-transcribe                  156 B         102 kB
+├ ƒ /api/pipeline-events                   156 B         102 kB
+├ ƒ /api/postmeeting-transcript            156 B         102 kB
+├ ƒ /api/realtime-transcribe               156 B         102 kB
+├ ƒ /api/session-title                     156 B         102 kB
+├ ƒ /api/sessions                          156 B         102 kB
+├ ƒ /api/suggestions                       156 B         102 kB
+├ ƒ /api/summarize                         156 B         102 kB
+├ ƒ /api/upload-media                      156 B         102 kB
+├ ƒ /api/vault-export                      156 B         102 kB
+└ ○ /replay                              7.11 kB         151 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/255-4f212684648fcab9.js         46 kB
+  ├ chunks/4bd1b696-c023c6e3521b1417.js  54.2 kB
+  └ other shared chunks (total)          1.93 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

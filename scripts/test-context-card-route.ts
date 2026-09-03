@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { POST } from "@/app/api/context-cards/route";
+import { POST as createSession } from "@/app/api/sessions/route";
 import {
   countCandidates,
   getCandidate,
@@ -162,12 +163,32 @@ if (!process.env.CUEMIND_DATA_DIR?.trim()) {
   process.env.CUEMIND_DATA_DIR = mkdtempSync(path.join(tmpdir(), "cuemind-route-test-"));
 }
 
+const sessionTokens = new Map<string, string>();
+
 function makeRequest(body: unknown): Request {
+  const sessionId = typeof body === "object" && body !== null && typeof (body as { sessionId?: unknown }).sessionId === "string"
+    ? (body as { sessionId: string }).sessionId
+    : undefined;
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const token = sessionId ? sessionTokens.get(sessionId) : undefined;
+  if (token) headers.set("X-Session-Token", token);
   return new Request("http://localhost/api/context-cards", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
+}
+
+async function bootstrapSessions(): Promise<void> {
+  for (const id of ["m2-route-card-shown", "m2-route-dup", "m2-live-simple", "m2-bypass-probe"]) {
+    const response = await createSession(new Request("http://localhost/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, title: id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),
+    }));
+    assert.equal(response.status, 200);
+    sessionTokens.set(id, (await response.json() as { sessionAccessToken: string }).sessionAccessToken);
+  }
 }
 
 function settings(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -863,6 +884,18 @@ async function testAgentReachMockPreservesInsufficientSourcesError(): Promise<vo
 // 构造/写入必抛（sqlite 打不开 → JSONL mkdir 也失败）→ makeTrace 的 try/catch 全吞 →
 // 路由仍须 200 出卡。模拟「账本写入抛错不影响响应」。
 async function runBypassProbe(): Promise<void> {
+  const probeDataPath = process.env.CUEMIND_DATA_DIR;
+  const authDataDir = mkdtempSync(path.join(tmpdir(), "cuemind-route-auth-"));
+  process.env.CUEMIND_DATA_DIR = authDataDir;
+  const authResponse = await createSession(new Request("http://localhost/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "m2-bypass-probe", title: "m2-bypass-probe", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), transcriptChunks: [], suggestionBatches: [], chatMessages: [], meetingReport: null }),
+  }));
+  assert.equal(authResponse.status, 200);
+  const authToken = (await authResponse.json() as { sessionAccessToken: string }).sessionAccessToken;
+  process.env.CUEMIND_DATA_DIR = probeDataPath;
+  sessionTokens.set("m2-bypass-probe", authToken);
   installSearchMock();
   let calls = 0;
   const { server, baseUrl } = await startMockServer((_req, res) => {
@@ -932,6 +965,7 @@ async function main(): Promise<void> {
     await runBypassProbe();
     return;
   }
+  await bootstrapSessions();
   installSearchMock();
   try {
     await testInvalidRequest();

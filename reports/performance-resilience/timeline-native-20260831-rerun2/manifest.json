@@ -1,0 +1,8 @@
+{
+  "evaluator": "request-timeline-evaluator-v2",
+  "generatedAt": "2026-08-31T12:46:07.460Z",
+  "baseUrl": "http://localhost:3000",
+  "questionCount": 3,
+  "executionMode": "real_ask_sse",
+  "evidenceBoundary": "Native pipeline events are preferred when emitted by the route. Legacy SSE boundaries and stage durations remain marked as derived; capture/ASR/render stay null when this Ask-only runner has no browser audio/render context."
+}

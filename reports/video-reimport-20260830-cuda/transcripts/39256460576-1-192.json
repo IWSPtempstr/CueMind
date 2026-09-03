@@ -1,0 +1,813 @@
+{
+	"systeminfo": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | CUDA : ARCHS = 890 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | OPENMP = 1 | REPACK = 1 | ",
+	"model": {
+		"type": "small",
+		"multilingual": true,
+		"vocab": 51865,
+		"audio": {
+			"ctx": 1500,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"text": {
+			"ctx": 448,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"mels": 80,
+		"ftype": 1
+	},
+	"params": {
+		"model": "/home/work/asr/.runtime/models/ggml-small.bin",
+		"language": "en",
+		"translate": false
+	},
+	"result": {
+		"language": "en"
+	},
+	"transcription": [
+		{
+			"timestamps": {
+				"from": "00:00:00,000",
+				"to": "00:00:30,000"
+			},
+			"offsets": {
+				"from": 0,
+				"to": 30000
+			},
+			"text": " Hello, everyone. Today we are going to do a mission on the LoRa围陶大模型. Why is it called the围陶大模型? The围陶大模型 is to give the model a specific mission and continue to train the model. It allows the model to perform better on this specific mission."
+		},
+		{
+			"timestamps": {
+				"from": "00:00:30,000",
+				"to": "00:01:00,000"
+			},
+			"offsets": {
+				"from": 30000,
+				"to": 60000
+			},
+			"text": " Why is it called the LoRa technology? The LoRa technology allows us to train the model on a normal computer. Because the size of the model is very large. The size of the model is very large. For example, the model we are going to train today is 1.7B. In the size of the model, this is a very small model, only 1.7B."
+		},
+		{
+			"timestamps": {
+				"from": "00:01:00,000",
+				"to": "00:01:30,000"
+			},
+			"offsets": {
+				"from": 60000,
+				"to": 90000
+			},
+			"text": " We can see that the size of the model is about 17Bb. Through the LoRa technology, we only need to train more than 300,000 models. In other words, we only need to train about 1,000 to 2,000 models."
+		},
+		{
+			"timestamps": {
+				"from": "00:01:30,000",
+				"to": "00:02:00,000"
+			},
+			"offsets": {
+				"from": 90000,
+				"to": 120000
+			},
+			"text": " We only need to train about an hour. And the data of the training is only 100. The memory is about 10 sentences. If we train with all the parameters, the speed may drop to hundreds of times. We need to train it for hundreds of hours. Let's take a closer look at our task."
+		},
+		{
+			"timestamps": {
+				"from": "00:02:00,000",
+				"to": "00:02:30,000"
+			},
+			"offsets": {
+				"from": 120000,
+				"to": 150000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:02:30,000",
+				"to": "00:03:00,000"
+			},
+			"offsets": {
+				"from": 150000,
+				"to": 180000
+			},
+			"text": " The system."
+		},
+		{
+			"timestamps": {
+				"from": "00:03:00,000",
+				"to": "00:03:30,000"
+			},
+			"offsets": {
+				"from": 180000,
+				"to": 210000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:03:30,000",
+				"to": "00:04:00,000"
+			},
+			"offsets": {
+				"from": 210000,
+				"to": 240000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:04:00,000",
+				"to": "00:04:30,000"
+			},
+			"offsets": {
+				"from": 240000,
+				"to": 270000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:04:30,000",
+				"to": "00:05:00,000"
+			},
+			"offsets": {
+				"from": 270000,
+				"to": 300000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:05:00,000",
+				"to": "00:05:30,000"
+			},
+			"offsets": {
+				"from": 300000,
+				"to": 330000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:05:30,000",
+				"to": "00:06:00,000"
+			},
+			"offsets": {
+				"from": 330000,
+				"to": 360000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:06:00,000",
+				"to": "00:06:30,000"
+			},
+			"offsets": {
+				"from": 360000,
+				"to": 390000
+			},
+			"text": " This is the original data."
+		},
+		{
+			"timestamps": {
+				"from": "00:06:30,000",
+				"to": "00:07:00,000"
+			},
+			"offsets": {
+				"from": 390000,
+				"to": 420000
+			},
+			"text": " This error is a mistake. We can not care about it first. There should be a problem with the original data. We will solve the problem later. OK, next. Take a look here. Take a look at the server. Next is the second step."
+		},
+		{
+			"timestamps": {
+				"from": "00:07:00,000",
+				"to": "00:07:30,000"
+			},
+			"offsets": {
+				"from": 420000,
+				"to": 450000
+			},
+			"text": " The first step. The first step is to download this model. We want to download a large model with a size of 1.7B. We copy this code. Directly paste it to the bottom. Run. It will start downloading this 1.3 1.7B. We can take a look at this download speed. I'm pretty fast here."
+		},
+		{
+			"timestamps": {
+				"from": "00:07:30,000",
+				"to": "00:08:00,000"
+			},
+			"offsets": {
+				"from": 450000,
+				"to": 480000
+			},
+			"text": " It's a total of 3.2G. It's fast here. Put it down a little. It takes about a minute. I can take a look at this code. The code in this is like this."
+		},
+		{
+			"timestamps": {
+				"from": "00:08:00,000",
+				"to": "00:08:30,000"
+			},
+			"offsets": {
+				"from": 480000,
+				"to": 510000
+			},
+			"text": " The path is here. We just didn't have this. After we download it, it will create a folder like this. And download this 1.3 1.7B model into this. This model should be 3.5G. It's already down to 1.9G. Then we use this model scope. This is a"
+		},
+		{
+			"timestamps": {
+				"from": "00:08:30,000",
+				"to": "00:09:00,000"
+			},
+			"offsets": {
+				"from": 510000,
+				"to": 540000
+			},
+			"text": " model scope. The download speed in China is very fast. But we can use the outside of the country. The outside is hugging face. That's enough for now. After downloading this model, let's look at the next step. Just let it download here. The next step is to deal with the data level. Our data level is this format."
+		},
+		{
+			"timestamps": {
+				"from": "00:09:00,000",
+				"to": "00:09:30,000"
+			},
+			"offsets": {
+				"from": 540000,
+				"to": 570000
+			},
+			"text": " I'm going to show you how to get this data level. This is a JSON format. And inside, there is a label. And the label is the default. These are our"
+		},
+		{
+			"timestamps": {
+				"from": "00:09:30,000",
+				"to": "00:10:00,000"
+			},
+			"offsets": {
+				"from": 570000,
+				"to": 600000
+			},
+			"text": " data to new."
+		},
+		{
+			"timestamps": {
+				"from": "00:10:00,000",
+				"to": "00:10:30,000"
+			},
+			"offsets": {
+				"from": 600000,
+				"to": 630000
+			},
+			"text": " This is a new JSON file after running. And finally, we generate a PoetryRow.json file. The final goal is to get this file. This is the middle file. What's the difference between these three? This file has a separate background. And now the model is downloaded."
+		},
+		{
+			"timestamps": {
+				"from": "00:10:30,000",
+				"to": "00:11:00,000"
+			},
+			"offsets": {
+				"from": 630000,
+				"to": 660000
+			},
+			"text": " Python data to new."
+		},
+		{
+			"timestamps": {
+				"from": "00:11:00,000",
+				"to": "00:11:30,000"
+			},
+			"offsets": {
+				"from": 660000,
+				"to": 690000
+			},
+			"text": " You have to do a change. And then there is another place. This is the name of your file. This is the case that the creation background is combined."
+		},
+		{
+			"timestamps": {
+				"from": "00:11:30,000",
+				"to": "00:12:00,000"
+			},
+			"offsets": {
+				"from": 690000,
+				"to": 720000
+			},
+			"text": " It's a more standard input format. So when we train, we usually use a message. And then there is a role. In short, the most important thing is to get this. Each line is a data. If your original data is different from mine, you can organize it like this."
+		},
+		{
+			"timestamps": {
+				"from": "00:12:00,000",
+				"to": "00:12:30,000"
+			},
+			"offsets": {
+				"from": 720000,
+				"to": 750000
+			},
+			"text": " The first one is if you combine them together, but the background is different from mine."
+		},
+		{
+			"timestamps": {
+				"from": "00:12:30,000",
+				"to": "00:13:00,000"
+			},
+			"offsets": {
+				"from": 750000,
+				"to": 780000
+			},
+			"text": " For example, the creation background. Then you have to change these two words here into the creation background. These two words can also be called creation background. The second one is we have to look at this code. This code. I'm going to show you how the format is. If it's not, for example, your time, location, program time, these are all different from mine. Then you have to change this. This is your creation background."
+		},
+		{
+			"timestamps": {
+				"from": "00:13:00,000",
+				"to": "00:13:30,000"
+			},
+			"offsets": {
+				"from": 780000,
+				"to": 810000
+			},
+			"text": " You have to change the parameters here into the parameters in your creation background. Okay, next. There is another place, this title. This title is the title of the title. This content is the Chinese title. If you are different from mine, then you also have to change the background. I'll search for it. You have to change it here, too. For example, your title is not the title, but the title of the title."
+		},
+		{
+			"timestamps": {
+				"from": "00:13:30,000",
+				"to": "00:14:00,000"
+			},
+			"offsets": {
+				"from": 810000,
+				"to": 840000
+			},
+			"text": " Then you have to change the title here. Then this content is the Chinese title. If your content is, for example, you wrote the Chinese title on it, you wrote the Chinese title here, then you also have to change the Chinese title. There are two places where you need to pay attention. Other than that, there is no more. Okay, next. Look at the next step. The next step is"
+		},
+		{
+			"timestamps": {
+				"from": "00:14:00,000",
+				"to": "00:14:30,000"
+			},
+			"offsets": {
+				"from": 840000,
+				"to": 870000
+			},
+			"text": " Okay, now the data is all organized. The model is also downloaded. The next step is to enter the training stage. Training There is one more step before training. We just transformed the model into this format."
+		},
+		{
+			"timestamps": {
+				"from": "00:14:30,000",
+				"to": "00:15:00,000"
+			},
+			"offsets": {
+				"from": 870000,
+				"to": 900000
+			},
+			"text": " This format needs to be transformed into the final entry format. Then run this data. Just run this data. Let's run it."
+		},
+		{
+			"timestamps": {
+				"from": "00:15:00,000",
+				"to": "00:15:30,000"
+			},
+			"offsets": {
+				"from": 900000,
+				"to": 930000
+			},
+			"text": " Okay, now the data is all processed."
+		},
+		{
+			"timestamps": {
+				"from": "00:15:30,000",
+				"to": "00:16:00,000"
+			},
+			"offsets": {
+				"from": 930000,
+				"to": 960000
+			},
+			"text": " Okay, now the data is all processed. Okay, now the data is all processed."
+		},
+		{
+			"timestamps": {
+				"from": "00:16:00,000",
+				"to": "00:16:30,000"
+			},
+			"offsets": {
+				"from": 960000,
+				"to": 990000
+			},
+			"text": " Oh, I just wrote wrong here. This is wrong. Then I'll change it here. I'll think about how to deal with it. This should be this frame."
+		},
+		{
+			"timestamps": {
+				"from": "00:16:30,000",
+				"to": "00:17:00,000"
+			},
+			"offsets": {
+				"from": 990000,
+				"to": 1020000
+			},
+			"text": " Okay, this is wrong. Then I'll change this."
+		},
+		{
+			"timestamps": {
+				"from": "00:17:00,000",
+				"to": "00:17:30,000"
+			},
+			"offsets": {
+				"from": 1020000,
+				"to": 1050000
+			},
+			"text": " Okay, now the data is all processed. Okay, now the data is all processed."
+		},
+		{
+			"timestamps": {
+				"from": "00:17:30,000",
+				"to": "00:18:00,000"
+			},
+			"offsets": {
+				"from": 1050000,
+				"to": 1080000
+			},
+			"text": " Okay, now the data is all processed."
+		},
+		{
+			"timestamps": {
+				"from": "00:18:00,000",
+				"to": "00:18:30,000"
+			},
+			"offsets": {
+				"from": 1080000,
+				"to": 1110000
+			},
+			"text": " I am starts."
+		},
+		{
+			"timestamps": {
+				"from": "00:18:30,000",
+				"to": "00:19:00,000"
+			},
+			"offsets": {
+				"from": 1110000,
+				"to": 1140000
+			},
+			"text": " I'm starts user."
+		},
+		{
+			"timestamps": {
+				"from": "00:19:00,000",
+				"to": "00:19:30,000"
+			},
+			"offsets": {
+				"from": 1140000,
+				"to": 1170000
+			},
+			"text": " Yeah, yeah, yeah, yeah, yeah, yeah."
+		},
+		{
+			"timestamps": {
+				"from": "00:19:30,000",
+				"to": "00:20:00,000"
+			},
+			"offsets": {
+				"from": 1170000,
+				"to": 1200000
+			},
+			"text": " Python. And then it's Lola.t.p y. This is this. If you want to use the code, you have to enter this code. Let's enter it."
+		},
+		{
+			"timestamps": {
+				"from": "00:20:00,000",
+				"to": "00:20:30,000"
+			},
+			"offsets": {
+				"from": 1200000,
+				"to": 1230000
+			},
+			"text": " Okay, let's start training. Because there's a graphics card here, so it's faster to train."
+		},
+		{
+			"timestamps": {
+				"from": "00:20:30,000",
+				"to": "00:21:00,000"
+			},
+			"offsets": {
+				"from": 1230000,
+				"to": 1260000
+			},
+			"text": " Oh, this is already trained."
+		},
+		{
+			"timestamps": {
+				"from": "00:21:00,000",
+				"to": "00:21:30,000"
+			},
+			"offsets": {
+				"from": 1260000,
+				"to": 1290000
+			},
+			"text": " It's 100. I'm going to change it a little bit. Because yesterday, that speed is slow. I remember it's here. Yeah, I'm going to change it all. All of them. It's. 3000. I wrote 4000 over here. It's all trained. Let's see. Okay, let's look at this when we're training."
+		},
+		{
+			"timestamps": {
+				"from": "00:21:30,000",
+				"to": "00:22:00,000"
+			},
+			"offsets": {
+				"from": 1290000,
+				"to": 1320000
+			},
+			"text": " Let's look at the parameters. The parameters are somewhere we can change. This is the biggest. The length of the token. This is the model name. This doesn't have to worry about it. This is Laura Laura parameters. This can be changed a little bit. Of course, it's a little bigger. The higher the performance requirements for the computer. Below that Epoch. This is best to try between 1 and 3. I can try this 3. I'm here to train faster."
+		},
+		{
+			"timestamps": {
+				"from": "00:22:00,000",
+				"to": "00:22:30,000"
+			},
+			"offsets": {
+				"from": 1320000,
+				"to": 1350000
+			},
+			"text": " Just try this 1. Next, the best size to see the configuration of the computer. The computer configuration can get bigger. This side can also be a little bigger. There's no repair on the back. Basically, you don't need to repair it. The main thing is that you can repair this one and this one. Okay, this side is also trained. Very fast."
+		},
+		{
+			"timestamps": {
+				"from": "00:22:30,000",
+				"to": "00:23:00,000"
+			},
+			"offsets": {
+				"from": 1350000,
+				"to": 1380000
+			},
+			"text": " Let's take a look at the final result. After the training, it will generate this picture. A picture of the loss circle. This is the loss of our training. It's getting lower and lower. That means the performance is getting better and better. It is getting better and better. This is its date. This is the record of the loss. Let's train 25 steps together. 25 steps."
+		},
+		{
+			"timestamps": {
+				"from": "00:23:00,000",
+				"to": "00:23:30,000"
+			},
+			"offsets": {
+				"from": 1380000,
+				"to": 1410000
+			},
+			"text": " And then let's take a look at this. There's a question. This is the final result of the loss."
+		},
+		{
+			"timestamps": {
+				"from": "00:23:30,000",
+				"to": "00:24:00,000"
+			},
+			"offsets": {
+				"from": 1410000,
+				"to": 1440000
+			},
+			"text": " It is getting better and better."
+		},
+		{
+			"timestamps": {
+				"from": "00:24:00,000",
+				"to": "00:24:30,000"
+			},
+			"offsets": {
+				"from": 1440000,
+				"to": 1470000
+			},
+			"text": " There's another one below. Here you can see how it works. I'm not a professional either. And then I look at the above. The result of the training will also be kept in this document. Finally, there's a timer, right? Let's run this test. This test timer, I'll write it in here."
+		},
+		{
+			"timestamps": {
+				"from": "00:24:30,000",
+				"to": "00:25:00,000"
+			},
+			"offsets": {
+				"from": 1470000,
+				"to": 1500000
+			},
+			"text": " Is it running this test? We can input a background to let it write a dictionary for us. Let's try the effect. Our Python test."
+		},
+		{
+			"timestamps": {
+				"from": "00:25:00,000",
+				"to": "00:25:30,000"
+			},
+			"offsets": {
+				"from": 1500000,
+				"to": 1530000
+			},
+			"text": " Let's call it. Let's input a creative background. Let's just write it. For example, it's 1091085 years."
+		},
+		{
+			"timestamps": {
+				"from": "00:25:30,000",
+				"to": "00:26:00,000"
+			},
+			"offsets": {
+				"from": 1530000,
+				"to": 1560000
+			},
+			"text": " Good."
+		},
+		{
+			"timestamps": {
+				"from": "00:26:00,000",
+				"to": "00:26:30,000"
+			},
+			"offsets": {
+				"from": 1560000,
+				"to": 1590000
+			},
+			"text": " I'll take a look at what it will write. Here you have to wait and see. It's all a single output. For example, it's 1000 words."
+		},
+		{
+			"timestamps": {
+				"from": "00:26:30,000",
+				"to": "00:27:00,000"
+			},
+			"offsets": {
+				"from": 1590000,
+				"to": 1620000
+			},
+			"text": " Yeah, that's about it. Let's take a look at this effect. Let's input this. And then it's created a dictionary. It's good to have it first. According to this. The background is 1085 years, and it's also analyzed."
+		},
+		{
+			"timestamps": {
+				"from": "00:27:00,000",
+				"to": "00:27:30,000"
+			},
+			"offsets": {
+				"from": 1620000,
+				"to": 1650000
+			},
+			"text": " Let's take a look at this. We trained this code. What does it look like?"
+		},
+		{
+			"timestamps": {
+				"from": "00:27:30,000",
+				"to": "00:28:00,000"
+			},
+			"offsets": {
+				"from": 1650000,
+				"to": 1680000
+			},
+			"text": " What about it? We use it to check it out through the Jupyter. I've opened JupyterLab here. Okay, the same is the code for this. It's just it's an IPYNB dictionary. And then we use Jupyter to run. Let's take a look at the process of running. I don't run here again because it runs very slowly. My local computer is not There's no single one."
+		},
+		{
+			"timestamps": {
+				"from": "00:28:00,000",
+				"to": "00:28:30,000"
+			},
+			"offsets": {
+				"from": 1680000,
+				"to": 1710000
+			},
+			"text": " It's been running for a very long time, and it runs for about 10 sentences. Now it's not running right now, so it doesn't run. Okay, let's take a look at it. First of all, let's look at the code we need."
+		},
+		{
+			"timestamps": {
+				"from": "00:28:30,000",
+				"to": "00:29:00,000"
+			},
+			"offsets": {
+				"from": 1710000,
+				"to": 1740000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:29:00,000",
+				"to": "00:29:30,000"
+			},
+			"offsets": {
+				"from": 1740000,
+				"to": 1770000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:29:30,000",
+				"to": "00:30:00,000"
+			},
+			"offsets": {
+				"from": 1770000,
+				"to": 1800000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:30:00,000",
+				"to": "00:30:30,000"
+			},
+			"offsets": {
+				"from": 1800000,
+				"to": 1830000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:30:30,000",
+				"to": "00:31:00,000"
+			},
+			"offsets": {
+				"from": 1830000,
+				"to": 1860000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:31:00,000",
+				"to": "00:31:30,000"
+			},
+			"offsets": {
+				"from": 1860000,
+				"to": 1890000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:31:30,000",
+				"to": "00:32:00,000"
+			},
+			"offsets": {
+				"from": 1890000,
+				"to": 1920000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:32:00,000",
+				"to": "00:32:30,000"
+			},
+			"offsets": {
+				"from": 1920000,
+				"to": 1950000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:32:30,000",
+				"to": "00:33:00,000"
+			},
+			"offsets": {
+				"from": 1950000,
+				"to": 1980000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:33:00,000",
+				"to": "00:33:30,000"
+			},
+			"offsets": {
+				"from": 1980000,
+				"to": 2010000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:33:30,000",
+				"to": "00:34:00,000"
+			},
+			"offsets": {
+				"from": 2010000,
+				"to": 2040000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:34:00,000",
+				"to": "00:34:30,000"
+			},
+			"offsets": {
+				"from": 2040000,
+				"to": 2070000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:34:30,000",
+				"to": "00:35:00,000"
+			},
+			"offsets": {
+				"from": 2070000,
+				"to": 2100000
+			},
+			"text": " It's just a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:35:00,000",
+				"to": "00:35:30,000"
+			},
+			"offsets": {
+				"from": 2100000,
+				"to": 2130000
+			},
+			"text": " It's just a little bit."
+		}
+	]
+}

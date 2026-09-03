@@ -1,0 +1,26 @@
+{
+  "evaluator": "asr-latency-evaluator-v1",
+  "status": "complete",
+  "denominator": {
+    "total": 15,
+    "succeeded": 15,
+    "failed": 0,
+    "notApplicable": 0
+  },
+  "summary": {
+    "count": 15,
+    "successfulCount": 15,
+    "failedCount": 0,
+    "notApplicableCount": 0,
+    "audioDurationMs": 28316688,
+    "elapsedMs": 1065437,
+    "audioSecondsPerSecond": 26.577533913314443,
+    "realTimeFactor": 0.03762576329548145,
+    "firstPartialP50Ms": null,
+    "firstPartialP95Ms": null,
+    "confirmedP50Ms": null,
+    "confirmedP95Ms": null
+  },
+  "failures": [],
+  "evidenceBoundary": "Real local whisper.cpp process timing and segment integrity. CLI per-request execution does not prove resident streaming partial/confirmed latency."
+}

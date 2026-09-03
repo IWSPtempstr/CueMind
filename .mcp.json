@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/root/anaconda3/envs/agent-learning/bin/code-review-graph",
+      "args": ["mcp", "--repo", "/home/work/asr/CueMind"],
+      "cwd": "/home/work/asr/CueMind",
+      "startup_timeout_sec": 120
+    }
+  }
+}

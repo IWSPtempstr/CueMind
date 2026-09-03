@@ -1,0 +1,373 @@
+{
+	"systeminfo": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | CUDA : ARCHS = 890 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | OPENMP = 1 | REPACK = 1 | ",
+	"model": {
+		"type": "small",
+		"multilingual": true,
+		"vocab": 51865,
+		"audio": {
+			"ctx": 1500,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"text": {
+			"ctx": 448,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"mels": 80,
+		"ftype": 1
+	},
+	"params": {
+		"model": "/home/work/asr/.runtime/models/ggml-small.bin",
+		"language": "en",
+		"translate": false
+	},
+	"result": {
+		"language": "en"
+	},
+	"transcription": [
+		{
+			"timestamps": {
+				"from": "00:00:00,000",
+				"to": "00:00:30,000"
+			},
+			"offsets": {
+				"from": 0,
+				"to": 30000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:00:30,000",
+				"to": "00:01:00,000"
+			},
+			"offsets": {
+				"from": 30000,
+				"to": 60000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:01:00,000",
+				"to": "00:01:30,000"
+			},
+			"offsets": {
+				"from": 60000,
+				"to": 90000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:01:30,000",
+				"to": "00:02:00,000"
+			},
+			"offsets": {
+				"from": 90000,
+				"to": 120000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:02:00,000",
+				"to": "00:02:30,000"
+			},
+			"offsets": {
+				"from": 120000,
+				"to": 150000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:02:30,000",
+				"to": "00:03:00,000"
+			},
+			"offsets": {
+				"from": 150000,
+				"to": 180000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:03:00,000",
+				"to": "00:03:30,000"
+			},
+			"offsets": {
+				"from": 180000,
+				"to": 210000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:03:30,000",
+				"to": "00:04:00,000"
+			},
+			"offsets": {
+				"from": 210000,
+				"to": 240000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:04:00,000",
+				"to": "00:04:30,000"
+			},
+			"offsets": {
+				"from": 240000,
+				"to": 270000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:04:30,000",
+				"to": "00:05:00,000"
+			},
+			"offsets": {
+				"from": 270000,
+				"to": 300000
+			},
+			"text": " Hello, everyone."
+		},
+		{
+			"timestamps": {
+				"from": "00:05:00,000",
+				"to": "00:05:30,000"
+			},
+			"offsets": {
+				"from": 300000,
+				"to": 330000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:05:30,000",
+				"to": "00:06:00,000"
+			},
+			"offsets": {
+				"from": 330000,
+				"to": 360000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:06:00,000",
+				"to": "00:06:30,000"
+			},
+			"offsets": {
+				"from": 360000,
+				"to": 390000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:06:30,000",
+				"to": "00:07:00,000"
+			},
+			"offsets": {
+				"from": 390000,
+				"to": 420000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:07:00,000",
+				"to": "00:07:30,000"
+			},
+			"offsets": {
+				"from": 420000,
+				"to": 450000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:07:30,000",
+				"to": "00:08:00,000"
+			},
+			"offsets": {
+				"from": 450000,
+				"to": 480000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:08:00,000",
+				"to": "00:08:30,000"
+			},
+			"offsets": {
+				"from": 480000,
+				"to": 510000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:08:30,000",
+				"to": "00:09:00,000"
+			},
+			"offsets": {
+				"from": 510000,
+				"to": 540000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:09:00,000",
+				"to": "00:09:30,000"
+			},
+			"offsets": {
+				"from": 540000,
+				"to": 570000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:09:30,000",
+				"to": "00:10:00,000"
+			},
+			"offsets": {
+				"from": 570000,
+				"to": 600000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:10:00,000",
+				"to": "00:10:30,000"
+			},
+			"offsets": {
+				"from": 600000,
+				"to": 630000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:10:30,000",
+				"to": "00:11:00,000"
+			},
+			"offsets": {
+				"from": 630000,
+				"to": 660000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:11:00,000",
+				"to": "00:11:30,000"
+			},
+			"offsets": {
+				"from": 660000,
+				"to": 690000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:11:30,000",
+				"to": "00:12:00,000"
+			},
+			"offsets": {
+				"from": 690000,
+				"to": 720000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:12:00,000",
+				"to": "00:12:30,000"
+			},
+			"offsets": {
+				"from": 720000,
+				"to": 750000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:12:30,000",
+				"to": "00:13:00,000"
+			},
+			"offsets": {
+				"from": 750000,
+				"to": 780000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:13:00,000",
+				"to": "00:13:30,000"
+			},
+			"offsets": {
+				"from": 780000,
+				"to": 810000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:13:30,000",
+				"to": "00:14:00,000"
+			},
+			"offsets": {
+				"from": 810000,
+				"to": 840000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:14:00,000",
+				"to": "00:14:30,000"
+			},
+			"offsets": {
+				"from": 840000,
+				"to": 870000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:14:30,000",
+				"to": "00:15:00,000"
+			},
+			"offsets": {
+				"from": 870000,
+				"to": 900000
+			},
+			"text": " You"
+		},
+		{
+			"timestamps": {
+				"from": "00:15:00,000",
+				"to": "00:15:30,000"
+			},
+			"offsets": {
+				"from": 900000,
+				"to": 930000
+			},
+			"text": " You You You You You You You You"
+		}
+	]
+}

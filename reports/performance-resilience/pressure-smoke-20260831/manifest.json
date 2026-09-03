@@ -1,0 +1,13 @@
+{
+  "evaluator": "resource-pressure-evaluator-v1",
+  "generatedAt": "2026-08-31T11:01:01.779Z",
+  "baseUrl": "http://localhost:3000",
+  "tiers": [
+    1,
+    2
+  ],
+  "sampleIntervalMs": 300,
+  "executionMode": "real_controlled_concurrency",
+  "destructiveOomTest": false,
+  "evidenceBoundary": "Controlled short-duration request concurrency and local nvidia-smi/process observations. This is not an artificial OOM or sustained production load test."
+}

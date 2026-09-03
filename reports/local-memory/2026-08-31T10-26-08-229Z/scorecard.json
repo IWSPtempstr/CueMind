@@ -1,0 +1,10 @@
+{
+  "evidenceBoundary": "fixture",
+  "backend": "sqlite",
+  "total": 6,
+  "passed": 6,
+  "failed": 0,
+  "p50Ms": 0.19,
+  "p95Ms": 1.01,
+  "noNetwork": true
+}

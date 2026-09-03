@@ -5,6 +5,9 @@
 // shared pure helpers in lib/ask-history (extract + one-line serialization).
 
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   createServer,
   type IncomingMessage,
@@ -22,6 +25,8 @@ import {
   MAX_ASK_FIELD_CHARS,
 } from "@/lib/ask-history";
 import type { ChatMessage } from "@/types/chat";
+
+process.env.CUEMIND_DATA_DIR = mkdtempSync(path.join(tmpdir(), "cuemind-summarize-route-"));
 
 const SUMMARIZE_PROMPT_MARKER = "MEETING_SUMMARY_PROMPT_MARKER";
 const POLISH_PROMPT_MARKER = "转写文本整理助手";

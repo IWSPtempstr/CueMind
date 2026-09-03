@@ -1,0 +1,1088 @@
+{
+	"systeminfo": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | CUDA : ARCHS = 890 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | OPENMP = 1 | REPACK = 1 | ",
+	"model": {
+		"type": "small",
+		"multilingual": true,
+		"vocab": 51865,
+		"audio": {
+			"ctx": 1500,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"text": {
+			"ctx": 448,
+			"state": 768,
+			"head": 12,
+			"layer": 12
+		},
+		"mels": 80,
+		"ftype": 1
+	},
+	"params": {
+		"model": "/home/work/asr/.runtime/models/ggml-small.bin",
+		"language": "en",
+		"translate": false
+	},
+	"result": {
+		"language": "en"
+	},
+	"transcription": [
+		{
+			"timestamps": {
+				"from": "00:00:00,000",
+				"to": "00:00:30,000"
+			},
+			"offsets": {
+				"from": 0,
+				"to": 30000
+			},
+			"text": " Hi, I'm Koji."
+		},
+		{
+			"timestamps": {
+				"from": "00:00:30,000",
+				"to": "00:01:00,000"
+			},
+			"offsets": {
+				"from": 30000,
+				"to": 60000
+			},
+			"text": " Hello, I'm Koji. Welcome."
+		},
+		{
+			"timestamps": {
+				"from": "00:01:00,000",
+				"to": "00:01:30,000"
+			},
+			"offsets": {
+				"from": 60000,
+				"to": 90000
+			},
+			"text": " You're going to be talking about your company and products. I'm now doing a 1KB agent computer tool for development. It's for development agents. And then I want to introduce the source of the source. What is Learn Cloud Code? Cloud Code is the best agent harness we think. So we want to learn the harness. We just made a data warehouse to explain Cloud Code's design model. What about the financing? We just closed $300 million."
+		},
+		{
+			"timestamps": {
+				"from": "00:01:30,000",
+				"to": "00:02:00,000"
+			},
+			"offsets": {
+				"from": 90000,
+				"to": 120000
+			},
+			"text": " It's very exciting. The main thing is me. And then I have two interns. What about income and profit? I just started a new industry direction. I haven't accepted it yet. What are you doing before you start your business? I'm doing AI infrastructure work at a big factory. If you want to use a new path today, you don't have to introduce harness to anyone who has heard about harness. What do you want to say? In addition to the model, it's all harness. I tend to think of the model as a smart brain. But it has no body and legs."
+		},
+		{
+			"timestamps": {
+				"from": "00:02:00,000",
+				"to": "00:02:30,000"
+			},
+			"offsets": {
+				"from": 120000,
+				"to": 150000
+			},
+			"text": " It's not going to work out. Agent's performance is from harness design. Do you agree with this sentence? And why isn't agent's performance from model intelligence? I think this is half of the story. Agent's performance in intelligence is definitely still a model development. Because agent is actually a model. The smarter the model is, the better it is. We see that most models are more efficient now. If we compare model to human, we are at least between 102 and 107. But we can learn dance through fitness."
+		},
+		{
+			"timestamps": {
+				"from": "00:02:30,000",
+				"to": "00:03:00,000"
+			},
+			"offsets": {
+				"from": 150000,
+				"to": 180000
+			},
+			"text": " This example is quite interesting. I think it has expanded our ability. We mentioned the training of Learn Cloud Code in the beginning. There are more than 50,000 courses on KTOP. What time did you start writing this training? Actually, it was 9 months ago. What did you think at the time?"
+		},
+		{
+			"timestamps": {
+				"from": "00:03:00,000",
+				"to": "00:03:30,000"
+			},
+			"offsets": {
+				"from": 180000,
+				"to": 210000
+			},
+			"text": " The training of Learn Cloud Code is very powerful. You should be able to get a very powerful agent product. That's why we did this training for the developers. But the developers may be familiar with this method, such as Long Graph, Long Chain, such as Promet, Node and Flow."
+		},
+		{
+			"timestamps": {
+				"from": "00:03:30,000",
+				"to": "00:04:00,000"
+			},
+			"offsets": {
+				"from": 210000,
+				"to": 240000
+			},
+			"text": " So, you will think that Long Chain, Long Graph will build an agent framework. They have already passed it completely, and there is no use for this place."
+		},
+		{
+			"timestamps": {
+				"from": "00:04:00,000",
+				"to": "00:04:30,000"
+			},
+			"offsets": {
+				"from": 240000,
+				"to": 270000
+			},
+			"text": " Then, the agent development process in the future is no longer useful. Then, this kind of CCE agent-native, which is agent-modeling, model-modeling agent, this kind of method and thinking to do things, including 80% of it, will be more and more clear, will be used by more people. Then, a few days before we started writing the course, Cloud has just launched this Management Agents, which is to develop this set of agent harnesses for everyone by themselves. Not to mention, even earlier, its original code was leaked."
+		},
+		{
+			"timestamps": {
+				"from": "00:04:30,000",
+				"to": "00:05:00,000"
+			},
+			"offsets": {
+				"from": 270000,
+				"to": 300000
+			},
+			"text": " Now, for example, I want to develop an agent, I can directly use Cloud Management Agents. Then, is it necessary for everyone to do harnesses by themselves? Is it even necessary to understand the details of harnesses?"
+		},
+		{
+			"timestamps": {
+				"from": "00:05:00,000",
+				"to": "00:05:30,000"
+			},
+			"offsets": {
+				"from": 300000,
+				"to": 330000
+			},
+			"text": " If you look at it from the whole perspective, there will be such a day in the future."
+		},
+		{
+			"timestamps": {
+				"from": "00:05:30,000",
+				"to": "00:06:00,000"
+			},
+			"offsets": {
+				"from": 330000,
+				"to": 360000
+			},
+			"text": " Now, what is the purpose of learning this agent harness?"
+		},
+		{
+			"timestamps": {
+				"from": "00:06:00,000",
+				"to": "00:06:30,000"
+			},
+			"offsets": {
+				"from": 360000,
+				"to": 390000
+			},
+			"text": " Is it necessary for you to understand the agent harness?"
+		},
+		{
+			"timestamps": {
+				"from": "00:06:30,000",
+				"to": "00:07:00,000"
+			},
+			"offsets": {
+				"from": 390000,
+				"to": 420000
+			},
+			"text": " Then let's talk about this agent harness."
+		},
+		{
+			"timestamps": {
+				"from": "00:07:00,000",
+				"to": "00:07:30,000"
+			},
+			"offsets": {
+				"from": 420000,
+				"to": 450000
+			},
+			"text": " When we talk about the agent harness, does it usually mean that you will separate it into a few parts?"
+		},
+		{
+			"timestamps": {
+				"from": "00:07:30,000",
+				"to": "00:08:00,000"
+			},
+			"offsets": {
+				"from": 450000,
+				"to": 480000
+			},
+			"text": " If you look at it from the outside, you can see that there is a memory, including this model of the harness window is not infinite. Many tasks will actually exceed the model of the harness window. Will it have an offload?"
+		},
+		{
+			"timestamps": {
+				"from": "00:08:00,000",
+				"to": "00:08:30,000"
+			},
+			"offsets": {
+				"from": 480000,
+				"to": 510000
+			},
+			"text": " It means that the management of this agent will be divided into two parts. One is that if you are not facing an agent today, you are facing 100 agents, like you have 100 employees in the company. How do you organize their coordination according to some kind of organization structure, some kind of cooperation method and transmission order to solve a complicated thing? The second layer is that the 100 people in your team, right? Each of them will have a different range of interviews. In fact, there will be a lot of questions about the comprehensive governance and information."
+		},
+		{
+			"timestamps": {
+				"from": "00:08:30,000",
+				"to": "00:09:00,000"
+			},
+			"offsets": {
+				"from": 510000,
+				"to": 540000
+			},
+			"text": " There are also a lot of questions about governance. So the third layer is the intelligence ability layer. And then the one is the environment layer with the upper and lower layers. And then there is the governance arrangement and management layer. Do we want to use an example to create a three-layer, a specific agent's task? How does the harness three layers work? There was a famous example before, that is, using two weeks to form a large number of agents, from the leading one to the first building a CBN machine."
+		},
+		{
+			"timestamps": {
+				"from": "00:09:00,000",
+				"to": "00:09:30,000"
+			},
+			"offsets": {
+				"from": 540000,
+				"to": 570000
+			},
+			"text": " The first layer is the model. The model is like a brain and a heart. It will be able to perform the entire task. It will have action capabilities. So you have to at least give it a list of the types of documents, such as the mountain reading, the search, etc. The tool for this type of work is action. The harness is the first layer. You provide the model with the ability. The model has the opportunity to write code, create documents, and modify the documents before it. The second layer is the intelligence ability layer."
+		},
+		{
+			"timestamps": {
+				"from": "00:09:30,000",
+				"to": "00:10:00,000"
+			},
+			"offsets": {
+				"from": 570000,
+				"to": 600000
+			},
+			"text": " The model has to know what kind of environment I am working in. What is my path? What is the rely on the tools I have installed? What is the structure of the documents I have written? Including my gate information, and its model has a lot of mountain reading. Because we know that a CBN machine is a very large capacity. It is impossible to complete the project directly in a model mountain reading window. It has to have some mountain readings."
+		},
+		{
+			"timestamps": {
+				"from": "00:10:00,000",
+				"to": "00:10:30,000"
+			},
+			"offsets": {
+				"from": 600000,
+				"to": 630000
+			},
+			"text": " It is impossible to complete the project directly in a model mountain reading window."
+		},
+		{
+			"timestamps": {
+				"from": "00:10:30,000",
+				"to": "00:11:00,000"
+			},
+			"offsets": {
+				"from": 630000,
+				"to": 660000
+			},
+			"text": " The third layer is the programming and intelligence level."
+		},
+		{
+			"timestamps": {
+				"from": "00:11:00,000",
+				"to": "00:11:30,000"
+			},
+			"offsets": {
+				"from": 660000,
+				"to": 690000
+			},
+			"text": " So when we do an agent, we have to rely on the manual. But now it is possible that some of them have been installed. Some of them can be directly dropped."
+		},
+		{
+			"timestamps": {
+				"from": "00:11:30,000",
+				"to": "00:12:00,000"
+			},
+			"offsets": {
+				"from": 690000,
+				"to": 720000
+			},
+			"text": " Infra tool, right? And then you see some of them have been installed very well. Some of them are currently needed. The third layer is not as good as I thought. Because we think that this style of transformation is too fast. From the launch of Chess GPT at the end of 2012. Until now, like this set of cc, this set of agent intelligence model. The model was trained to complete the long-term mission. That is, it has been about half a year since it started to appear. So the open source community, I actually observed a lot. I didn't see it too much."
+		},
+		{
+			"timestamps": {
+				"from": "00:12:00,000",
+				"to": "00:12:30,000"
+			},
+			"offsets": {
+				"from": 720000,
+				"to": 750000
+			},
+			"text": " Let me be satisfied with this layer. So it's also the reason why we are doing this layer."
+		},
+		{
+			"timestamps": {
+				"from": "00:12:30,000",
+				"to": "00:13:00,000"
+			},
+			"offsets": {
+				"from": 750000,
+				"to": 780000
+			},
+			"text": " So the first layer is this."
+		},
+		{
+			"timestamps": {
+				"from": "00:13:00,000",
+				"to": "00:13:30,000"
+			},
+			"offsets": {
+				"from": 780000,
+				"to": 810000
+			},
+			"text": " It's similar to providing a lot of interface for developers to develop agents. In addition to this layer, we will have other layers that will be related to everyone. For example, like Keywatch, which is my official color. For example, my agent in the past half a month. They are different in what kind of situation they are completed. It's like this, you can know that I go to the official color. Hey, isn't this my CLM design? Or is my scale not provided? Or is my model not enough? Okay, the official color layer is very important at the time. And we continue to observe the color layer."
+		},
+		{
+			"timestamps": {
+				"from": "00:13:30,000",
+				"to": "00:14:00,000"
+			},
+			"offsets": {
+				"from": 810000,
+				"to": 840000
+			},
+			"text": " I understand that the cloud storage will also want to do this layer. AWS has agent core and Aria cloud has agent bay."
+		},
+		{
+			"timestamps": {
+				"from": "00:14:00,000",
+				"to": "00:14:30,000"
+			},
+			"offsets": {
+				"from": 840000,
+				"to": 870000
+			},
+			"text": " I also want to provide this layer of information for the agent. Then how do you see the difference between you and the cloud storage? Yes, first of all, I want to emphasize that our agent development training is not for the cloud or cloud storage. In fact, we hope that everything can run smoothly. For example, if you develop a browser in a browser, that is, it is completely run in a browser, there is no backup. Then, including you, you may develop a WeChat account, right? Then you develop a lot of"
+		},
+		{
+			"timestamps": {
+				"from": "00:14:30,000",
+				"to": "00:15:00,000"
+			},
+			"offsets": {
+				"from": 870000,
+				"to": 900000
+			},
+			"text": " WeChat account, right?"
+		},
+		{
+			"timestamps": {
+				"from": "00:15:00,000",
+				"to": "00:15:30,000"
+			},
+			"offsets": {
+				"from": 900000,
+				"to": 930000
+			},
+			"text": " So your company's name is called EKB?"
+		},
+		{
+			"timestamps": {
+				"from": "00:15:30,000",
+				"to": "00:16:00,000"
+			},
+			"offsets": {
+				"from": 930000,
+				"to": 960000
+			},
+			"text": " Yes."
+		},
+		{
+			"timestamps": {
+				"from": "00:16:00,000",
+				"to": "00:16:30,000"
+			},
+			"offsets": {
+				"from": 960000,
+				"to": 990000
+			},
+			"text": " We are still talking about agent harness. The first layer is a smart power layer. Is it to give the agent various tools? Can you calculate what is the most important tool now? I think the most important tool is the tools about the document system."
+		},
+		{
+			"timestamps": {
+				"from": "00:16:30,000",
+				"to": "00:17:00,000"
+			},
+			"offsets": {
+				"from": 990000,
+				"to": 1020000
+			},
+			"text": " research-based tasks will basically require some tools. Then the second layer, I think, is a brother layer, that is, you give it an original user system, such as a operation ability to prevent this layer. The third layer is a bit like Python, we know this kind of, that is, an explanation layer. I think this is a lot of cases, you can combine these tools, it should be able to meet our maybe more than 95% of this kind of task."
+		},
+		{
+			"timestamps": {
+				"from": "00:17:00,000",
+				"to": "00:17:30,000"
+			},
+			"offsets": {
+				"from": 1020000,
+				"to": 1050000
+			},
+			"text": " It's a lot of times, it's related to our full line, including the agent's role. For example, I'm a certain agent, I'm responsible for doing an exploration of this code, right? And then at this time, I should only give it a tool that doesn't have a service. For example, all the commands about writing, including the ability to delete or change, including some of them, you can't let it run to the brother. Or you're the one who's going to give it to him, you're the one who's going to limit his defense. There will be a lot of this kind of middle-aged trade-off, that is, your agent's"
+		},
+		{
+			"timestamps": {
+				"from": "00:17:30,000",
+				"to": "00:18:00,000"
+			},
+			"offsets": {
+				"from": 1050000,
+				"to": 1080000
+			},
+			"text": " tool to be more closely related to the agent's role, to limit his first layer of operations for this UNIX computer."
+		},
+		{
+			"timestamps": {
+				"from": "00:18:00,000",
+				"to": "00:18:30,000"
+			},
+			"offsets": {
+				"from": 1080000,
+				"to": 1110000
+			},
+			"text": " What are some of the main solutions?"
+		},
+		{
+			"timestamps": {
+				"from": "00:18:30,000",
+				"to": "00:19:00,000"
+			},
+			"offsets": {
+				"from": 1110000,
+				"to": 1140000
+			},
+			"text": " The second one is the second one is the third one, the third one is the fourth one, the fourth one is the fourth one."
+		},
+		{
+			"timestamps": {
+				"from": "00:19:00,000",
+				"to": "00:19:30,000"
+			},
+			"offsets": {
+				"from": 1140000,
+				"to": 1170000
+			},
+			"text": " The third one is the fourth one, the fourth one is the fourth one."
+		},
+		{
+			"timestamps": {
+				"from": "00:19:30,000",
+				"to": "00:20:00,000"
+			},
+			"offsets": {
+				"from": 1170000,
+				"to": 1200000
+			},
+			"text": " The fourth one is the agent's tool to be more closely related to the agent's role, to limit his first layer of operations for this UNIX computer."
+		},
+		{
+			"timestamps": {
+				"from": "00:20:00,000",
+				"to": "00:20:30,000"
+			},
+			"offsets": {
+				"from": 1200000,
+				"to": 1230000
+			},
+			"text": " The fourth one is the fourth one, the fourth one is the fourth one, the fourth one is the fourth one."
+		},
+		{
+			"timestamps": {
+				"from": "00:20:30,000",
+				"to": "00:21:00,000"
+			},
+			"offsets": {
+				"from": 1230000,
+				"to": 1260000
+			},
+			"text": " The fifth one is the fourth one, the fifth one is the fourth one, the fourth one is the fourth one."
+		},
+		{
+			"timestamps": {
+				"from": "00:21:00,000",
+				"to": "00:21:30,000"
+			},
+			"offsets": {
+				"from": 1260000,
+				"to": 1290000
+			},
+			"text": " This makes me think of a recent article about a company with a great ability, Generalis AI. They just released a version of this model, which is very cool. They also released a blog, which is saying that"
+		},
+		{
+			"timestamps": {
+				"from": "00:21:30,000",
+				"to": "00:22:00,000"
+			},
+			"offsets": {
+				"from": 1290000,
+				"to": 1320000
+			},
+			"text": " we are actually not the world model, we can't say that we are not very reliable. We don't want to use the label to define us, we want to use the purpose to define us. Our purpose is to pursue something, not only does the label limit our imagination, but it also limits our team and our imagination. I think what we were talking about just now is about some of the harness time. Should it be memory or scale? Maybe it's not that important to talk about this definition. Maybe what's more important is how the agent can continue to learn, evolve,"
+		},
+		{
+			"timestamps": {
+				"from": "00:22:00,000",
+				"to": "00:22:30,000"
+			},
+			"offsets": {
+				"from": 1320000,
+				"to": 1350000
+			},
+			"text": " and realize that its purpose is important. Yes, the label limit is not that important. When we talk about harness today, what do you think is the consensus? What are the non-concerned consensus? The consensus may be that what we are saying now is that the batch is a consensus. Now, everyone is doing CLI, right? Or simply, we say CLI is a consensus. Everyone starts saying, okay, I don't want to go to those traditional processes. I don't want the MCP, I'm all on the CLI, right? I put it on the server, I put it on my computer, I can use all the agents, right? My MCP may still have one agent to match it, it's quite troublesome."
+		},
+		{
+			"timestamps": {
+				"from": "00:22:30,000",
+				"to": "00:23:00,000"
+			},
+			"offsets": {
+				"from": 1350000,
+				"to": 1380000
+			},
+			"text": " This may be a consensus."
+		},
+		{
+			"timestamps": {
+				"from": "00:23:00,000",
+				"to": "00:23:30,000"
+			},
+			"offsets": {
+				"from": 1380000,
+				"to": 1410000
+			},
+			"text": " I don't want to go to those traditional processes."
+		},
+		{
+			"timestamps": {
+				"from": "00:23:30,000",
+				"to": "00:24:00,000"
+			},
+			"offsets": {
+				"from": 1410000,
+				"to": 1440000
+			},
+			"text": " I just said agent, do you have a copy of agent? The next agent, when the agent completes half of the task, the following agent starts preparing the content, adding in the information that is not needed, the information is to let him continue to check it by himself. There are a lot of trade-offs in it. I think he has done a lot of work for the company. There are a lot of things he has done in the company, including auto-dream, including Cloudcode. Now, there are many special features that do not have a normal user's release. There is a far-off flag controlling, so many features are not clearly pushed up."
+		},
+		{
+			"timestamps": {
+				"from": "00:24:00,000",
+				"to": "00:24:30,000"
+			},
+			"offsets": {
+				"from": 1440000,
+				"to": 1470000
+			},
+			"text": " Cloudcode's memory design is also very good. The skills of the company are the same. First of all, the model is the agent. The client writes the prompts to prevent this kind of procedure. It's not makes sense, right? The model is the agent. Cloudcode is completely new experience. The second thing we found out about Cloudcode is that I want to see how I can match the right tools for the model. Let the model use it, right?"
+		},
+		{
+			"timestamps": {
+				"from": "00:24:30,000",
+				"to": "00:25:00,000"
+			},
+			"offsets": {
+				"from": 1470000,
+				"to": 1500000
+			},
+			"text": " More context, less control. More context, more action ability. Then zero control. Most of the time you drop the tool, you can't drop some tools."
+		},
+		{
+			"timestamps": {
+				"from": "00:25:00,000",
+				"to": "00:25:30,000"
+			},
+			"offsets": {
+				"from": 1500000,
+				"to": 1530000
+			},
+			"text": " When Manus was online, he actually used a cloud kill box called E2B. Can you talk about the evolution of the kill box today? From one year to now."
+		},
+		{
+			"timestamps": {
+				"from": "00:25:30,000",
+				"to": "00:26:00,000"
+			},
+			"offsets": {
+				"from": 1530000,
+				"to": 1560000
+			},
+			"text": " Or it will be a big progress, right? You said Daytona is a bit like Daytona, but Daytona may not be as small as you. Yes, we have made several lightings. What we did is no longer a sandbox. It is a data structure that we have realized in the original layer. You can make it like a map, right? Almost the same size. But you are so small, don't you have any characteristics? We of course made some trade-offs. We have no real way to run some GCTB machines. It really ran in our virtual computing machine."
+		},
+		{
+			"timestamps": {
+				"from": "00:26:00,000",
+				"to": "00:26:30,000"
+			},
+			"offsets": {
+				"from": 1560000,
+				"to": 1590000
+			},
+			"text": " Right? There are many things that need to rely on real code. We can't do it. But the smallest of our applications, UNIX's file system and the smallest of UNIX's batch, the ability to command. So the network of the web, the share of the file, the communication of its Gmail network, including the cloud command network, the communication of the network, we all have. And we think that things like browser or"
+		},
+		{
+			"timestamps": {
+				"from": "00:26:30,000",
+				"to": "00:27:00,000"
+			},
+			"offsets": {
+				"from": 1590000,
+				"to": 1620000
+			},
+			"text": " GCTB machines, and many other important things, shouldn't be in a production-level agent. It should provide an infrastructure service in another place. Previously, we did a complex system optimization. We used to analyze low-quality data in the entire pipeline, but its performance was more important. We took it out. When we saw Cloud Code's original code leak, there was a very interesting memory mechanism to make a dream come true. We also briefly mentioned it just now. Let's talk about it a little bit."
+		},
+		{
+			"timestamps": {
+				"from": "00:27:00,000",
+				"to": "00:27:30,000"
+			},
+			"offsets": {
+				"from": 1620000,
+				"to": 1650000
+			},
+			"text": " How does it help the memory become better?"
+		},
+		{
+			"timestamps": {
+				"from": "00:27:30,000",
+				"to": "00:28:00,000"
+			},
+			"offsets": {
+				"from": 1650000,
+				"to": 1680000
+			},
+			"text": " It's a very complicated design. It's the same as Scale. The third-tier is a壓-mail. It's like Scale, which is called its own Distraction. These are the records of the Macdonals. In Cloud Code, it won't be added to the Macdonals' full text at the beginning. It also takes away all the documents and Distraction, and then it will judge whether you are actually in the process of delivering them. The second layer is that it has an auto-dream mechanism."
+		},
+		{
+			"timestamps": {
+				"from": "00:28:00,000",
+				"to": "00:28:30,000"
+			},
+			"offsets": {
+				"from": 1680000,
+				"to": 1710000
+			},
+			"text": " It will have a pattern. At least five sections will be used. It will start to enter the system to make a deeper memory. For example, in recent sections, what do you do with your memory? It will look at these recent sections comprehensively to improve the use of this information. In the process of error or not being in time for updates, it will remember to do some peace and tidy up. You can understand that it will open a rear-stage agent every day. So, recently, the return of the message will be re-entered."
+		},
+		{
+			"timestamps": {
+				"from": "00:28:30,000",
+				"to": "00:29:00,000"
+			},
+			"offsets": {
+				"from": 1710000,
+				"to": 1740000
+			},
+			"text": " It will be like doing a dream, doing a re-entering, and organizing a message. It is such a two-touch agent mechanism. So Cloud Code's original code reveal, in addition to the memory mechanism we just talked about, do you have any surprises? I think the biggest surprise for me is the memory. I think its design is the same as the idea of its previous skill. It has a similar pattern. It's good to organize and maintain the structure. It makes a lot of sense. For me, the biggest surprise is"
+		},
+		{
+			"timestamps": {
+				"from": "00:29:00,000",
+				"to": "00:29:30,000"
+			},
+			"offsets": {
+				"from": 1740000,
+				"to": 1770000
+			},
+			"text": " that I just talked about when I was pressing the wrong button, because the agent window is full. It can't continue working. So it's supposed to be a street race. It has to be sent to the next agent. There are a lot of trade-offs between them. I think it does a lot of things. Can we talk about that? Because it is a model. The window of the model window is not long today, but it's not like you just throw away something and it's full. The standard agent model is at 200."
+		},
+		{
+			"timestamps": {
+				"from": "00:29:30,000",
+				"to": "00:30:00,000"
+			},
+			"offsets": {
+				"from": 1770000,
+				"to": 1800000
+			},
+			"text": " 256 can set the window length. It can actually install a lot of information. So I think it's more about the development of the Shanghai culture management. The Shanghai window is really full. I can't install it anymore. But my task is still to continue doing it. How do you make more space for me? Or do you think of a way to let me continue to complete this task? At this time, let's take a look at what kind of garbage or unnecessary information is in this project. We can put it on the window and throw it away."
+		},
+		{
+			"timestamps": {
+				"from": "00:30:00,000",
+				"to": "00:30:30,000"
+			},
+			"offsets": {
+				"from": 1800000,
+				"to": 1830000
+			},
+			"text": " 0.8% right? It left 20% of the page. At this time, let's explain what our task is. What else do we have to do next? The general public needs to write a document on what task we are going to do. Write the whole progress we are doing now. Then let the next agent start working. Okay, let's read the document first. Then go to work. This is a kind of transaction. What should be the transaction and what should not be the transaction? And how to prepare for the next agent's presentation. There are a lot of good designs in it."
+		},
+		{
+			"timestamps": {
+				"from": "00:30:30,000",
+				"to": "00:31:00,000"
+			},
+			"offsets": {
+				"from": 1830000,
+				"to": 1860000
+			},
+			"text": " Harness."
+		},
+		{
+			"timestamps": {
+				"from": "00:31:00,000",
+				"to": "00:31:30,000"
+			},
+			"offsets": {
+				"from": 1860000,
+				"to": 1890000
+			},
+			"text": " It is because of our machine. We can create a prototype on it. There is a C, a C++ prototype. We have a generation of sketches. We will have a chance to bring it to pass and do a JS. We will have a chance to bring it out. For example, you have to launch a full-time project. What should it use? What should it use? Actually, every level of technical press time is on the basis of a single point. Now I have a new layer of operation. This model. It is hard for us to modify its parameters. In this situation, we can't wait to go up the ladder."
+		},
+		{
+			"timestamps": {
+				"from": "00:31:30,000",
+				"to": "00:32:00,000"
+			},
+			"offsets": {
+				"from": 1890000,
+				"to": 1920000
+			},
+			"text": " We can use its intelligence to make our project press time. I think a lot of things are shared now. If you start from the model, it is very natural, very suitable for long-term and direct thinking. But if you are only developing in a strong way, and you are doing Robust things, you will think that this press time seems... Why is it like this? It doesn't make sense. It just tells you that it is done like this. You don't know what is behind it. But if you think about it for a while,"
+		},
+		{
+			"timestamps": {
+				"from": "00:32:00,000",
+				"to": "00:32:30,000"
+			},
+			"offsets": {
+				"from": 1920000,
+				"to": 1950000
+			},
+			"text": " and how it works, how does it work, how does the agent model work, how do you combine this to think about all the best 10-point process of the agent, including the stuff mentioned by previous miners, you will feel that it makes sense. When I went up the ladder, it was suitable for its working logic. When we say that an agent harness is done well or not good, what is good and what is not good? The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:32:30,000",
+				"to": "00:33:00,000"
+			},
+			"offsets": {
+				"from": 1950000,
+				"to": 1980000
+			},
+			"text": " the bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:33:00,000",
+				"to": "00:33:30,000"
+			},
+			"offsets": {
+				"from": 1980000,
+				"to": 2010000
+			},
+			"text": " the bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:33:30,000",
+				"to": "00:34:00,000"
+			},
+			"offsets": {
+				"from": 2010000,
+				"to": 2040000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem. The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:34:00,000",
+				"to": "00:34:30,000"
+			},
+			"offsets": {
+				"from": 2040000,
+				"to": 2070000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:34:30,000",
+				"to": "00:35:00,000"
+			},
+			"offsets": {
+				"from": 2070000,
+				"to": 2100000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:35:00,000",
+				"to": "00:35:30,000"
+			},
+			"offsets": {
+				"from": 2100000,
+				"to": 2130000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:35:30,000",
+				"to": "00:36:00,000"
+			},
+			"offsets": {
+				"from": 2130000,
+				"to": 2160000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:36:00,000",
+				"to": "00:36:30,000"
+			},
+			"offsets": {
+				"from": 2160000,
+				"to": 2190000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:36:30,000",
+				"to": "00:37:00,000"
+			},
+			"offsets": {
+				"from": 2190000,
+				"to": 2220000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:37:00,000",
+				"to": "00:37:30,000"
+			},
+			"offsets": {
+				"from": 2220000,
+				"to": 2250000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:37:30,000",
+				"to": "00:38:00,000"
+			},
+			"offsets": {
+				"from": 2250000,
+				"to": 2280000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:38:00,000",
+				"to": "00:38:30,000"
+			},
+			"offsets": {
+				"from": 2280000,
+				"to": 2310000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:38:30,000",
+				"to": "00:39:00,000"
+			},
+			"offsets": {
+				"from": 2310000,
+				"to": 2340000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:39:00,000",
+				"to": "00:39:30,000"
+			},
+			"offsets": {
+				"from": 2340000,
+				"to": 2370000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:39:30,000",
+				"to": "00:40:00,000"
+			},
+			"offsets": {
+				"from": 2370000,
+				"to": 2400000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:40:00,000",
+				"to": "00:40:30,000"
+			},
+			"offsets": {
+				"from": 2400000,
+				"to": 2430000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:40:30,000",
+				"to": "00:41:00,000"
+			},
+			"offsets": {
+				"from": 2430000,
+				"to": 2460000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:41:00,000",
+				"to": "00:41:30,000"
+			},
+			"offsets": {
+				"from": 2460000,
+				"to": 2490000
+			},
+			"text": " The bad management of Shandong Literature is that it will do some middle-aged materials, throw away some front wheels, or any repair materials, which will lead to this problem."
+		},
+		{
+			"timestamps": {
+				"from": "00:41:30,000",
+				"to": "00:42:00,000"
+			},
+			"offsets": {
+				"from": 2490000,
+				"to": 2520000
+			},
+			"text": " Do you have anyone in this direction?"
+		},
+		{
+			"timestamps": {
+				"from": "00:42:00,000",
+				"to": "00:42:30,000"
+			},
+			"offsets": {
+				"from": 2520000,
+				"to": 2550000
+			},
+			"text": " Yes, but I think it's not as good as the things that Tizinkar's water purifier is doing. Because it's actually very conservative in our supply chain direction. I just said that there is a data on our supply chain. It's a half-month that you have been running on Harleys. You will definitely have a lot of fraud on it, because of the case and bad case. You have to do analysis in real life, do a low-end repair, but sometimes you don't have money, you don't have a card to repair this model. You can only do a low-end repair on the upper and lower levels. You can't say, okay, I really need to repair this model's parameters, I will get a model of my own."
+		},
+		{
+			"timestamps": {
+				"from": "00:42:30,000",
+				"to": "00:43:00,000"
+			},
+			"offsets": {
+				"from": 2550000,
+				"to": 2580000
+			},
+			"text": " You think that the K series you are doing in the future, will it survive a lot of companies? I think it will be a fierce race. We think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model. It has to be self-explanatory with the model's future progress."
+		},
+		{
+			"timestamps": {
+				"from": "00:43:00,000",
+				"to": "00:43:30,000"
+			},
+			"offsets": {
+				"from": 2580000,
+				"to": 2610000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:43:30,000",
+				"to": "00:44:00,000"
+			},
+			"offsets": {
+				"from": 2610000,
+				"to": 2640000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:44:00,000",
+				"to": "00:44:30,000"
+			},
+			"offsets": {
+				"from": 2640000,
+				"to": 2670000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:44:30,000",
+				"to": "00:45:00,000"
+			},
+			"offsets": {
+				"from": 2670000,
+				"to": 2700000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:45:00,000",
+				"to": "00:45:30,000"
+			},
+			"offsets": {
+				"from": 2700000,
+				"to": 2730000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:45:30,000",
+				"to": "00:46:00,000"
+			},
+			"offsets": {
+				"from": 2730000,
+				"to": 2760000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:46:00,000",
+				"to": "00:46:30,000"
+			},
+			"offsets": {
+				"from": 2760000,
+				"to": 2790000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:46:30,000",
+				"to": "00:47:00,000"
+			},
+			"offsets": {
+				"from": 2790000,
+				"to": 2820000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:47:00,000",
+				"to": "00:47:30,000"
+			},
+			"offsets": {
+				"from": 2820000,
+				"to": 2850000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		},
+		{
+			"timestamps": {
+				"from": "00:47:30,000",
+				"to": "00:48:00,000"
+			},
+			"offsets": {
+				"from": 2850000,
+				"to": 2880000
+			},
+			"text": " You think that the future of Agent Harleys may not need the so-called level difference, because it has to be self-explanatory with the model."
+		}
+	]
+}

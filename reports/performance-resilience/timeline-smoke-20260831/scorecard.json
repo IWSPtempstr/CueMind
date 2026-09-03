@@ -1,0 +1,20 @@
+{
+  "evaluator": "request-timeline-evaluator-v1",
+  "status": "complete",
+  "denominator": {
+    "total": 3,
+    "succeeded": 3,
+    "failed": 0
+  },
+  "missingEventCounts": {
+    "capture_start": 3,
+    "capture_end": 3,
+    "asr_start": 3,
+    "asr_end": 3,
+    "keyword_start": 3,
+    "keyword_end": 3,
+    "render_start": 3,
+    "render_end": 3
+  },
+  "evidenceBoundary": "Observed SSE boundaries plus explicitly marked stage-time derivations. Ask route does not expose capture/ASR/render events, so missing fields remain null."
+}

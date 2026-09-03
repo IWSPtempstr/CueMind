@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-08-30T14:53:46.166Z",
+  "sampleCount": 950,
+  "dialogSumCount": 0,
+  "source": "local-video-transcripts",
+  "transcriptDir": "/home/work/asr/CueMind/reports/video-reimport-20260830-cuda-zh/transcripts",
+  "publicDatasetDownload": "skipped-by-user",
+  "videoCount": 15,
+  "labelingRequired": true,
+  "splitPolicy": "by-video"
+}

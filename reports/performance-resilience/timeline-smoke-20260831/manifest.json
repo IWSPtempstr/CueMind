@@ -1,0 +1,8 @@
+{
+  "evaluator": "request-timeline-evaluator-v1",
+  "generatedAt": "2026-08-31T11:00:29.993Z",
+  "baseUrl": "http://localhost:3000",
+  "questionCount": 3,
+  "executionMode": "real_ask_sse",
+  "evidenceBoundary": "Observed SSE boundaries plus explicitly marked stage-time derivations. Ask route does not expose capture/ASR/render events, so missing fields remain null."
+}
