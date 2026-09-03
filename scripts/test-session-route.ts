@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { NextRequest } from "next/server";
 import { POST, GET } from "@/app/api/sessions/route";
+import { POST as realtimePost } from "@/app/api/realtime-transcribe/route";
 
 process.env.CUEMIND_DATA_DIR = mkdtempSync(path.join(tmpdir(), "cuemind-session-route-"));
 process.env.CUEMIND_SESSION_STORE = "jsonl";
@@ -60,6 +61,20 @@ async function main(): Promise<void> {
   const otherToken = await other.json() as { sessionAccessToken: string };
   const crossSession = await GET(request("/api/sessions?id=session-a", { headers: { "X-Session-Token": otherToken.sessionAccessToken } }));
   assert.equal(crossSession.status, 401);
+
+  const realtimeBody = JSON.stringify({ sessionId: "session-a", runId: "run-a", snapshots: [] });
+  const realtimeNoToken = await realtimePost(request("/api/realtime-transcribe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: realtimeBody,
+  }));
+  assert.equal(realtimeNoToken.status, 401);
+  const realtime = await realtimePost(request("/api/realtime-transcribe", {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: realtimeBody,
+  }));
+  assert.equal(realtime.status, 200);
 
   console.log("session route regression passed");
 }

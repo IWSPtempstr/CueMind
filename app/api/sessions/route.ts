@@ -81,7 +81,7 @@ export async function POST(
   const record = body as Record<string, unknown>;
   const sessionId = typeof record.id === "string" ? record.id.trim() : "";
   const existingSession = sessionId ? getSession(sessionId) : null;
-  const accessDenied = existingSession?.sessionAccessTokenHash
+  const accessDenied = existingSession
     ? requireSessionAccess(request, sessionId)
     : null;
   if (accessDenied) return accessDenied;
