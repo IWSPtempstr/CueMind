@@ -1,4 +1,5 @@
 import { percentile } from "@/lib/telemetry";
+import { withSessionHeaders } from "@/lib/client-session-auth";
 
 export const REQUEST_TIMELINE_EVENTS = [
   "request_start", "capture_start", "capture_end", "asr_start", "asr_end", "keyword_start", "keyword_end",
@@ -77,12 +78,12 @@ export function appendPipelineEvent(events: PipelineEvent[], event: PipelineEven
 }
 
 /** Browser-side best-effort JSONL sink through the local API route. */
-export function persistPipelineEvent(event: PipelineEvent): void {
+export function persistPipelineEvent(event: PipelineEvent, sessionId?: string | null): void {
   if (typeof window === "undefined" || typeof window.fetch !== "function") return;
   void window.fetch("/api/pipeline-events", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify([event]),
+    headers: withSessionHeaders(sessionId, { "Content-Type": "application/json", ...(sessionId ? { "X-Session-Id": sessionId } : {}) }),
+    body: JSON.stringify([{ ...event, ...(sessionId ? { sessionId } : {}) }]),
     keepalive: true,
   }).catch(() => undefined);
 }

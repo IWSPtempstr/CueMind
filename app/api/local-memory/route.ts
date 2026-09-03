@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit } from "@/lib/api-security";
+import { requireSessionAccess } from "@/lib/session-route";
 import { getKnowledgeMemoryStore } from "@/lib/knowledge-memory-store";
 import type { MemoryKind } from "@/lib/knowledge-memory";
 
@@ -27,6 +28,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (typeof record.query !== "string" || record.query.trim().length === 0) {
     return NextResponse.json({ error: "query is required" }, { status: 400 });
   }
+  const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
   const query = record.query.trim().slice(0, MAX_QUERY_CHARS);
   const limit = typeof record.limit === "number" && Number.isFinite(record.limit) ? Math.min(Math.max(Math.round(record.limit), 1), 20) : 3;
   const kind = parseKind(record.kind);

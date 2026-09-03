@@ -55,6 +55,8 @@ export interface PostmeetingTranscriptArtifact {
 export interface SessionSnapshot {
   id: string;
   title: string;
+  /** Browser-kept raw access token for session-scoped API calls; never persisted server-side. */
+  sessionAccessToken?: string;
   /** 模型生成的会话主题短语（≤20 字符）；缺省时回退到 title 推导。 */
   topicSummary?: string;
   createdAt: Date;

@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 interface RateWindow {
@@ -14,7 +13,7 @@ const rateLimits =
   globalRateLimit.cueMindRateLimits ?? new Map<string, RateWindow>();
 globalRateLimit.cueMindRateLimits = rateLimits;
 
-function clientIp(request: NextRequest): string {
+function clientIp(request: Pick<Request, "headers">): string {
   return (
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip")?.trim() ||
@@ -28,7 +27,7 @@ function clientIp(request: NextRequest): string {
  * a shared store, but this still bounds bursts handled by each function instance.
  */
 export function enforceRateLimit(
-  request: NextRequest,
+  request: Pick<Request, "headers">,
   bucket: string,
   limit: number,
 ): NextResponse<{ error: string }> | null {

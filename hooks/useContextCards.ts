@@ -7,6 +7,7 @@ import type { TranscriptChunk } from "@/types/session";
 import type { ContextCard, ContextCardFailure } from "@/types/suggestions";
 import { appendPipelineEvent, createPipelineEvent, persistPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
 import { buildCardContext } from "@/lib/realtime-context-memory";
+import { withSessionHeaders } from "@/lib/client-session-auth";
 
 type ContextCardTrace = NonNullable<ContextCard["demoTrace"]> & {
   finalState: NonNullable<ContextCard["demoTrace"]>["finalState"] | "suppressed_as_duplicate";
@@ -44,12 +45,15 @@ export default function useContextCards({ transcriptChunks, isRecording, session
   const [latencySamples, setLatencySamples] = useState<LatencySample[]>([]);
   const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
   const lastProcessedIdsRef = useRef<Set<string>>(new Set());
+  const pendingChunksRef = useRef<TranscriptChunk[]>([]);
   const lastRunAtRef = useRef(0);
   const runningRef = useRef(false);
+  const transcriptChunksRef = useRef(transcriptChunks);
   const cardsRef = useRef(cards);
   const pendingRenderRunIdRef = useRef<string | null>(null);
   const pipelineEventsRef = useRef<PipelineEvent[]>([]);
   useEffect(() => { cardsRef.current = cards; }, [cards]);
+  useEffect(() => { transcriptChunksRef.current = transcriptChunks; }, [transcriptChunks]);
 
   const setCards = useCallback((next: ContextCard[]): void => {
     setCardState(next.map((card) => ({ ...card, createdAt: new Date(card.createdAt) })));
@@ -60,30 +64,41 @@ export default function useContextCards({ transcriptChunks, isRecording, session
       const event = createPipelineEvent(runId, name, typeof performance !== "undefined" ? performance.now() : Date.now(), metadata);
       const eventsForRun = pipelineEventsRef.current.filter((item) => item.runId === runId);
       appendPipelineEvent(eventsForRun, event);
-      persistPipelineEvent(event);
+      persistPipelineEvent(event, sessionId);
       pipelineEventsRef.current = [...pipelineEventsRef.current.filter((item) => item.runId !== runId), ...eventsForRun];
       setPipelineEvents([...pipelineEventsRef.current]);
     } catch {
       // Telemetry is best effort and must not affect card delivery.
     }
-  }, []);
+  }, [sessionId]);
 
   const run = useCallback(async (chunks: TranscriptChunk[]): Promise<void> => {
     if (runningRef.current || chunks.length === 0) return;
     const settings = loadCueMindSettings();
     const now = Date.now();
-    if (now - lastRunAtRef.current < settings.contextCardCooldownSeconds * 1000) return;
+    const cooldownMs = settings.contextCardCooldownSeconds * 1000;
+    const remainingCooldownMs = cooldownMs - (now - lastRunAtRef.current);
+    if (remainingCooldownMs > 0) {
+      pendingChunksRef.current = [...chunks, ...pendingChunksRef.current].slice(-32);
+      window.setTimeout(() => {
+        if (runningRef.current || pendingChunksRef.current.length === 0) return;
+        const pending = pendingChunksRef.current;
+        pendingChunksRef.current = [];
+        void run(pending);
+      }, remainingCooldownMs);
+      return;
+    }
     runningRef.current = true;
     lastRunAtRef.current = now;
     const runId = chunks.find((chunk) => chunk.pipelineRunId)?.pipelineRunId ?? crypto.randomUUID();
     setIsLoading(true);
     const knownKeywords = cardsRef.current.map((card) => card.keyword);
-    const cardContext = buildCardContext(transcriptChunks.map((chunk) => ({ id: chunk.id, text: chunk.text, timestampMs: chunk.timestamp.getTime() })), knownKeywords, [], []);
+    const cardContext = buildCardContext(transcriptChunksRef.current.map((chunk) => ({ id: chunk.id, text: chunk.text, timestampMs: chunk.timestamp.getTime() })), knownKeywords, [], []);
     const knownCandidates = cardsRef.current.map(({ candidateId, keyword }) => ({ candidateId, keyword }));
     try {
       const response = await fetch("/api/context-cards", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: withSessionHeaders(sessionId, { "Content-Type": "application/json" }),
         body: JSON.stringify({
           ...(sessionId ? { sessionId } : {}),
           runId,
@@ -140,9 +155,15 @@ export default function useContextCards({ transcriptChunks, isRecording, session
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Context card request failed");
+      pendingChunksRef.current = [...chunks, ...pendingChunksRef.current].slice(-32);
     } finally {
       runningRef.current = false;
       setIsLoading(false);
+      if (pendingChunksRef.current.length > 0) {
+        const pending = pendingChunksRef.current;
+        pendingChunksRef.current = [];
+        window.setTimeout(() => { void run(pending); }, 0);
+      }
     }
   }, [emitPipelineEvent, sessionId]);
 
@@ -159,13 +180,18 @@ export default function useContextCards({ transcriptChunks, isRecording, session
     if (!isRecording) return;
     const newChunks = transcriptChunks.filter((chunk) => !lastProcessedIdsRef.current.has(chunk.id));
     if (newChunks.length === 0) return;
+    pendingChunksRef.current = [...pendingChunksRef.current, ...newChunks].slice(-32);
     for (const chunk of newChunks) lastProcessedIdsRef.current.add(chunk.id);
-    void run(newChunks);
+    if (runningRef.current) return;
+    const pending = pendingChunksRef.current;
+    pendingChunksRef.current = [];
+    void run(pending);
   }, [isRecording, run, transcriptChunks]);
 
   useEffect(() => {
     if (!isRecording) {
       lastProcessedIdsRef.current.clear();
+      pendingChunksRef.current = [];
       lastRunAtRef.current = 0;
     }
   }, [isRecording]);

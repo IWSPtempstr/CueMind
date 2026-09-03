@@ -15,6 +15,7 @@ import {
 } from "@/lib/local-asr";
 import type { ConvertMediaOptions, LocalAsrSegment } from "@/lib/local-asr";
 import { sliceWavToWindowFiles } from "@/lib/wav-slice";
+import { resolveFfmpegPath, resolveVadModelPath, resolveWhisperModelPath, resolveWhisperPath } from "@/lib/server-paths";
 
 /** Hard upload cap: 2048MB, enforced both by header pre-check and post-parse File.size. */
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
@@ -182,11 +183,11 @@ function parseUploadFields(formData: FormData): ParseOutcome {
     };
   }
 
-  const whisperPath = trimmedString(formData.get("whisperPath"));
-  const whisperModelPath = trimmedString(formData.get("whisperModelPath"));
   const uploadId = trimmedString(formData.get("uploadId"));
+  const whisperPath = resolveWhisperPath() || trimmedString(formData.get("whisperPath"));
+  const whisperModelPath = resolveWhisperModelPath() || trimmedString(formData.get("whisperModelPath"));
   if (!whisperPath || !whisperModelPath || !uploadId) {
-    return fail("whisperPath, whisperModelPath, and uploadId are required");
+    return fail("Server whisper.cpp paths and uploadId are required");
   }
 
   let language: ParsedUploadFields["language"] = "auto";
@@ -198,11 +199,8 @@ function parseUploadFields(formData: FormData): ParseOutcome {
     language = rawLanguage;
   }
 
-  const rawFfmpegPath = formData.get("ffmpegPath");
-  const ffmpegPath =
-    typeof rawFfmpegPath === "string" && rawFfmpegPath.trim()
-      ? rawFfmpegPath.trim()
-      : undefined;
+  const ffmpegPath = resolveFfmpegPath();
+  const legacyFfmpegPath = optionalTrimmedString(formData.get("ffmpegPath"));
 
   // Optional meeting context / VAD fields: absent or blank keeps legacy behavior
   // (no prompt bias, no VAD), so old clients stay unaffected.
@@ -210,7 +208,7 @@ function parseUploadFields(formData: FormData): ParseOutcome {
   const domainGlossary = optionalTrimmedString(formData.get("domainGlossary"));
   const rawEnableVad = formData.get("enableVad");
   const enableVad = rawEnableVad === "1" || rawEnableVad === "true";
-  const vadModelPath = optionalTrimmedString(formData.get("vadModelPath"));
+  const vadModelPath = resolveVadModelPath() || optionalTrimmedString(formData.get("vadModelPath"));
 
   return {
     ok: true,
@@ -220,7 +218,7 @@ function parseUploadFields(formData: FormData): ParseOutcome {
       whisperPath,
       whisperModelPath,
       uploadId,
-      ffmpegPath,
+      ffmpegPath: process.env.CUEMIND_FFMPEG_PATH?.trim() ? ffmpegPath : legacyFfmpegPath,
       ...(meetingTopic ? { meetingTopic } : {}),
       ...(domainGlossary ? { domainGlossary } : {}),
       enableVad,
@@ -236,7 +234,7 @@ function isSupportedUploadMedia(fileName: string, mimeType: string): boolean {
   // MIME rule: accept audio/* or video/* types. Combined gate per API contract:
   // extension-in-whitelist AND at least one of (extension whitelisted | allowed MIME).
   const mimeAllowed = mimeType.startsWith("audio/") || mimeType.startsWith("video/");
-  return extensionInWhitelist && (extensionInWhitelist || mimeAllowed);
+  return extensionInWhitelist && mimeAllowed;
 }
 
 function getFileExtension(fileName: string): string {
@@ -300,15 +298,16 @@ function defaultTranscribe(
 function mapProcessingError(caught: unknown): NextResponse<UploadMediaErrorPayload> {
   if (caught instanceof MediaConvertError) {
     return NextResponse.json(
-      { error: caught.message, code: caught.code },
+      { error: "Media processing failed", code: caught.code },
       { status: caught.code === "unsupported_media" ? 415 : 502 },
     );
   }
-  const message =
-    caught instanceof Error && caught.message.trim()
-      ? caught.message
-      : "Local ASR failed while processing the uploaded media";
-  return NextResponse.json({ error: message }, { status: 502 });
+  console.error("[upload-media] processing failed", caught);
+  const detail = caught instanceof Error ? caught.message : "";
+  const error = /timed out/i.test(detail)
+    ? "Local ASR timed out"
+    : "Local ASR failed while processing the uploaded media";
+  return NextResponse.json({ error }, { status: 502 });
 }
 
 function fail(message: string): ParseOutcome {

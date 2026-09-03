@@ -5,8 +5,6 @@ export interface LocalTranscribeBody {
   startMs: number;
   endMs: number;
   settings: {
-    whisperPath: string;
-    modelPath: string;
     language: "auto" | "zh" | "en";
     timeoutMs?: number;
     promptContext?: { topic?: string; glossary?: string };
@@ -20,8 +18,6 @@ export function parseLocalTranscribeRequest(value: unknown): LocalTranscribeBody
   if (value.source !== "system" && value.source !== "microphone" && value.source !== "upload") return null;
   if (!isFiniteNumber(value.startMs) || !isFiniteNumber(value.endMs)) return null;
   if (!isRecord(value.settings)) return null;
-  if (!isString(value.settings.whisperPath) || !value.settings.whisperPath.trim()) return null;
-  if (!isString(value.settings.modelPath) || !value.settings.modelPath.trim()) return null;
   const language = value.settings.language;
   if (language !== "auto" && language !== "zh" && language !== "en") return null;
 
@@ -36,8 +32,6 @@ export function parseLocalTranscribeRequest(value: unknown): LocalTranscribeBody
     startMs: value.startMs,
     endMs: value.endMs,
     settings: {
-      whisperPath: value.settings.whisperPath,
-      modelPath: value.settings.modelPath,
       language,
       ...(typeof timeoutMs === "number" ? { timeoutMs } : {}),
       ...(promptContext ? { promptContext } : {}),

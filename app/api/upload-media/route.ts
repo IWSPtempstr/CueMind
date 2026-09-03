@@ -27,6 +27,8 @@
 // export HTTP methods and framework config fields.
 
 import { NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/api-security";
+import { requireSessionAccess } from "@/lib/session-route";
 import {
   assertUploadSize,
   handleUploadMedia,
@@ -105,6 +107,11 @@ async function pumpStreamingResponse(
 export async function POST(
   request: Request,
 ): Promise<Response> {
+  const limited = enforceRateLimit(request, "upload-media", 12);
+  if (limited) return limited;
+  const sessionId = request.headers.get("x-session-id")?.trim() ?? "";
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
   // Reject oversized uploads BEFORE consuming/streaming the multipart body.
   const oversizeByHeaders = assertUploadSize(request.headers);
   if (oversizeByHeaders) return oversizeByHeaders;
@@ -115,6 +122,13 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "Invalid multipart body" }, { status: 400 });
   }
+
+  // HTTP callers cannot choose executables or model files. Testable lower-level helpers
+  // may still inject paths, but route input is stripped before processing.
+  formData.delete("whisperPath");
+  formData.delete("whisperModelPath");
+  formData.delete("ffmpegPath");
+  formData.delete("vadModelPath");
 
   if (formData.get("stream") === "1") {
     return new Response(await pumpStreamingResponse(formData, request.signal), {

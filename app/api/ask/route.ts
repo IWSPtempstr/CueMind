@@ -13,6 +13,7 @@ import {
   cappedText,
   enforceRateLimit,
 } from "@/lib/api-security";
+import { requireSessionAccess } from "@/lib/session-route";
 import { askCacheGet, askCacheSet } from "@/lib/ask-cache";
 import {
   cardInflight,
@@ -112,6 +113,8 @@ export async function POST(
   const cacheMode = record.cacheMode === "cold" || record.cacheMode === "hot" ? record.cacheMode : "default";
   const cacheKey = cappedText(record.cacheKey, 200).trim();
   const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
 
   // Local-only generation context. Never forwarded to the search layer.
   const recentTranscript = cappedText(record.recentTranscript, MAX_CONTEXT_CHARS);

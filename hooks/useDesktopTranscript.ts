@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
+import { withSessionHeaders } from "@/lib/client-session-auth";
 import type { AudioSourceMode } from "@/lib/audio-source-mode";
 import { parseDesktopEvent, type AudioChunkReadyEvent } from "@/lib/desktop-events";
 import { attributeChunkSpeaker } from "@/lib/speaker-attributes";
@@ -38,7 +39,7 @@ interface UseDesktopTranscriptResult {
   pipelineEvents: PipelineEvent[];
 }
 
-export default function useDesktopTranscript(): UseDesktopTranscriptResult {
+export default function useDesktopTranscript(sessionId?: string | null): UseDesktopTranscriptResult {
   const [isDesktop, setIsDesktop] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [transcriptChunks, setTranscriptState] = useState<TranscriptChunk[]>([]);
@@ -62,14 +63,14 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       const event = createPipelineEvent(runId, name, monotonicNow(), metadata);
       const runEvents = pipelineByRunRef.current.get(runId) ?? [];
       appendPipelineEvent(runEvents, event);
-      persistPipelineEvent(event);
+      persistPipelineEvent(event, sessionId);
       pipelineByRunRef.current.set(runId, runEvents);
       pipelineEventsRef.current.push(event);
       setPipelineEvents([...pipelineEventsRef.current]);
     } catch {
       // Telemetry is best-effort and must not interrupt desktop capture.
     }
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cuemindDesktop));
@@ -99,8 +100,9 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
     try {
       const response = await fetch("/api/local-transcribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: withSessionHeaders(sessionId, { "Content-Type": "application/json" }),
         body: JSON.stringify({
+          sessionId,
           audioPath: event.path,
           runId,
           source: event.source,
@@ -164,7 +166,7 @@ export default function useDesktopTranscript(): UseDesktopTranscriptResult {
       emitPipelineEvent(runId, "asr_end", { source: event.source, status: "error", errorCode: "local_transcribe_failed" });
       setError(caught instanceof Error ? caught.message : "本地转写失败");
     }
-  }, [emitPipelineEvent]);
+  }, [emitPipelineEvent, sessionId]);
 
   const enqueueChunk = useCallback((event: AudioChunkReadyEvent): void => {
     if (seenChunkIdsRef.current.has(event.id)) return;

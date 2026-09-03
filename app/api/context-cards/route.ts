@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { appendCandidates } from "@/lib/candidate-store";
+import { enforceRateLimit } from "@/lib/api-security";
+import { requireSessionAccess } from "@/lib/session-route";
 import { askCacheSet } from "@/lib/ask-cache";
 import { generateLlamaCppJson, withCardInflight } from "@/lib/llama-cpp";
 import { generateRemoteApiJson } from "@/lib/remote-api";
@@ -102,6 +104,8 @@ type ContextCardResponse =
 export async function POST(
   request: Request,
 ): Promise<NextResponse<ContextCardResponse>> {
+  const limited = enforceRateLimit(request, "context-cards", 30);
+  if (limited) return limited as unknown as NextResponse<ContextCardResponse>;
   const started = performance.now();
   let traceId = crypto.randomUUID();
   let runId = traceId;
@@ -122,6 +126,9 @@ export async function POST(
       trace: makeTrace(traceId, { candidateId: "", datasetVersion: "", windowingVersion: "" }, [], emptyProvider, traceEvents, "system", "invalid_request", started),
     }, { status: 400 });
   }
+
+  const accessDenied = parsed.sessionId ? requireSessionAccess(request, parsed.sessionId) : null;
+  if (accessDenied) return accessDenied as unknown as NextResponse<ContextCardResponse>;
 
   runId = parsed.runId ?? traceId;
   traceId = runId;

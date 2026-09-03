@@ -4,6 +4,8 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/api-security";
+import { requireSessionAccess } from "@/lib/session-route";
 import {
   appendChatMessages,
   getChatMessages,
@@ -15,10 +17,11 @@ export const runtime = "nodejs";
 export async function GET(
   request: NextRequest,
 ): Promise<NextResponse<{ messages: StoredChatMessage[] } | { error: string }>> {
+  const limited = enforceRateLimit(request, "chat-messages", 60);
+  if (limited) return limited;
   const sessionId = request.nextUrl.searchParams.get("sessionId")?.trim() ?? "";
-  if (sessionId.length === 0) {
-    return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
-  }
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
   return NextResponse.json({ messages: getChatMessages(sessionId) });
 }
 
@@ -46,6 +49,8 @@ function parseChatMessage(
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<{ saved: number } | { error: string }>> {
+  const limited = enforceRateLimit(request, "chat-messages", 60);
+  if (limited) return limited;
   let body: unknown;
   try {
     body = (await request.json()) as unknown;
@@ -59,9 +64,8 @@ export async function POST(
 
   const record = body as Record<string, unknown>;
   const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
-  if (sessionId.length === 0) {
-    return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
-  }
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
   if (!Array.isArray(record.messages)) {
     return NextResponse.json({ error: "messages must be an array" }, { status: 400 });
   }

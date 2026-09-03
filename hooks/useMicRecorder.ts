@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
+import { withSessionHeaders } from "@/lib/client-session-auth";
 import {
   freshThrottleState,
   onConfirmed,
@@ -89,14 +90,12 @@ function buildTranscribeFormData(blob: Blob, settings: ReturnType<typeof loadCue
   const formData = new FormData();
   formData.append("media", blob, TRANSCRIBE_UPLOAD_FILENAME);
   if (settings.localWhisperLanguage !== "auto") formData.append("language", settings.localWhisperLanguage);
-  formData.append("whisperPath", settings.localWhisperPath);
-  formData.append("whisperModelPath", settings.localWhisperModelPath);
   formData.append("uploadId", runId);
   formData.append("runId", runId);
   return formData;
 }
 
-export default function useMicRecorder(): UseMicRecorderResult {
+export default function useMicRecorder(sessionId?: string | null): UseMicRecorderResult {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
@@ -131,14 +130,14 @@ export default function useMicRecorder(): UseMicRecorderResult {
       const event = createPipelineEvent(runId, name, monotonicNow(), metadata);
       const runEvents = pipelineByRunRef.current.get(runId) ?? [];
       appendPipelineEvent(runEvents, event);
-      persistPipelineEvent(event);
+      persistPipelineEvent(event, sessionId);
       pipelineByRunRef.current.set(runId, runEvents);
       pipelineEventsRef.current.push(event);
       setPipelineEvents([...pipelineEventsRef.current]);
     } catch {
       // Telemetry is best-effort and must never interrupt recording/transcription.
     }
-  }, []);
+  }, [sessionId]);
 
   const setTranscriptChunks = useCallback((chunks: TranscriptChunk[]): void => {
     setTranscriptState(chunks);
@@ -179,6 +178,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
   const transcribeBlobOnce = useCallback(async (blob: Blob, runId: string): Promise<string> => {
     const response = await fetch("/api/upload-media", {
       method: "POST",
+      headers: withSessionHeaders(sessionId, { "X-Session-Id": sessionId ?? "" }),
       body: buildTranscribeFormData(blob, loadCueMindSettings(), runId),
     });
     const payload: unknown = await response.json();
@@ -186,7 +186,7 @@ export default function useMicRecorder(): UseMicRecorderResult {
     return isTranscribeSuccess(payload)
       ? payload.chunks.map((chunk) => (typeof chunk.text === "string" ? chunk.text : "")).join(" ").trim()
       : "";
-  }, []);
+  }, [sessionId]);
 
   const transcribeBlob = useCallback(async (blob: Blob, timestamp: Date, segment: Segment, attempt = 1): Promise<void> => {
     if (!segment.asrTraced) {

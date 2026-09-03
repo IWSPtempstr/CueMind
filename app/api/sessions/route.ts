@@ -11,78 +11,47 @@ import { NextResponse } from "next/server";
 import { enforceRateLimit } from "@/lib/api-security";
 import {
   getSession,
-  listSessions,
-  searchSessions,
+  toPublicSession,
   upsertSession,
   type StoredSession,
 } from "@/lib/session-store";
+import { requireSessionAccess } from "@/lib/session-route";
+import { readSessionAccessToken } from "@/lib/session-auth";
 
 export const runtime = "nodejs";
 
-const DEFAULT_LIST_LIMIT = 20;
-const MAX_LIST_LIMIT = 100;
-
-type SessionSummary = Omit<StoredSession, "transcriptJson" | "cardsJson" | "metricsJson"> & {
-  transcriptChars: number;
-};
-
-function toSummary(session: StoredSession): SessionSummary {
-  return {
-    id: session.id,
-    title: session.title,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    durationMs: session.durationMs,
-    inputSource: session.inputSource,
-    transcriptChars: session.transcriptJson.length,
-  };
-}
+type SessionSummary = { id: string; title: string; createdAt: string; updatedAt: string; durationMs: number | null; inputSource: string | null; transcriptChars: number };
 
 export async function GET(
   request: NextRequest,
 ): Promise<
   NextResponse<
-    { session: StoredSession } | { results: Array<{ session: SessionSummary; score: number }> } | { sessions: SessionSummary[] } | { error: string }
+    { session: Omit<StoredSession, "sessionAccessTokenHash"> } | { results: Array<{ session: SessionSummary; score: number }> } | { sessions: SessionSummary[] } | { error: string }
   >
 > {
   const params = request.nextUrl.searchParams;
 
   const id = params.get("id")?.trim() ?? "";
   if (id.length > 0) {
+    const accessDenied = requireSessionAccess(request, id);
+    if (accessDenied) return accessDenied;
     const session = getSession(id);
     if (session === null) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
-    return NextResponse.json({ session });
+    return NextResponse.json({ session: toPublicSession(session) });
   }
 
-  const query = params.get("q")?.trim() ?? "";
-  if (query.length > 0) {
-    const results = searchSessions(query).map((hit) => ({
-      session: toSummary(hit.session),
-      score: hit.score,
-    }));
-    return NextResponse.json({ results });
+  if (!params.has("id")) {
+    return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
   }
 
-  const from = params.get("from")?.trim() || undefined;
-  const to = params.get("to")?.trim() || undefined;
-  let limit = DEFAULT_LIST_LIMIT;
-  const limitParam = params.get("limit");
-  if (limitParam !== null && limitParam.trim().length > 0) {
-    const parsed = Number.parseInt(limitParam, 10);
-    if (Number.isNaN(parsed) || parsed < 1) {
-      return NextResponse.json({ error: "limit must be a positive integer" }, { status: 400 });
-    }
-    limit = Math.min(parsed, MAX_LIST_LIMIT);
-  }
-
-  return NextResponse.json({ sessions: listSessions({ from, to, limit }).map(toSummary) });
+  return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
 }
 
 export async function POST(
   request: NextRequest,
-): Promise<NextResponse<{ saved: true } | { error: string }>> {
+ ): Promise<NextResponse<{ saved: true; sessionAccessToken?: string } | { error: string }>> {
   const limited = enforceRateLimit(request, "sessions", 30);
   if (limited !== null) return limited;
 
@@ -97,11 +66,20 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  const record = body as Record<string, unknown>;
+  const sessionId = typeof record.id === "string" ? record.id.trim() : "";
+  const existingSession = sessionId ? getSession(sessionId) : null;
+  const accessDenied = existingSession?.sessionAccessTokenHash
+    ? requireSessionAccess(request, sessionId)
+    : null;
+  if (accessDenied) return accessDenied;
+
+  let result;
   try {
-    upsertSession(body as Record<string, unknown>);
+    result = upsertSession(record, readSessionAccessToken(request.headers));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid session payload";
     return NextResponse.json({ error: message }, { status: 400 });
   }
-  return NextResponse.json({ saved: true });
+  return NextResponse.json({ saved: true, ...(result.sessionAccessToken ? { sessionAccessToken: result.sessionAccessToken } : {}) });
 }

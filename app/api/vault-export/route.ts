@@ -10,6 +10,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { enforceRateLimit } from "@/lib/api-security";
+import { requireSessionAccess } from "@/lib/session-route";
 import { getCandidate } from "@/lib/candidate-store";
 import type { AskExchange } from "@/lib/ask-history";
 import type { AskSource } from "@/types/chat";
@@ -226,8 +227,12 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const record = body as Record<string, unknown>;
+  const sessionId = typeof record.sessionId === "string" ? record.sessionId.trim() : "";
+  const accessDenied = requireSessionAccess(request, sessionId);
+  if (accessDenied) return accessDenied;
   const kind = record.kind;
-  const vaultRoot = resolveVaultRoot(typeof record.vaultPath === "string" ? record.vaultPath : undefined);
+  // vaultPath is deliberately ignored: filesystem destinations are server configuration.
+  const vaultRoot = resolveVaultRoot();
 
   try {
     if (kind === "meeting") {

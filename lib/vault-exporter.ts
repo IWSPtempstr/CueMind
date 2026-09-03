@@ -116,9 +116,9 @@ function resolveDataDir(): string {
   return fromEnv ? path.resolve(fromEnv) : path.join(process.cwd(), ".data");
 }
 
-/** 显式 vaultPath > CUEMIND_VAULT_DIR 环境变量 > <CUEMIND_DATA_DIR>/vault（计划文档约定）。 */
-export function resolveVaultRoot(vaultPath?: string): string {
-  const explicit = vaultPath?.trim();
+/** Library resolver retains an explicit path for trusted local callers. HTTP routes call it without a request value. */
+export function resolveVaultRoot(explicitPath?: string): string {
+  const explicit = explicitPath?.trim();
   if (explicit) return path.resolve(explicit);
   const fromEnv = process.env[VAULT_DIR_ENV]?.trim();
   if (fromEnv) return path.resolve(fromEnv);

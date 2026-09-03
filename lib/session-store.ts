@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { Database as SqliteDatabase } from "better-sqlite3";
+import { generateSessionAccessToken, hashSessionAccessToken, verifySessionAccessToken } from "@/lib/session-auth";
 
 export type UnknownRecord = Record<string, unknown>;
 
@@ -29,6 +30,15 @@ export interface StoredSession {
   cardsJson: string | null;
   /** Serialized latency metrics; null until SessionSnapshot carries latencySamples. */
   metricsJson: string | null;
+  /** Server-side only token hash; never return this field from route responses. */
+  sessionAccessTokenHash: string | null;
+}
+
+export type PublicStoredSession = Omit<StoredSession, "sessionAccessTokenHash">;
+
+export interface SessionUpsertResult {
+  session: StoredSession;
+  sessionAccessToken?: string;
 }
 
 export type SessionStoreBackend = "sqlite" | "jsonl";
@@ -192,6 +202,7 @@ export function buildStoredSession(snapshot: UnknownRecord): StoredSession {
     transcriptJson: JSON.stringify(chunks),
     cardsJson,
     metricsJson,
+    sessionAccessTokenHash: null,
   };
 }
 
@@ -230,6 +241,7 @@ interface SqliteRow {
   transcriptJson: string;
   cardsJson: string | null;
   metricsJson: string | null;
+  sessionAccessTokenHash: string | null;
 }
 
 // createRequire is used instead of a static import so a broken native build
@@ -255,11 +267,12 @@ function rowToSession(row: SqliteRow): StoredSession {
     transcriptJson: row.transcriptJson,
     cardsJson: row.cardsJson,
     metricsJson: row.metricsJson,
+    sessionAccessTokenHash: row.sessionAccessTokenHash,
   };
 }
 
 const SESSION_COLUMNS =
-  "id, title, created_at AS createdAt, updated_at AS updatedAt, duration_ms AS durationMs, input_source AS inputSource, transcript_json AS transcriptJson, cards_json AS cardsJson, metrics_json AS metricsJson";
+  "id, title, created_at AS createdAt, updated_at AS updatedAt, duration_ms AS durationMs, input_source AS inputSource, transcript_json AS transcriptJson, cards_json AS cardsJson, metrics_json AS metricsJson, session_access_token_hash AS sessionAccessTokenHash";
 
 function createSqliteStore(dataDir: string, Database: SqliteDatabaseConstructor): SessionStore {
   mkdirSync(dataDir, { recursive: true });
@@ -275,17 +288,24 @@ function createSqliteStore(dataDir: string, Database: SqliteDatabaseConstructor)
       input_source TEXT,
       transcript_json TEXT NOT NULL,
       cards_json TEXT,
-      metrics_json TEXT
+      metrics_json TEXT,
+      session_access_token_hash TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
     CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(title, transcript_text, content='');
   `);
 
+  const tableColumns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+  const columnNames = new Set(tableColumns.map((column) => column.name));
+  if (!columnNames.has("session_access_token_hash")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN session_access_token_hash TEXT");
+  }
+
   const selectExisting = db.prepare(
     "SELECT rowid AS rowid, title, transcript_json AS transcriptJson FROM sessions WHERE id = ?",
   );
   const upsert = db.prepare(
-    "INSERT OR REPLACE INTO sessions (id, title, created_at, updated_at, duration_ms, input_source, transcript_json, cards_json, metrics_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO sessions (id, title, created_at, updated_at, duration_ms, input_source, transcript_json, cards_json, metrics_json, session_access_token_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   const ftsInsert = db.prepare(
     "INSERT INTO sessions_fts (rowid, title, transcript_text) VALUES (?, ?, ?)",
@@ -329,6 +349,7 @@ function createSqliteStore(dataDir: string, Database: SqliteDatabaseConstructor)
       session.transcriptJson,
       session.cardsJson,
       session.metricsJson,
+      session.sessionAccessTokenHash,
     );
     ftsInsert.run(info.lastInsertRowid, titleTokens, transcriptTokens);
   });
@@ -395,6 +416,7 @@ function parseJsonlLine(line: string): StoredSession | null {
       transcriptJson: record.transcriptJson,
       cardsJson: typeof record.cardsJson === "string" ? record.cardsJson : null,
       metricsJson: typeof record.metricsJson === "string" ? record.metricsJson : null,
+      sessionAccessTokenHash: typeof record.sessionAccessTokenHash === "string" ? record.sessionAccessTokenHash : null,
     };
   } catch {
     return null;
@@ -504,9 +526,30 @@ function getStore(): SessionStore {
   return cachedStore;
 }
 
-/** Idempotent upsert by session id; throws on invalid snapshots (fire-and-forget callers swallow). */
-export function upsertSession(snapshot: UnknownRecord): void {
-  getStore().upsert(buildStoredSession(snapshot));
+function withSessionAccessToken(session: StoredSession, sessionAccessToken?: string): SessionUpsertResult {
+  return sessionAccessToken ? { session, sessionAccessToken } : { session };
+}
+
+function sanitizeStoredSession(session: StoredSession): PublicStoredSession {
+  return Object.fromEntries(Object.entries(session).filter(([key]) => key !== "sessionAccessTokenHash")) as PublicStoredSession;
+}
+
+/** Idempotent upsert by session id; returns a token only on first save. */
+export function upsertSession(snapshot: UnknownRecord, sessionAccessToken?: string): SessionUpsertResult {
+  const next = buildStoredSession(snapshot);
+  const existing = getStore().get(next.id);
+  if (existing?.sessionAccessTokenHash) {
+    next.sessionAccessTokenHash = existing.sessionAccessTokenHash;
+    getStore().upsert(next);
+    return withSessionAccessToken(next);
+  }
+
+  const issuedToken = sessionAccessToken && sessionAccessToken.trim().length > 0
+    ? sessionAccessToken.trim()
+    : generateSessionAccessToken();
+  next.sessionAccessTokenHash = hashSessionAccessToken(issuedToken);
+  getStore().upsert(next);
+  return withSessionAccessToken(next, issuedToken);
 }
 
 /** Sessions ordered by updatedAt descending, limit default 20 / max 100. */
@@ -516,6 +559,20 @@ export function listSessions(opts: SessionListOptions = {}): StoredSession[] {
 
 export function getSession(id: string): StoredSession | null {
   return getStore().get(id);
+}
+
+export function getPublicSession(id: string): PublicStoredSession | null {
+  const session = getSession(id);
+  return session ? sanitizeStoredSession(session) : null;
+}
+
+export function toPublicSession(session: StoredSession): PublicStoredSession {
+  return sanitizeStoredSession(session);
+}
+
+export function verifySessionAccess(id: string, sessionAccessToken: string): boolean {
+  const session = getStore().get(id);
+  return Boolean(session?.sessionAccessTokenHash && verifySessionAccessToken(sessionAccessToken, session.sessionAccessTokenHash));
 }
 
 /** FTS5 (bigram) hits ranked by bm25; empty query returns []. */

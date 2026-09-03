@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { withSessionHeaders } from "@/lib/client-session-auth";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { Settings } from "@/types/settings";
 import type { TranscriptChunk } from "@/types/session";
@@ -52,6 +53,7 @@ type UploadOutcome =
   | { kind: "cancelled" };
 
 export interface UseMediaUploaderArgs {
+  sessionId?: string | null;
   setTranscriptChunks: (chunks: TranscriptChunk[]) => void;
   getTranscriptChunks?: () => TranscriptChunk[];
 }
@@ -129,6 +131,7 @@ function compareUploadOrder(left: TranscriptChunk, right: TranscriptChunk): numb
 }
 
 export default function useMediaUploader({
+  sessionId,
   setTranscriptChunks,
   getTranscriptChunks,
 }: UseMediaUploaderArgs): UseMediaUploaderResult {
@@ -141,8 +144,8 @@ export default function useMediaUploader({
 
   // Refreshed on every render so long-running async work always reads the latest
   // closures instead of a capture-time snapshot (stale-closure guard).
-  const argsRef = useRef({ setTranscriptChunks, getTranscriptChunks });
-  argsRef.current = { setTranscriptChunks, getTranscriptChunks };
+  const argsRef = useRef({ setTranscriptChunks, getTranscriptChunks, sessionId });
+  argsRef.current = { setTranscriptChunks, getTranscriptChunks, sessionId };
   // Mirror of the newest transcript list this hook produced or observed; used as
   // the merge base when no getTranscriptChunks callback was provided.
   const mirrorRef = useRef<TranscriptChunk[]>([]);
@@ -262,6 +265,10 @@ export default function useMediaUploader({
         };
 
         xhr.open("POST", "/api/upload-media");
+        const sessionHeaders = withSessionHeaders(argsRef.current.sessionId);
+        const token = sessionHeaders.get("X-Session-Token");
+        if (token) xhr.setRequestHeader("X-Session-Token", token);
+        if (argsRef.current.sessionId) xhr.setRequestHeader("X-Session-Id", argsRef.current.sessionId);
         xhr.upload.onprogress = (event) => {
           if (unmountedRef.current || !event.lengthComputable) return;
           setProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));

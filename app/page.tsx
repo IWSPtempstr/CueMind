@@ -16,6 +16,7 @@ import useSuggestions from "@/hooks/useSuggestions";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { StoredChatMessage } from "@/lib/chat-store";
 import { isErrorResponseBody } from "@/lib/api-response";
+import { generateClientSessionAccessToken, loadSessionAccessToken, storeSessionAccessToken, withSessionHeaders } from "@/lib/client-session-auth";
 import { extractAskExchanges } from "@/lib/ask-history";
 import { AUDIO_SOURCE_MODE_LABELS } from "@/lib/audio-source-mode";
 import { exportSession } from "@/lib/export";
@@ -115,10 +116,13 @@ function mergeAskMessages(local: ChatMessage[], server: StoredChatMessage[]): Ch
 }
 
 export default function Home(): ReactElement {
-  const browserRecorder = useMicRecorder();
-  const desktopRecorder = useDesktopTranscript();
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const activeSessionTokenRef = useRef("");
+  const browserRecorder = useMicRecorder(activeSessionId);
+  const desktopRecorder = useDesktopTranscript(activeSessionId);
   const recorder = desktopRecorder.isDesktop ? desktopRecorder : browserRecorder;
   const uploader = useMediaUploader({
+    sessionId: activeSessionId,
     setTranscriptChunks: recorder.setTranscriptChunks,
     // 回调经 hook 内部 ref 每次渲染刷新，避免长任务读到过期闭包。
     getTranscriptChunks: () => recorder.transcriptChunks,
@@ -132,7 +136,6 @@ export default function Home(): ReactElement {
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportRequested, setReportRequested] = useState(false);
   const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   // 会中询问（决策 67/68）：单飞锁 + SSE 阶段状态机，请求体透传 sessionId。
   const ask = useAsk({ transcriptChunks: recorder.transcriptChunks, sessionId: activeSessionId });
   // 批次三：转写内联标注点击 → setAskDraft 预填右栏询问框（AskPanel 不自动发送）。
@@ -177,8 +180,8 @@ export default function Home(): ReactElement {
     // fire-and-forget：失败静默，不影响主流程。
     void fetch("/api/session-title", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ transcript: trimmed }),
+      headers: withSessionHeaders(activeSessionIdRef.current, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ transcript: trimmed, sessionId: activeSessionIdRef.current }),
     }).then(async (response) => {
       if (!response.ok) return;
       const payload: unknown = await response.json();
@@ -194,8 +197,8 @@ export default function Home(): ReactElement {
     setIsPostmeetingLoading(true);
     void fetch("/api/postmeeting-transcript", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ transcriptChunks: chunks.map((chunk) => ({ text: chunk.text })) }),
+      headers: withSessionHeaders(activeSessionIdRef.current, { "Content-Type": "application/json", "X-Session-Id": activeSessionIdRef.current ?? "" }),
+      body: JSON.stringify({ sessionId: activeSessionIdRef.current, transcriptChunks: chunks.map((chunk) => ({ text: chunk.text })) }),
     }).then(async (response) => {
       const payload: unknown = await response.json();
       if (!response.ok || typeof payload !== "object" || payload === null || typeof (payload as { text?: unknown }).text !== "string") {
@@ -215,8 +218,9 @@ export default function Home(): ReactElement {
     const settings = loadCueMindSettings();
     void fetch("/api/vault-export", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withSessionHeaders(activeSessionIdRef.current, { "Content-Type": "application/json" }),
       body: JSON.stringify({
+        sessionId: activeSessionIdRef.current,
         kind: "meeting",
         exportTranscript: settings.exportTranscript,
         vaultPath: settings.vaultPath,
@@ -256,7 +260,7 @@ export default function Home(): ReactElement {
     const settings = loadCueMindSettings();
     void fetch("/api/vault-export", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withSessionHeaders(activeSessionIdRef.current, { "Content-Type": "application/json" }),
       body: JSON.stringify({
         kind: "concept",
         candidateId: card.candidateId,
@@ -289,12 +293,19 @@ export default function Home(): ReactElement {
 
   const hasContent = recorder.transcriptChunks.length > 0 || suggestions.batches.length > 0 || ask.messages.length > 0 || meetingReport !== null;
   useEffect(() => {
-    if (!hasContent || activeSessionId) return;
-    setActiveSessionId(crypto.randomUUID());
+    activeSessionTokenRef.current = loadSessionAccessToken(activeSessionId);
+  }, [activeSessionId]);
+  useEffect(() => {
+    if (activeSessionId) return;
+    const sessionId = crypto.randomUUID();
+    const sessionToken = generateClientSessionAccessToken();
+    storeSessionAccessToken(sessionId, sessionToken);
+    activeSessionTokenRef.current = sessionToken;
+    setActiveSessionId(sessionId);
     setCreatedAt(new Date());
     setTopicSummary(null);
     setResumeCandidate(null);
-  }, [activeSessionId, hasContent]);
+  }, [activeSessionId]);
 
   const snapshot = useMemo<SessionSnapshot>(() => {
     const base = {
@@ -320,13 +331,23 @@ export default function Home(): ReactElement {
     const id = window.setTimeout(() => {
       try {
         const snapshotToSave = { ...snapshot, id: activeSessionId, updatedAt: new Date() };
+        const serverSnapshot = { ...snapshotToSave };
+        delete serverSnapshot.sessionAccessToken;
         setSessions(storeSession(snapshotToSave));
         setPersistenceError(null);
         // M1 服务端会话持久化：fire-and-forget，失败静默，绝不阻塞自动保存主流程。
         void fetch("/api/sessions", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(snapshotToSave),
+          headers: withSessionHeaders(activeSessionId, { "Content-Type": "application/json" }),
+          body: JSON.stringify(serverSnapshot),
+        }).then(async (response) => {
+          if (!response.ok) return;
+          const payload: unknown = await response.json();
+          if (typeof payload === "object" && payload !== null && typeof (payload as { sessionAccessToken?: unknown }).sessionAccessToken === "string") {
+            const token = (payload as { sessionAccessToken: string }).sessionAccessToken;
+            storeSessionAccessToken(activeSessionId, token);
+            activeSessionTokenRef.current = token;
+          }
         }).catch(() => undefined);
       } catch {
         setPersistenceError("Session autosave ran out of browser storage. Export this meeting to keep it safe.");
@@ -343,7 +364,7 @@ export default function Home(): ReactElement {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          const response = await fetch("/api/chat-messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, messages: payload }) });
+          const response = await fetch("/api/chat-messages", { method: "POST", headers: withSessionHeaders(sessionId, { "Content-Type": "application/json" }), body: JSON.stringify({ sessionId, messages: payload }) });
           if (response.ok) return;
           lastError = new Error(`chat history persistence HTTP ${response.status}`);
         } catch (error) { lastError = error; }
@@ -356,7 +377,7 @@ export default function Home(): ReactElement {
   const fetchServerAskMessages = useCallback(
     async (sessionId: string): Promise<StoredChatMessage[]> => {
       try {
-        const response = await fetch(`/api/chat-messages?sessionId=${encodeURIComponent(sessionId)}`);
+        const response = await fetch(`/api/chat-messages?sessionId=${encodeURIComponent(sessionId)}`, { headers: withSessionHeaders(sessionId) });
         if (!response.ok) return [];
         const payload: unknown = await response.json();
         if (typeof payload !== "object" || payload === null || !("messages" in payload)) return [];
@@ -407,6 +428,9 @@ export default function Home(): ReactElement {
     setPostmeetingTranscript(session.postmeetingTranscript ?? null);
     setTopicSummary(session.topicSummary ?? null);
     setActiveSessionId(session.id);
+    const token = session.sessionAccessToken ?? loadSessionAccessToken(session.id);
+    activeSessionTokenRef.current = token;
+    if (token) storeSessionAccessToken(session.id, token);
     setCreatedAt(session.createdAt);
     setResumeCandidate(null);
     // P2: localStorage 快照先行渲染；sessionId 变化触发的同步 effect 会拉服务端历史，
@@ -422,7 +446,11 @@ export default function Home(): ReactElement {
     setMeetingReport(null);
     setPostmeetingTranscript(null);
     setTopicSummary(null);
-    setActiveSessionId(crypto.randomUUID());
+    const sessionId = crypto.randomUUID();
+    const sessionToken = generateClientSessionAccessToken();
+    storeSessionAccessToken(sessionId, sessionToken);
+    activeSessionTokenRef.current = sessionToken;
+    setActiveSessionId(sessionId);
     setCreatedAt(new Date());
     setResumeCandidate(null);
   }, [ask, recorder, suggestions]);

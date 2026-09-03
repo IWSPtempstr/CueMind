@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import { isErrorResponseBody } from "@/lib/api-response";
+import { withSessionHeaders } from "@/lib/client-session-auth";
 import type { TranscriptChunk } from "@/types/session";
 import type { AskSource, ChatMessage } from "@/types/chat";
 import type { AskContextSummary } from "@/lib/realtime-context-memory";
@@ -365,7 +366,7 @@ export default function useAsk({ transcriptChunks, sessionId, contextSummary }: 
       try {
         const response = await fetch("/api/ask", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: withSessionHeaders(sessionIdValue, { "Content-Type": "application/json" }),
           body: JSON.stringify({
             runId,
             question: trimmed,
