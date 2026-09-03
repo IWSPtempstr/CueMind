@@ -327,8 +327,6 @@ export default function useMediaUploader({
       const formData = new FormData();
       formData.append("media", file);
       formData.append("language", settings.localWhisperLanguage);
-      formData.append("whisperPath", settings.localWhisperPath.trim());
-      formData.append("whisperModelPath", settings.localWhisperModelPath.trim());
       formData.append("uploadId", uploadId);
       formData.append("stream", "1");
       // 会议上下文 + VAD 配置透传给服务端，组装成 whisper initial prompt / --vad 参数。

@@ -109,8 +109,6 @@ export default function useDesktopTranscript(sessionId?: string | null): UseDesk
           startMs: event.startMs,
           endMs: event.endMs,
           settings: {
-            whisperPath: settings.localWhisperPath,
-            modelPath: settings.localWhisperModelPath,
             language: settings.localWhisperLanguage,
             timeoutMs: 60_000,
           },
