@@ -4,7 +4,7 @@
 // reused) plus failure/degraded states. Suggestion cards moved out for good.
 
 import { type ReactElement } from "react";
-import ContextCardView from "@/components/ContextCardView";
+import ContextCardView, { type CardKnowledgeDraft } from "@/components/ContextCardView";
 import type { ContextCard, ContextCardFailure } from "@/types/suggestions";
 
 interface ContextCardsPanelProps {
@@ -19,6 +19,9 @@ interface ContextCardsPanelProps {
   onAskMore?: (term: string) => void;
   onMarkUseful?: (card: ContextCard) => void;
   usefulCandidateIds?: ReadonlySet<string>;
+  /** Phase B：卡片存入知识库（确认/编辑后由父级提交）。 */
+  onSaveKnowledge?: (card: ContextCard, draft: CardKnowledgeDraft) => void;
+  knowledgeSavedCardIds?: ReadonlySet<string>;
 }
 
 export default function ContextCardsPanel({
@@ -31,6 +34,8 @@ export default function ContextCardsPanel({
   onAskMore,
   onMarkUseful,
   usefulCandidateIds,
+  onSaveKnowledge,
+  knowledgeSavedCardIds,
 }: ContextCardsPanelProps): ReactElement {
   return (
     <section className="flex h-[50vh] min-h-0 w-full shrink-0 flex-col border-r border-neutral-800 lg:h-auto lg:min-w-0 lg:flex-1 lg:shrink">
@@ -51,12 +56,12 @@ export default function ContextCardsPanel({
             </div>
             <div>
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-200">当前背景</p>
-              <ContextCardView card={cards[0]} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(cards[0].candidateId) ?? false} onAskMore={onAskMore} onMarkUseful={onMarkUseful} isMarkedUseful={usefulCandidateIds?.has(cards[0].candidateId)} />
+              <ContextCardView card={cards[0]} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(cards[0].candidateId) ?? false} onAskMore={onAskMore} onMarkUseful={onMarkUseful} isMarkedUseful={usefulCandidateIds?.has(cards[0].candidateId)} onSaveKnowledge={onSaveKnowledge} isKnowledgeSaved={knowledgeSavedCardIds?.has(cards[0].candidateId) ?? false} />
             </div>
             {cards.length > 1 ? (
               <div className="max-h-96 min-w-0 space-y-3 overflow-y-auto pr-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">此前背景 · {cards.length - 1}</p>
-                {cards.slice(1).map((card) => <ContextCardView key={card.id} card={card} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(card.candidateId) ?? false} onAskMore={onAskMore} onMarkUseful={onMarkUseful} isMarkedUseful={usefulCandidateIds?.has(card.candidateId)} />)}
+                {cards.slice(1).map((card) => <ContextCardView key={card.id} card={card} onDeposit={onCardDeposit} isDeposited={depositedCardIds?.has(card.candidateId) ?? false} onAskMore={onAskMore} onMarkUseful={onMarkUseful} isMarkedUseful={usefulCandidateIds?.has(card.candidateId)} onSaveKnowledge={onSaveKnowledge} isKnowledgeSaved={knowledgeSavedCardIds?.has(card.candidateId) ?? false} />)}
               </div>
             ) : null}
             <p className="text-[10px] text-neutral-500">来源：每张卡片均附带检索来源。</p>

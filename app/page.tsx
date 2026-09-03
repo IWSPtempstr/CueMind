@@ -16,7 +16,8 @@ import useSuggestions from "@/hooks/useSuggestions";
 import { loadCueMindSettings } from "@/hooks/useSettings";
 import type { StoredChatMessage } from "@/lib/chat-store";
 import { isErrorResponseBody } from "@/lib/api-response";
-import { generateClientSessionAccessToken, loadSessionAccessToken, storeSessionAccessToken, withSessionHeaders } from "@/lib/client-session-auth";
+import { generateClientSessionAccessToken, loadLastActiveSessionId, loadSessionAccessToken, storeLastActiveSessionId, storeSessionAccessToken, withSessionHeaders } from "@/lib/client-session-auth";
+import type { CardKnowledgeDraft } from "@/components/ContextCardView";
 import { extractAskExchanges } from "@/lib/ask-history";
 import { AUDIO_SOURCE_MODE_LABELS } from "@/lib/audio-source-mode";
 import { exportSession } from "@/lib/export";
@@ -36,10 +37,23 @@ function sessionTitle(snapshot: Pick<SessionSnapshot, "createdAt" | "transcriptC
 // M3-a：卡片沉淀去重记录（本地持久化，避免重复导出同一 candidateId）。
 const DEPOSITED_CARDS_STORAGE_KEY = "cuemind_deposited_cards";
 const USEFUL_CARDS_STORAGE_KEY = "cuemind_useful_cards";
+// Phase B：知识库存入去重（/knowledge 页读取最近会话键见 lib/client-session-auth）。
+const KNOWLEDGE_CARDS_STORAGE_KEY = "cuemind_knowledge_cards";
 
 function loadDepositedCardIds(): Set<string> {
   try {
     const raw = localStorage.getItem(DEPOSITED_CARDS_STORAGE_KEY);
+    const parsed: unknown = raw === null ? null : JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function loadStringSetFromStorage(key: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(key);
     const parsed: unknown = raw === null ? null : JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set();
     return new Set(parsed.filter((value): value is string => typeof value === "string"));
@@ -163,7 +177,13 @@ export default function Home(): ReactElement {
   // M3-a：已沉淀卡片去重集合（localStorage cuemind_deposited_cards）。
   const [depositedCardIds, setDepositedCardIds] = useState<ReadonlySet<string>>(() => new Set());
   const [usefulCandidateIds, setUsefulCandidateIds] = useState<ReadonlySet<string>>(() => new Set());
-  useEffect(() => { setDepositedCardIds(loadDepositedCardIds()); }, []);
+  // Phase B：已存知识库的卡片去重集合（localStorage cuemind_knowledge_cards）。
+  const [knowledgeSavedCardIds, setKnowledgeSavedCardIds] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    setDepositedCardIds(loadDepositedCardIds());
+    setUsefulCandidateIds(loadStringSetFromStorage(USEFUL_CARDS_STORAGE_KEY));
+    setKnowledgeSavedCardIds(loadStringSetFromStorage(KNOWLEDGE_CARDS_STORAGE_KEY));
+  }, []);
   // 已处理过"上传完成"事件的 uploadId 去重集合（主题摘要只生成一次）。
   const handledUploadIdsRef = useRef(new Set<string>());
   // P2 → live-ask 服务端同步：代 token 使在途合并失效（restore/new 切换会话时不串数据）；
@@ -285,6 +305,35 @@ export default function Home(): ReactElement {
     try { localStorage.setItem(USEFUL_CARDS_STORAGE_KEY, JSON.stringify([...next])); } catch { /* local audit is best effort */ }
   }, [usefulCandidateIds]);
 
+  // Phase B：卡片存入知识库（确认/最小编辑后）。POST /api/knowledge 带 cardId
+  //（candidateId），服务端校验卡片归属当前会话后才落库。
+  const handleSaveKnowledge = useCallback((card: ContextCard, draft: CardKnowledgeDraft): void => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId || !card.candidateId || knowledgeSavedCardIds.has(card.candidateId)) return;
+    const cardId = card.candidateId;
+    void fetch("/api/knowledge", {
+      method: "POST",
+      headers: withSessionHeaders(sessionId, { "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        sessionId,
+        cardId,
+        title: draft.title,
+        summary: draft.summary,
+        content: draft.content,
+        sourceTypes: card.sources.flatMap((source) => typeof source.sourceType === "string" ? [source.sourceType] : []),
+        sourceUrls: card.sources.map((source) => source.url),
+      }),
+    }).then(async (response) => {
+      if (!response.ok) {
+        const payload: unknown = await response.json().catch(() => null);
+        throw new Error(isErrorResponseBody(payload) ? payload.error : `存入知识库失败（HTTP ${response.status}）`);
+      }
+      const next = new Set(knowledgeSavedCardIds).add(cardId);
+      setKnowledgeSavedCardIds(next);
+      try { localStorage.setItem(KNOWLEDGE_CARDS_STORAGE_KEY, JSON.stringify([...next])); } catch { /* local audit is best effort */ }
+    }).catch((error: unknown) => setPersistenceError(error instanceof Error ? error.message : "存入知识库失败"));
+  }, [knowledgeSavedCardIds]);
+
   useEffect(() => {
     const saved = loadSessions();
     setSessions(saved);
@@ -294,6 +343,10 @@ export default function Home(): ReactElement {
   const hasContent = recorder.transcriptChunks.length > 0 || suggestions.batches.length > 0 || ask.messages.length > 0 || meetingReport !== null;
   useEffect(() => {
     activeSessionTokenRef.current = loadSessionAccessToken(activeSessionId);
+  }, [activeSessionId]);
+  // Phase B：/knowledge 管理页以最近会话为默认会话（写 localStorage 引导键）。
+  useEffect(() => {
+    storeLastActiveSessionId(activeSessionId ?? loadLastActiveSessionId());
   }, [activeSessionId]);
   useEffect(() => {
     if (activeSessionId) return;
@@ -584,6 +637,9 @@ export default function Home(): ReactElement {
           <button type="button" onClick={newSession} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400">
             新建
           </button>
+          <a href="/knowledge" className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200">
+            📚 知识库
+          </a>
           <button type="button" disabled={!hasContent} onClick={() => exportSession(snapshot, "json")} className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 disabled:opacity-40">
             JSON
           </button>
@@ -689,6 +745,8 @@ export default function Home(): ReactElement {
           onAskMore={(term) => setAskTermHint(term)}
           onMarkUseful={handleMarkUseful}
           usefulCandidateIds={usefulCandidateIds}
+          onSaveKnowledge={handleSaveKnowledge}
+          knowledgeSavedCardIds={knowledgeSavedCardIds}
         />
         <AskPanel
           messages={ask.messages}

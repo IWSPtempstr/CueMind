@@ -1,4 +1,20 @@
 const SESSION_TOKEN_PREFIX = "cuemind_session_token_";
+// Phase B：主界面写入最近会话 ID，/knowledge 管理页读取作为默认会话。
+export const LAST_ACTIVE_SESSION_STORAGE_KEY = "cuemind_last_active_session";
+
+export function storeLastActiveSessionId(sessionId: string | null | undefined): void {
+  if (typeof window === "undefined" || !sessionId) return;
+  try {
+    localStorage.setItem(LAST_ACTIVE_SESSION_STORAGE_KEY, sessionId);
+  } catch {
+    // 存储溢出等：引导键写入失败不影响主流程。
+  }
+}
+
+export function loadLastActiveSessionId(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(LAST_ACTIVE_SESSION_STORAGE_KEY)?.trim() ?? "";
+}
 
 function storageKey(sessionId: string): string {
   return `${SESSION_TOKEN_PREFIX}${sessionId}`;

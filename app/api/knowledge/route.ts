@@ -58,8 +58,12 @@ export async function GET(request: Request, context?: { params: Promise<{ id: st
   }
   const params = new URL(request.url).searchParams;
   const query = params.get("q")?.trim() ?? "";
-  const entries = query ? store.search(query, sessionId).map((hit) => ({ ...responseEntry(hit.entry), score: hit.score })) : store.list(sessionId).filter((entry) => entry.status === "active").map((entry) => responseEntry(entry));
-  return NextResponse.json(query ? { entries } : { entries });
+  // Phase B：归档条目管理需要列表可见。默认 active；archived 只看归档；all 两者。
+  const statusFilter = params.get("status") === "archived" ? "archived" : params.get("status") === "all" ? "all" : "active";
+  const entries = query
+    ? store.search(query, sessionId).flatMap((hit) => hit.entry.status !== "deleted" && (statusFilter === "all" || hit.entry.status === statusFilter) ? [{ ...responseEntry(hit.entry), score: hit.score }] : [])
+    : store.list(sessionId).filter((entry) => entry.status !== "deleted" && (statusFilter === "all" || entry.status === statusFilter)).map((entry) => responseEntry(entry));
+  return NextResponse.json({ entries });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -104,7 +108,10 @@ export async function PATCH(request: Request, context?: { params: Promise<{ id: 
   const entry = getKnowledgeStore().get(id);
   if (!entry || !belongs(entry, sessionId) || entry.status === "deleted") return NextResponse.json({ error: "Knowledge entry not found" }, { status: 404 });
   if (body.version !== entry.version) return NextResponse.json({ error: "Knowledge entry version conflict" }, { status: 409 });
-  const next: KnowledgeEntry = { ...entry, title: text(body.title, MAX_TITLE_CHARS) ?? entry.title, summary: text(body.summary) ?? entry.summary, content: text(body.content) ?? entry.content, aliases: body.aliases === undefined ? entry.aliases : strings(body.aliases, MAX_ALIASES, MAX_TITLE_CHARS), updatedAt: new Date().toISOString(), version: entry.version + 1 };
+  // Phase B：archive/restore 走同一乐观锁 PATCH（status 只允许 active/archived，
+  // 删除仍走 DELETE 软删，避免误清）。
+  const requestedStatus = body.status === "active" || body.status === "archived" ? (body.status as KnowledgeStatus) : entry.status;
+  const next: KnowledgeEntry = { ...entry, title: text(body.title, MAX_TITLE_CHARS) ?? entry.title, summary: text(body.summary) ?? entry.summary, content: text(body.content) ?? entry.content, aliases: body.aliases === undefined ? entry.aliases : strings(body.aliases, MAX_ALIASES, MAX_TITLE_CHARS), status: requestedStatus, updatedAt: new Date().toISOString(), version: entry.version + 1 };
   getKnowledgeStore().upsert(next);
   return NextResponse.json({ entry: next });
 }

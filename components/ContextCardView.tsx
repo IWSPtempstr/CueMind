@@ -6,6 +6,13 @@ import { useState, type ReactElement } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ContextCard, Suggestion } from "@/types/suggestions";
 
+/** Phase B：卡片存入知识库前的最小可编辑草稿（确认后由父级 POST /api/knowledge）。 */
+export interface CardKnowledgeDraft {
+  title: string;
+  summary: string;
+  content: string;
+}
+
 interface ContextCardProps {
   card: ContextCard;
   /** M3-a：沉淀到 vault（fire-and-forget 导出 cuemind/concepts/<term>.md）。 */
@@ -15,6 +22,9 @@ interface ContextCardProps {
   onAskMore?: (term: string) => void;
   onMarkUseful?: (card: ContextCard) => void;
   isMarkedUseful?: boolean;
+  /** Phase B：存入知识库（用户确认并最小编辑后提交）。 */
+  onSaveKnowledge?: (card: ContextCard, draft: CardKnowledgeDraft) => void;
+  isKnowledgeSaved?: boolean;
 }
 
 /** 建议类别色板（批次三：左栏转写内联徽标沿用；五类全映射）。 */
@@ -57,8 +67,22 @@ export function sourceBadge(sourceType: ContextCard["sources"][number]["sourceTy
   }
 }
 
-export default function ContextCardView({ card, onDeposit, isDeposited, onAskMore, onMarkUseful, isMarkedUseful }: ContextCardProps): ReactElement {
+export default function ContextCardView({ card, onDeposit, isDeposited, onAskMore, onMarkUseful, isMarkedUseful, onSaveKnowledge, isKnowledgeSaved }: ContextCardProps): ReactElement {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+  // Phase B：存知识库的确认/最小编辑表单（默认预填卡片内容，用户可直接提交）。
+  const [showKnowledgeForm, setShowKnowledgeForm] = useState(false);
+  const [knowledgeDraft, setKnowledgeDraft] = useState<CardKnowledgeDraft>({ title: "", summary: "", content: "" });
+
+  const toggleKnowledgeForm = (): void => {
+    if (!showKnowledgeForm) {
+      setKnowledgeDraft({
+        title: card.keyword,
+        summary: card.keyPoints?.[0] ?? card.explanation?.slice(0, 200) ?? "",
+        content: card.keyPoints ? card.keyPoints.map((point) => `- ${point}`).join("\n") : card.explanation ?? "",
+      });
+    }
+    setShowKnowledgeForm((previous) => !previous);
+  };
 
   const toggleSource = (url: string): void => {
     setExpandedSources((previous) => {
@@ -118,7 +142,45 @@ export default function ContextCardView({ card, onDeposit, isDeposited, onAskMor
           </div>
         ))}
       </div>
-      {onAskMore || onDeposit || onMarkUseful ? (
+      {onSaveKnowledge && !isKnowledgeSaved && showKnowledgeForm ? (
+        <form
+          className="mt-3 flex flex-col gap-2 rounded border border-neutral-800 bg-neutral-950/60 p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSaveKnowledge(card, knowledgeDraft);
+            setShowKnowledgeForm(false);
+          }}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">存入知识库（可先最小编辑）</p>
+          <input
+            value={knowledgeDraft.title}
+            onChange={(event) => setKnowledgeDraft({ ...knowledgeDraft, title: event.target.value })}
+            aria-label="知识条目标题"
+            placeholder="标题"
+            className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200"
+          />
+          <input
+            value={knowledgeDraft.summary}
+            onChange={(event) => setKnowledgeDraft({ ...knowledgeDraft, summary: event.target.value })}
+            aria-label="知识条目摘要"
+            placeholder="摘要"
+            className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200"
+          />
+          <textarea
+            value={knowledgeDraft.content}
+            onChange={(event) => setKnowledgeDraft({ ...knowledgeDraft, content: event.target.value })}
+            aria-label="知识条目内容"
+            placeholder="内容"
+            rows={4}
+            className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs leading-relaxed text-neutral-200"
+          />
+          <div className="flex gap-2">
+            <button type="submit" className="rounded bg-blue-600 px-2 py-1 text-[10px] text-white">确认存入</button>
+            <button type="button" onClick={() => setShowKnowledgeForm(false)} className="rounded border border-neutral-700 px-2 py-1 text-[10px] text-neutral-400">取消</button>
+          </div>
+        </form>
+      ) : null}
+      {onAskMore || onDeposit || onMarkUseful || onSaveKnowledge ? (
         <div className="mt-3 flex items-center gap-2 border-t border-blue-900/60 pt-3">
           {onAskMore ? (
             <button
@@ -131,6 +193,17 @@ export default function ContextCardView({ card, onDeposit, isDeposited, onAskMor
             </button>
           ) : null}
           {onMarkUseful ? <button type="button" onClick={() => onMarkUseful(card)} disabled={isMarkedUseful} className="rounded border border-amber-800 px-2 py-1 text-[10px] text-amber-300 disabled:opacity-50">{isMarkedUseful ? "已标记应出卡" : "标记应出卡"}</button> : null}
+          {onSaveKnowledge ? (
+            <button
+              type="button"
+              disabled={isKnowledgeSaved}
+              aria-label={isKnowledgeSaved ? "已存入知识库" : "存入知识库"}
+              onClick={toggleKnowledgeForm}
+              className={`rounded border border-emerald-800 px-2 py-1 text-[10px] text-emerald-300 transition-colors hover:bg-emerald-950 disabled:opacity-50 ${isKnowledgeSaved ? "text-emerald-500" : ""}`}
+            >
+              {isKnowledgeSaved ? "✓ 已存知识库" : "📚 存知识库"}
+            </button>
+          ) : null}
           {onDeposit ? (
             <button
               type="button"

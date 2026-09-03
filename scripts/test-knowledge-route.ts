@@ -37,6 +37,30 @@ async function main(): Promise<void> {
   assert.equal((await patch.json() as { entry: { version: number } }).entry.version, 2);
   assert.equal((await PATCH(request(`/api/knowledge/${entry.id}`, { method: "PATCH", headers, body: JSON.stringify({ sessionId: "knowledge-a", version: 1 }) }))).status, 409);
 
+  // Phase B：归档 → archived 列表可见且 active 列表不可见 → 恢复；status 修改同样受乐观锁约束。
+  const createArchived = await POST(request("/api/knowledge", { method: "POST", headers, body: JSON.stringify({ sessionId: "knowledge-a", title: "Speculative Decoding", content: "草稿模型并行生成", summary: "摘要" }) }));
+  assert.equal(createArchived.status, 201);
+  const archivedEntry = (await createArchived.json() as { entry: { id: string } }).entry;
+
+  const archivePatch = await PATCH(request(`/api/knowledge/${archivedEntry.id}`, { method: "PATCH", headers, body: JSON.stringify({ sessionId: "knowledge-a", version: 1, status: "archived" }) }));
+  assert.equal(archivePatch.status, 200, "归档 PATCH 应成功");
+  assert.equal((await archivePatch.json() as { entry: { status: string; version: number } }).entry.status, "archived");
+
+  const staleArchive = await PATCH(request(`/api/knowledge/${archivedEntry.id}`, { method: "PATCH", headers, body: JSON.stringify({ sessionId: "knowledge-a", version: 1, status: "active" }) }));
+  assert.equal(staleArchive.status, 409, "旧版本 status PATCH 应 409");
+
+  const activeList = await GET(request("/api/knowledge?sessionId=knowledge-a", { headers }));
+  const activeIds = (await activeList.json() as { entries: Array<{ id: string }> }).entries.map((item) => item.id);
+  assert.ok(!activeIds.includes(archivedEntry.id), "archived 条目不应出现在默认 active 列表");
+
+  const archivedList = await GET(request("/api/knowledge?sessionId=knowledge-a&status=archived", { headers }));
+  const archivedIds = (await archivedList.json() as { entries: Array<{ id: string }> }).entries.map((item) => item.id);
+  assert.deepEqual(archivedIds, [archivedEntry.id], "archived 过滤应只含归档条目");
+
+  const restore = await PATCH(request(`/api/knowledge/${archivedEntry.id}`, { method: "PATCH", headers, body: JSON.stringify({ sessionId: "knowledge-a", version: 2, status: "active" }) }));
+  assert.equal(restore.status, 200, "恢复 PATCH 应成功");
+  assert.equal((await restore.json() as { entry: { status: string } }).entry.status, "active");
+
   assert.equal((await DELETE(request(`/api/knowledge/${entry.id}?sessionId=knowledge-a`, { method: "DELETE", headers }))).status, 200);
   assert.equal((await GET(request(`/api/knowledge/${entry.id}?sessionId=knowledge-a`, { headers }))).status, 404);
   console.log("knowledge route regression passed");
