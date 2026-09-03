@@ -42,10 +42,22 @@ function belongs(entry: KnowledgeEntry, sessionId: string): boolean {
   return entry.originSessionIds.includes(sessionId);
 }
 
-export async function GET(request: Request, context?: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+// context.params 用 { id?: string }：同一 handler 同时被静态 /api/knowledge（validator 生成
+// Promise<{}>）与动态 /api/knowledge/[id]（Promise<{ id: string }>）两条路径复用。
+type KnowledgeRouteContext = { params: Promise<{ id?: string }> };
+
+// 无 context（Next 运行时总是传，测试直调时可能缺）→ 从 pathname 解析 id。
+function resolveId(context: KnowledgeRouteContext | undefined, request: Request): Promise<string> {
+  if (context) return context.params.then((params) => (params.id ?? "").trim());
+  const segments = new URL(request.url).pathname.split("/").filter(Boolean);
+  const index = segments.indexOf("knowledge");
+  return Promise.resolve(index >= 0 ? (segments[index + 1] ?? "").trim() : "");
+}
+
+export async function GET(request: Request, context?: KnowledgeRouteContext): Promise<NextResponse> {
   const limited = enforceRateLimit(request, "knowledge", 60);
   if (limited) return limited;
-  const id = context ? (await context.params).id.trim() : new URL(request.url).pathname.split("/").filter(Boolean).pop() === "knowledge" ? "" : (new URL(request.url).pathname.split("/").filter(Boolean).pop() ?? "");
+  const id = await resolveId(context, request);
   const sessionId = request.headers.get("x-session-id")?.trim() || new URL(request.url).searchParams.get("sessionId")?.trim() || "";
   const denied = requireSessionAccess(request, sessionId);
   if (denied) return denied;
@@ -85,6 +97,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     sourceTypes: strings(body.sourceTypes, MAX_SOURCES, MAX_SOURCE_CHARS), sourceUrls: strings(body.sourceUrls, MAX_SOURCES, MAX_SOURCE_CHARS),
     originSessionIds: [sessionId], originCardIds: strings(body.originCardIds, MAX_SOURCES, 200), status: "active",
     createdAt: now, updatedAt: now, lastUsedAt: null, version: 1,
+    vaultFile: null, vaultFileHash: null, vaultExportedVersion: null, vaultExportedAt: null, vaultConflict: false,
   };
   if (body.cardId !== undefined) {
     const cardId = text(body.cardId, 200);
@@ -96,7 +109,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   return NextResponse.json({ entry }, { status: 201 });
 }
 
-export async function PATCH(request: Request, context?: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+export async function PATCH(request: Request, context?: KnowledgeRouteContext): Promise<NextResponse> {
   const limited = enforceRateLimit(request, "knowledge", 30);
   if (limited) return limited;
   const body = await readBody(request);
@@ -104,7 +117,7 @@ export async function PATCH(request: Request, context?: { params: Promise<{ id: 
   const sessionId = sessionIdFrom(request, body);
   const denied = requireSessionAccess(request, sessionId);
   if (denied) return denied;
-  const id = context ? (await context.params).id.trim() : (new URL(request.url).pathname.split("/").filter(Boolean).pop() ?? "");
+  const id = await resolveId(context, request);
   const entry = getKnowledgeStore().get(id);
   if (!entry || !belongs(entry, sessionId) || entry.status === "deleted") return NextResponse.json({ error: "Knowledge entry not found" }, { status: 404 });
   if (body.version !== entry.version) return NextResponse.json({ error: "Knowledge entry version conflict" }, { status: 409 });
@@ -116,13 +129,13 @@ export async function PATCH(request: Request, context?: { params: Promise<{ id: 
   return NextResponse.json({ entry: next });
 }
 
-export async function DELETE(request: Request, context?: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+export async function DELETE(request: Request, context?: KnowledgeRouteContext): Promise<NextResponse> {
   const limited = enforceRateLimit(request, "knowledge", 30);
   if (limited) return limited;
   const sessionId = new URL(request.url).searchParams.get("sessionId")?.trim() || request.headers.get("x-session-id")?.trim() || "";
   const denied = requireSessionAccess(request, sessionId);
   if (denied) return denied;
-  const id = context ? (await context.params).id.trim() : (new URL(request.url).pathname.split("/").filter(Boolean).pop() ?? "");
+  const id = await resolveId(context, request);
   const entry = getKnowledgeStore().get(id);
   if (!entry || !belongs(entry, sessionId) || entry.status === "deleted") return NextResponse.json({ error: "Knowledge entry not found" }, { status: 404 });
   const next = { ...entry, status: "deleted" as KnowledgeStatus, updatedAt: new Date().toISOString(), version: entry.version + 1 };

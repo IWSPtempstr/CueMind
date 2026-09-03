@@ -22,6 +22,13 @@ export interface KnowledgeEntry {
   updatedAt: string;
   lastUsedAt: string | null;
   version: number;
+  // Phase C：vault 同步元数据。vault 是 sidecar 表示，不是运行时事实源；
+  // fileHash + exportedVersion 共同支撑「外部编辑检测 + 幂等重导出」。
+  vaultFile: string | null;
+  vaultFileHash: string | null;
+  vaultExportedVersion: number | null;
+  vaultExportedAt: string | null;
+  vaultConflict: boolean;
 }
 
 export interface KnowledgeSearchHit {
@@ -65,6 +72,12 @@ function validEntry(value: unknown): KnowledgeEntry | null {
     status: r.status, createdAt: r.createdAt as string, updatedAt: r.updatedAt as string,
     lastUsedAt: typeof r.lastUsedAt === "string" ? r.lastUsedAt : null,
     version: typeof r.version === "number" && Number.isInteger(r.version) ? r.version : 1,
+    // Phase C：旧记录（Phase A/B 落盘）没有 vault 字段 → 统一补默认值，向后兼容。
+    vaultFile: typeof r.vaultFile === "string" ? r.vaultFile : null,
+    vaultFileHash: typeof r.vaultFileHash === "string" ? r.vaultFileHash : null,
+    vaultExportedVersion: typeof r.vaultExportedVersion === "number" && Number.isInteger(r.vaultExportedVersion) ? r.vaultExportedVersion : null,
+    vaultExportedAt: typeof r.vaultExportedAt === "string" ? r.vaultExportedAt : null,
+    vaultConflict: r.vaultConflict === true,
   };
 }
 
