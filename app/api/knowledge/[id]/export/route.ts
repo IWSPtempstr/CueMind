@@ -9,6 +9,7 @@ import { enforceRateLimit, readJsonBodyWithLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { getKnowledgeStore } from "@/lib/knowledge-store";
 import { exportKnowledgeToVault } from "@/lib/knowledge-vault";
+import { canLeaveLocalBoundary, redactCopy } from "@/lib/privacy";
 import { resolveVaultRoot } from "@/lib/vault-exporter";
 
 export const runtime = "nodejs";
@@ -47,19 +48,47 @@ export async function POST(
     return NextResponse.json({ error: "Archived entries cannot be exported" }, { status: 400 });
   }
 
-  const { result, next } = exportKnowledgeToVault(resolveVaultRoot(), entry, {
+  // Phase D：隐私门控。blocked / privacy_uncertain 均不允许离开本地边界；
+  // privacy_uncertain 需先经 PATCH privacy 人工复审（redacted/clear）再导出。
+  if (!canLeaveLocalBoundary(entry.privacy)) {
+    return NextResponse.json(
+      {
+        error: entry.privacy === "blocked"
+          ? "Entry is privacy-blocked and cannot leave the local boundary"
+          : "Entry privacy is uncertain; review it (PATCH privacy: redacted|clear) before exporting",
+        privacy: entry.privacy,
+        reasons: entry.privacyReasons,
+      },
+      { status: 403 },
+    );
+  }
+
+  // redacted：导出副本脱敏（EMAIL/PHONE/SECRET + aliases 作 PERSON 字典），
+  // 库内原文与不可变会话记录不动。
+  const exportSource = entry.privacy === "redacted"
+    ? (() => {
+        const copy = redactCopy(entry.title, entry.summary, entry.content, entry.aliases);
+        return { ...entry, title: copy.title, summary: copy.summary, content: copy.content };
+      })()
+    : entry;
+
+  const { result, next } = exportKnowledgeToVault(resolveVaultRoot(), exportSource, {
     force: record.force === true,
   });
+  // store 回写始终以真实 entry 为基底（exportSource 可能是脱敏副本，绝不入库覆盖原文）。
+  const storeNext: typeof entry = entry.privacy === "redacted"
+    ? { ...entry, vaultFile: next.vaultFile, vaultFileHash: next.vaultFileHash, vaultExportedVersion: next.vaultExportedVersion, vaultExportedAt: next.vaultExportedAt, vaultConflict: next.vaultConflict }
+    : next;
   if (result.outcome === "conflict") {
-    store.upsert(next);
+    store.upsert(storeNext);
     return NextResponse.json(
       { conflict: true, file: result.file, error: "Vault file was edited outside CueMind; review and re-export with force to overwrite" },
       { status: 409 },
     );
   }
-  store.upsert(next);
+  store.upsert(storeNext);
   if (result.outcome === "skipped") {
-    return NextResponse.json({ entry: next, skipped: result.reason });
+    return NextResponse.json({ entry: storeNext, skipped: result.reason });
   }
-  return NextResponse.json({ entry: next, saved: true, file: result.file });
+  return NextResponse.json({ entry: storeNext, saved: true, file: result.file });
 }

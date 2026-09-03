@@ -4,6 +4,7 @@ import { enforceRateLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { getCandidate } from "@/lib/candidate-store";
 import { getKnowledgeStore, type KnowledgeEntry, type KnowledgeStatus } from "@/lib/knowledge-store";
+import { assessPrivacy, isPrivacyState } from "@/lib/privacy";
 import { slugifyTerm } from "@/lib/vault-exporter";
 
 export const runtime = "nodejs";
@@ -90,14 +91,18 @@ export async function POST(request: Request): Promise<NextResponse> {
   const content = text(body.content);
   if (!title || !content) return NextResponse.json({ error: "title and content are required" }, { status: 400 });
   const now = new Date().toISOString();
+  const summary = text(body.summary, MAX_FIELD_CHARS) ?? content.slice(0, 200);
+  // Phase D：入站隐私检测（SECRET → blocked；EMAIL/PHONE → privacy_uncertain）。
+  const assessment = assessPrivacy(title, summary, content);
   const entry: KnowledgeEntry = {
     id: text(body.id, 200) ?? `knowledge-${randomUUID()}`,
     slug: slugifyTerm(title), title, aliases: strings(body.aliases, MAX_ALIASES, MAX_TITLE_CHARS),
-    summary: text(body.summary, MAX_FIELD_CHARS) ?? content.slice(0, 200), content,
+    summary, content,
     sourceTypes: strings(body.sourceTypes, MAX_SOURCES, MAX_SOURCE_CHARS), sourceUrls: strings(body.sourceUrls, MAX_SOURCES, MAX_SOURCE_CHARS),
     originSessionIds: [sessionId], originCardIds: strings(body.originCardIds, MAX_SOURCES, 200), status: "active",
     createdAt: now, updatedAt: now, lastUsedAt: null, version: 1,
     vaultFile: null, vaultFileHash: null, vaultExportedVersion: null, vaultExportedAt: null, vaultConflict: false,
+    privacy: assessment.state, privacyReasons: assessment.reasons, privacyReviewedAt: null,
   };
   if (body.cardId !== undefined) {
     const cardId = text(body.cardId, 200);
@@ -124,7 +129,32 @@ export async function PATCH(request: Request, context?: KnowledgeRouteContext): 
   // Phase B：archive/restore 走同一乐观锁 PATCH（status 只允许 active/archived，
   // 删除仍走 DELETE 软删，避免误清）。
   const requestedStatus = body.status === "active" || body.status === "archived" ? (body.status as KnowledgeStatus) : entry.status;
-  const next: KnowledgeEntry = { ...entry, title: text(body.title, MAX_TITLE_CHARS) ?? entry.title, summary: text(body.summary) ?? entry.summary, content: text(body.content) ?? entry.content, aliases: body.aliases === undefined ? entry.aliases : strings(body.aliases, MAX_ALIASES, MAX_TITLE_CHARS), status: requestedStatus, updatedAt: new Date().toISOString(), version: entry.version + 1 };
+  const nextTitle = text(body.title, MAX_TITLE_CHARS) ?? entry.title;
+  const nextSummary = text(body.summary) ?? entry.summary;
+  const nextContent = text(body.content) ?? entry.content;
+  const nextAliases = body.aliases === undefined ? entry.aliases : strings(body.aliases, MAX_ALIASES, MAX_TITLE_CHARS);
+  // Phase D：内容变更时重检测（SECRET 恒阻断）；privacy 字段为显式人工复审结果
+  // （privacyReviewedAt 记录时间），但 blocked 只能被复审解除为 redacted/clear，
+  // 不能由检测自动降级覆盖人工结论。
+  const reassessed = assessPrivacy(nextTitle, nextSummary, nextContent);
+  const contentChanged = nextTitle !== entry.title || nextSummary !== entry.summary || nextContent !== entry.content;
+  let privacy = entry.privacy;
+  let privacyReasons = entry.privacyReasons;
+  let privacyReviewedAt = entry.privacyReviewedAt;
+  if (isPrivacyState(body.privacy)) {
+    privacy = body.privacy;
+    privacyReasons = reassessed.reasons;
+    privacyReviewedAt = new Date().toISOString();
+  } else if (contentChanged) {
+    if (reassessed.state === "blocked") {
+      privacy = "blocked";
+      privacyReasons = reassessed.reasons;
+    } else if (entry.privacy === "clear" && reassessed.state !== "clear") {
+      privacy = reassessed.state;
+      privacyReasons = reassessed.reasons;
+    }
+  }
+  const next: KnowledgeEntry = { ...entry, title: nextTitle, summary: nextSummary, content: nextContent, aliases: nextAliases, status: requestedStatus, updatedAt: new Date().toISOString(), version: entry.version + 1, privacy, privacyReasons, privacyReviewedAt };
   getKnowledgeStore().upsert(next);
   return NextResponse.json({ entry: next });
 }

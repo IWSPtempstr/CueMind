@@ -37,6 +37,10 @@ import path from "node:path";
 //      get_card 维持既有诚实降级
 //   r) 只读断言：vault 目录文件内容+size+mtime 前后不变
 //   s) 坏 frontmatter 文件被跳过，其余概念仍可检索
+// Phase D（只读知识工具）：
+//   t) list/get/search/versions/sources 五工具：blocked 条目对 MCP 等同不存在
+//      （list/search/get 一律不可见）、archived 可列、投影不携带 content 载荷、
+//      版本与来源元数据透出；工具清单扩展至 14 个（h/g 同步更新）
 // a-m 不回退：CUEMIND_VAULT_DIR 未设（测试客户端显式 unset）→ 默认路径 <dataDir>/vault
 // 不存在即静默跳过，行为与 M2-b 完全一致。
 // 账本种子策略：优先用真实 .data（m2-smoke 的 card_shown 行已由主项目真机写入）；若缺失，
@@ -71,6 +75,47 @@ const VAULT_FIXTURE_CARD_ID = "seed-card-ring-attention-vault";
 const VAULT_FIXTURE_TERM = "Ring Attention";
 const VAULT_FIXTURE_UPDATED = "2026-08-28T01:02:03.000Z";
 const VAULT_FIXTURE_ALIAS_CN = "环形注意力";
+
+// Phase D 知识工具夹具：clear（可检索可读）+ blocked（对 MCP 等同不存在）+ archived。
+const KNOWLEDGE_CLEAR_ID = "knowledge-mcp-clear";
+const KNOWLEDGE_BLOCKED_ID = "knowledge-mcp-blocked";
+const KNOWLEDGE_ARCHIVED_ID = "knowledge-mcp-archived";
+const KNOWLEDGE_CREATED_AT = "2026-08-29T00:00:00.000Z";
+
+function knowledgeEntryFixture(input: {
+  id: string;
+  title: string;
+  content: string;
+  status: "active" | "archived";
+  privacy: string;
+}): string {
+  const now = KNOWLEDGE_CREATED_AT;
+  return JSON.stringify({
+    id: input.id,
+    slug: input.title.toLowerCase().replaceAll(/\s+/g, "-"),
+    title: input.title,
+    aliases: [input.title],
+    summary: `${input.title} 摘要`,
+    content: input.content,
+    sourceTypes: ["web"],
+    sourceUrls: [`https://example.com/${encodeURIComponent(input.title)}`],
+    originSessionIds: [VAULT_FIXTURE_SESSION],
+    originCardIds: [],
+    status: input.status,
+    createdAt: now,
+    updatedAt: now,
+    lastUsedAt: null,
+    version: 3,
+    vaultFile: null,
+    vaultFileHash: null,
+    vaultExportedVersion: null,
+    vaultExportedAt: null,
+    vaultConflict: false,
+    privacy: input.privacy,
+    privacyReasons: input.privacy === "blocked" ? ["SECRET"] : [],
+    privacyReviewedAt: null,
+  });
+}
 
 interface JsonRpcResponse {
   jsonrpc: "2.0";
@@ -649,16 +694,21 @@ async function assertNormalServer(fixture: CandidateFixture): Promise<void> {
   const fullToolNames = fullToolList.tools.map((tool) => tool.name).sort();
   assert.deepEqual(fullToolNames, [
     "get_card",
+    "get_knowledge_entry",
+    "get_knowledge_sources",
+    "get_knowledge_versions",
     "get_session",
     "get_session_ledger",
     "get_vault_entry",
     "get_vault_version",
+    "list_knowledge_entries",
     "list_sessions",
     "search_cards",
+    "search_knowledge",
     "search_transcripts",
     "search_vault",
   ]);
-  console.log(`[h] tools/list OK: 共 ${fullToolNames.length} 个工具（含 Vault 只读治理接口）`);
+  console.log(`[h] tools/list OK: 共 ${fullToolNames.length} 个工具（含 Vault 治理与 Phase D 只读知识接口）`);
 
   // i) get_session_ledger：card_shown 账本行 + finalStateSummary 自洽
   const ledger = toolPayload<GetSessionLedgerPayload>(
@@ -817,7 +867,7 @@ async function assertMissingDbServer(): Promise<void> {
     `explainable missing-db error, got: ${payload.error}`,
   );
   const stillResponsive = (await client.request("tools/list", {})) as { tools: unknown[] };
-  assert.equal(stillResponsive.tools.length, 9, "server stays responsive after db-missing error");
+  assert.equal(stillResponsive.tools.length, 14, "server stays responsive after db-missing error");
   assert.ok(client.isAlive(), "server process must not crash");
   await client.stop();
   console.log(`[g] db-missing path OK (CUEMIND_DATA_DIR=${absentDir}): error 终态可解释，server 不崩`);
@@ -942,6 +992,29 @@ function prepareVaultFixture(): string {
       );
     `);
     db.pragma("journal_mode = DELETE");
+    // Phase D：知识条目夹具（DDL 与 lib/knowledge-store.ts 同款；只灌临时副本）。
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_entries (
+        id TEXT PRIMARY KEY,
+        slug TEXT NOT NULL UNIQUE,
+        entry_json TEXT NOT NULL,
+        title TEXT NOT NULL,
+        search_text TEXT NOT NULL,
+        status TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    const insertKnowledge = db.prepare(
+      "INSERT OR REPLACE INTO knowledge_entries (id, slug, entry_json, title, search_text, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
+    const knowledgeFixtures = [
+      { id: KNOWLEDGE_CLEAR_ID, title: "Ring Attention", content: "Blockwise computation of attention over long sequences.", status: "active" as const, privacy: "clear" },
+      { id: KNOWLEDGE_BLOCKED_ID, title: "Secret Deployment Note", content: "API key is sk-abcdefghijkmnopq", status: "active" as const, privacy: "blocked" },
+      { id: KNOWLEDGE_ARCHIVED_ID, title: "Speculative Decoding", content: "Draft model proposes tokens.", status: "archived" as const, privacy: "clear" },
+    ];
+    for (const fixture of knowledgeFixtures) {
+      insertKnowledge.run(fixture.id, fixture.title.toLowerCase().replaceAll(/\s+/g, "-"), knowledgeEntryFixture(fixture), fixture.title, fixture.content, fixture.status, KNOWLEDGE_CREATED_AT);
+    }
     db.prepare(
       "INSERT INTO sessions (id, title, created_at, updated_at, duration_ms, input_source, transcript_json, cards_json, metrics_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).run(VAULT_FIXTURE_SESSION, "M3 vault 合流冒烟", SEED_CREATED_AT, SEED_CREATED_AT, 15000, "mixed", "[]", null, null);
@@ -1041,6 +1114,59 @@ async function assertVaultMergeServer(vaultDataDir: string, vaultDir: string): P
   );
   console.log('[s] 坏 frontmatter 跳过 OK: query="broken" 无 vault 命中且不崩，"投机解码" 仍命中 speculative-decoding.md');
 
+  // t) Phase D 只读知识工具：blocked 不可见、archived 可列、检索/版本/来源投影正确
+  const knowledgeList = toolPayload<{ entries: Array<{ id: string; privacy: string; status: string; content?: string }> }>(
+    await client.request("tools/call", { name: "list_knowledge_entries", arguments: {} }),
+  );
+  const knowledgeIds = knowledgeList.entries.map((entry) => entry.id);
+  assert.ok(knowledgeIds.includes(KNOWLEDGE_CLEAR_ID) && knowledgeIds.includes(KNOWLEDGE_ARCHIVED_ID), "clear + archived entries listed");
+  assert.ok(!knowledgeIds.includes(KNOWLEDGE_BLOCKED_ID), "blocked entries must never be listed");
+  assert.ok(knowledgeList.entries.every((entry) => entry.content === undefined), "list projection must not carry content bodies");
+  const activeOnly = toolPayload<{ entries: Array<{ id: string }> }>(
+    await client.request("tools/call", { name: "list_knowledge_entries", arguments: { status: "active" } }),
+  );
+  assert.deepEqual(activeOnly.entries.map((entry) => entry.id), [KNOWLEDGE_CLEAR_ID], "status=active filter excludes archived");
+  const sessionScoped = toolPayload<{ entries: Array<{ id: string }> }>(
+    await client.request("tools/call", { name: "list_knowledge_entries", arguments: { session_id: VAULT_FIXTURE_SESSION } }),
+  );
+  assert.equal(sessionScoped.entries.length, knowledgeList.entries.length, "session_id filter keeps fixtures");
+
+  const gotEntry = toolPayload<{ entry: { id: string; content: string; privacy: string } }>(
+    await client.request("tools/call", { name: "get_knowledge_entry", arguments: { entry_id: KNOWLEDGE_CLEAR_ID } }),
+  );
+  assert.equal(gotEntry.entry.id, KNOWLEDGE_CLEAR_ID);
+  assert.ok(gotEntry.entry.content.includes("Blockwise computation"), "get_knowledge_entry returns the content body");
+  const blockedGet = parseToolText(
+    await client.request("tools/call", { name: "get_knowledge_entry", arguments: { entry_id: KNOWLEDGE_BLOCKED_ID } }),
+  );
+  assert.equal(blockedGet.isError, true, "blocked entry must be indistinguishable from missing");
+  assert.ok((JSON.parse(blockedGet.content[0].text) as { error: string }).error.includes("not found"));
+
+  const knowledgeSearch = toolPayload<{ results: Array<{ entry: { id: string }; score: number }> }>(
+    await client.request("tools/call", { name: "search_knowledge", arguments: { query: "Ring Attention" } }),
+  );
+  assert.ok(knowledgeSearch.results.some((hit) => hit.entry.id === KNOWLEDGE_CLEAR_ID), "search hits the clear entry");
+  assert.ok(knowledgeSearch.results.every((hit) => hit.entry.id !== KNOWLEDGE_BLOCKED_ID), "blocked entry never surfaces in search");
+  const secretSearch = toolPayload<{ results: Array<{ entry: { id: string } }> }>(
+    await client.request("tools/call", { name: "search_knowledge", arguments: { query: "Secret Deployment" } }),
+  );
+  assert.equal(secretSearch.results.length, 0, "search scoped to the blocked title yields nothing");
+
+  const versions = toolPayload<{ entryId: string; version: number; vaultExportedVersion: number | null; privacy: string }>(
+    await client.request("tools/call", { name: "get_knowledge_versions", arguments: { entry_id: KNOWLEDGE_CLEAR_ID } }),
+  );
+  assert.equal(versions.entryId, KNOWLEDGE_CLEAR_ID);
+  assert.equal(versions.version, 3);
+  assert.equal(versions.privacy, "clear");
+  assert.equal(versions.vaultExportedVersion, null);
+  const knowledgeSources = toolPayload<{ entryId: string; sourceUrls: string[]; originSessionIds: string[] }>(
+    await client.request("tools/call", { name: "get_knowledge_sources", arguments: { entry_id: KNOWLEDGE_CLEAR_ID } }),
+  );
+  assert.equal(knowledgeSources.entryId, KNOWLEDGE_CLEAR_ID);
+  assert.deepEqual(knowledgeSources.originSessionIds, [VAULT_FIXTURE_SESSION]);
+  assert.equal(knowledgeSources.sourceUrls.length, 1);
+  console.log(`[t] knowledge tools OK: blocked 不可见、list/search/get/versions/sources 投影正确（clear=${KNOWLEDGE_CLEAR_ID}）`);
+
   // p) get_card：账本 term 与 vault 概念一致 + 正文未归档 → vault 投影 + note
   const cardResult = parseToolText(
     await client.request("tools/call", { name: "get_card", arguments: { card_id: VAULT_FIXTURE_CARD_ID } }),
@@ -1133,7 +1259,7 @@ async function main(): Promise<void> {
     rmSync(vaultDataDir, { recursive: true, force: true });
     rmSync(VAULT_DIR, { recursive: true, force: true });
   }
-  console.log("test-mcp-server: all assertions passed (a-s)");
+  console.log("test-mcp-server: all assertions passed (a-t)");
 }
 
 main().catch((error: unknown) => {

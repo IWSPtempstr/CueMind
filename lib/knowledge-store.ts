@@ -29,6 +29,11 @@ export interface KnowledgeEntry {
   vaultExportedVersion: number | null;
   vaultExportedAt: string | null;
   vaultConflict: boolean;
+  // Phase D：隐私状态机。clear/redacted/privacy_uncertain/blocked；
+  // privacy_uncertain 允许本地保存但阻断外部导出与远程发送；脱敏只作用于副本。
+  privacy: "clear" | "redacted" | "privacy_uncertain" | "blocked";
+  privacyReasons: string[];
+  privacyReviewedAt: string | null;
 }
 
 export interface KnowledgeSearchHit {
@@ -78,6 +83,10 @@ function validEntry(value: unknown): KnowledgeEntry | null {
     vaultExportedVersion: typeof r.vaultExportedVersion === "number" && Number.isInteger(r.vaultExportedVersion) ? r.vaultExportedVersion : null,
     vaultExportedAt: typeof r.vaultExportedAt === "string" ? r.vaultExportedAt : null,
     vaultConflict: r.vaultConflict === true,
+    // Phase D：旧记录缺隐私字段 → 默认 clear（不追溯阻断既有数据）。
+    privacy: r.privacy === "redacted" || r.privacy === "privacy_uncertain" || r.privacy === "blocked" ? r.privacy : "clear",
+    privacyReasons: strings("privacyReasons"),
+    privacyReviewedAt: typeof r.privacyReviewedAt === "string" ? r.privacyReviewedAt : null,
   };
 }
 

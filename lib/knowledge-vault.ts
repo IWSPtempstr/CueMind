@@ -39,6 +39,7 @@ export function buildKnowledgeMarkdown(entry: KnowledgeEntry, exportedAt: string
     ["source_types", `[${entry.sourceTypes.join(", ")}]`],
     ["origin_sessions", `[${entry.originSessionIds.join(", ")}]`],
     ["status", entry.status],
+    ["privacy", entry.privacy],
     ["exported_version", String(entry.version)],
     ["exported_at", exportedAt],
     ["updated", entry.updatedAt],

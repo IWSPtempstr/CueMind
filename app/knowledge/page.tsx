@@ -14,6 +14,21 @@ import {
 } from "@/lib/client-session-auth";
 
 type KnowledgeStatus = "active" | "archived" | "deleted";
+type PrivacyState = "clear" | "redacted" | "privacy_uncertain" | "blocked";
+
+const PRIVACY_LABELS: Record<PrivacyState, string> = {
+  clear: "无敏感",
+  redacted: "已脱敏",
+  privacy_uncertain: "待复审",
+  blocked: "已阻断",
+};
+
+const PRIVACY_BADGE_CLASS: Record<PrivacyState, string> = {
+  clear: "border-emerald-800 text-emerald-300",
+  redacted: "border-blue-700 text-blue-300",
+  privacy_uncertain: "border-amber-700 text-amber-300",
+  blocked: "border-red-900 text-red-400",
+};
 
 interface KnowledgeEntry {
   id: string;
@@ -37,6 +52,9 @@ interface KnowledgeEntry {
   vaultExportedVersion: number | null;
   vaultExportedAt: string | null;
   vaultConflict: boolean;
+  privacy: PrivacyState;
+  privacyReasons: string[];
+  privacyReviewedAt: string | null;
 }
 
 export default function KnowledgePage(): ReactElement {
@@ -171,6 +189,37 @@ export default function KnowledgePage(): ReactElement {
       setError("导出失败：网络错误");
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  // Phase D：隐私复审（PATCH privacy）。privacy_uncertain/blocked 复审为
+  // redacted/clear 后才允许导出。
+  const handlePrivacyReview = async (privacy: PrivacyState): Promise<void> => {
+    if (!selected) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/knowledge/${encodeURIComponent(selected.id)}`, {
+        method: "PATCH",
+        headers: withSessionHeaders(sessionId, { "Content-Type": "application/json" }),
+        body: JSON.stringify({ sessionId, version: selected.version, privacy }),
+      });
+      if (response.status === 409) {
+        setConflict(true);
+        return;
+      }
+      if (!response.ok) {
+        setError(`隐私复审失败（HTTP ${response.status}）`);
+        return;
+      }
+      const payload: unknown = await response.json();
+      const entry = typeof payload === "object" && payload !== null ? (payload as { entry?: KnowledgeEntry }).entry : undefined;
+      if (entry) setSelected(entry);
+      void loadList();
+    } catch {
+      setError("隐私复审失败：网络错误");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -357,6 +406,17 @@ export default function KnowledgePage(): ReactElement {
                   <p className="mt-0.5 text-[11px] text-neutral-500">
                     版本 {selected.version} · 更新于 {new Date(selected.updatedAt).toLocaleString()} ·
                     {" "}{selected.status === "archived" ? "已归档" : "进行中"}
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-neutral-500">
+                    隐私：
+                    <span className={`rounded border px-1 py-px text-[10px] ${PRIVACY_BADGE_CLASS[selected.privacy]}`}>{PRIVACY_LABELS[selected.privacy]}</span>
+                    {selected.privacyReasons.length > 0 ? <span className="text-neutral-600">（{selected.privacyReasons.join("、")}）</span> : null}
+                    {selected.privacy !== "clear" ? (
+                      <span className="flex gap-1">
+                        <button type="button" disabled={isSaving} onClick={() => handlePrivacyReview("redacted")} className="rounded border border-blue-700 px-1.5 py-px text-[10px] text-blue-300 disabled:opacity-50">复审为已脱敏</button>
+                        <button type="button" disabled={isSaving} onClick={() => handlePrivacyReview("clear")} className="rounded border border-emerald-800 px-1.5 py-px text-[10px] text-emerald-300 disabled:opacity-50">复审为无敏感</button>
+                      </span>
+                    ) : null}
                   </p>
                   <p className="mt-0.5 text-[11px] text-neutral-500">
                     vault：{selected.vaultConflict
