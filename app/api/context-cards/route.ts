@@ -127,7 +127,7 @@ export async function POST(
     }, { status: 400 });
   }
 
-  const accessDenied = parsed.sessionId ? requireSessionAccess(request, parsed.sessionId) : null;
+  const accessDenied = requireSessionAccess(request, parsed.sessionId);
   if (accessDenied) return accessDenied as unknown as NextResponse<ContextCardResponse>;
 
   runId = parsed.runId ?? traceId;

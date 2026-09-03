@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { enforceRateLimit } from "@/lib/api-security";
 import {
   getSession,
+  searchSessions,
   toPublicSession,
   upsertSession,
   type StoredSession,
@@ -21,6 +22,10 @@ import { readSessionAccessToken } from "@/lib/session-auth";
 export const runtime = "nodejs";
 
 type SessionSummary = { id: string; title: string; createdAt: string; updatedAt: string; durationMs: number | null; inputSource: string | null; transcriptChars: number };
+
+function toSummary(session: StoredSession): SessionSummary {
+  return { id: session.id, title: session.title, createdAt: session.createdAt, updatedAt: session.updatedAt, durationMs: session.durationMs, inputSource: session.inputSource, transcriptChars: session.transcriptJson.length };
+}
 
 export async function GET(
   request: NextRequest,
@@ -42,11 +47,18 @@ export async function GET(
     return NextResponse.json({ session: toPublicSession(session) });
   }
 
-  if (!params.has("id")) {
-    return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
+  const scopedSessionId = params.get("sessionId")?.trim() || request.headers.get("x-session-id")?.trim() || "";
+  const accessDenied = requireSessionAccess(request, scopedSessionId);
+  if (accessDenied) return accessDenied;
+  const limit = Math.min(Math.max(Number(params.get("limit") ?? 20) || 20, 1), 100);
+  if (params.has("q")) {
+    const query = params.get("q")?.trim() ?? "";
+    const hit = searchSessions(query).find(({ session }) => session.id === scopedSessionId);
+    return NextResponse.json({ results: hit ? [{ session: toSummary(hit.session), score: hit.score }] : [] });
   }
-
-  return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
+  const session = getSession(scopedSessionId);
+  if (!session) return NextResponse.json({ sessions: [] });
+  return NextResponse.json({ sessions: [toSummary(session)].slice(0, limit) });
 }
 
 export async function POST(
