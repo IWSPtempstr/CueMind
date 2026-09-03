@@ -5,6 +5,9 @@ import path from "node:path";
 import { NextRequest } from "next/server";
 import { POST, GET } from "@/app/api/sessions/route";
 import { POST as realtimePost } from "@/app/api/realtime-transcribe/route";
+import { POST as summarizePost } from "@/app/api/summarize/route";
+import { POST as suggestionsPost } from "@/app/api/suggestions/route";
+import { POST as postmeetingPost } from "@/app/api/postmeeting-transcript/route";
 
 process.env.CUEMIND_DATA_DIR = mkdtempSync(path.join(tmpdir(), "cuemind-session-route-"));
 process.env.CUEMIND_SESSION_STORE = "jsonl";
@@ -75,6 +78,33 @@ async function main(): Promise<void> {
     body: realtimeBody,
   }));
   assert.equal(realtime.status, 200);
+
+  const summarizeBody = JSON.stringify({ sessionId: "session-a", earlierTranscript: "会议内容" });
+  const summarizeNoToken = await summarizePost(request("/api/summarize", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: summarizeBody,
+  }));
+  assert.equal(summarizeNoToken.status, 401);
+  const suggestionsNoToken = await suggestionsPost(request("/api/suggestions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "session-a", recentTranscript: "会议内容" }),
+  }));
+  assert.equal(suggestionsNoToken.status, 401);
+
+  const tooManyChunks = await postmeetingPost(request("/api/postmeeting-transcript", {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "session-a", transcriptChunks: Array.from({ length: 2_001 }, () => ({ text: "x" })) }),
+  }));
+  assert.equal(tooManyChunks.status, 413);
+  const tooMuchText = await postmeetingPost(request("/api/postmeeting-transcript", {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "session-a", transcriptChunks: [{ text: "x".repeat(20_000) }, { text: "y".repeat(20_000) }] }),
+  }));
+  assert.equal(tooMuchText.status, 413);
 
   console.log("session route regression passed");
 }
