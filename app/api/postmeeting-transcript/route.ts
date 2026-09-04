@@ -6,9 +6,11 @@ import { requireSessionAccess } from "@/lib/session-route";
 
 export const runtime = "nodejs";
 
-// Security plan §6.5: the effective transcript ceiling is 32k chars; 2MB of
-// raw body is a generous envelope (chunks carry timestamps etc.) — reject
-// anything larger with 413 before parsing.
+// Security plan §6.5: the effective transcript ceiling is 160k chars (~1 hour
+// of Chinese meeting audio); 2MB of raw body is a generous envelope (chunks
+// carry timestamps etc.) — reject anything larger with 413 before parsing.
+// Oversized-but-valid transcripts are chunk-polished server-side rather than
+// rejected, so long meetings still get a usable report.
 const POSTMEETING_BODY_MAX_BYTES = 2 * 1024 * 1024;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return typeof text === "string" && text.trim() ? [{ text: text.slice(0, 20_000) }] : [];
   });
   if (chunks.length === 0) return NextResponse.json({ error: "transcriptChunks must contain text" }, { status: 400 });
-  if (chunks.reduce((total, chunk) => total + chunk.text.length, 0) > 32_000) return NextResponse.json({ error: "Transcript is too large" }, { status: 413 });
+  if (chunks.reduce((total, chunk) => total + chunk.text.length, 0) > 160_000) return NextResponse.json({ error: "Transcript is too large" }, { status: 413 });
   const artifact = await createPostmeetingTranscript(chunks, { provider: record.provider });
   return NextResponse.json(artifact);
 }

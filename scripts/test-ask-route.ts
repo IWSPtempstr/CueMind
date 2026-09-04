@@ -117,6 +117,8 @@ function restoreFetch(): void {
 interface ProviderScript {
   /** 关键词提取响应（非流式调用）。 */
   keywords: string[];
+  /** 模型对泛化问题的搜索判定（缺省 → needsSearch=true，保持既有搜索行为）。 */
+  needsSearch?: boolean;
   /** 生成响应原文（流式调用拼回的内容；合法/非法 schema 都从这里来）。 */
   generationContent: string;
   /** Optional HTTP failure for the streamed generation call. */
@@ -154,7 +156,7 @@ function startMockProvider(script: ProviderScript): Promise<{ server: Server; ba
           return;
         }
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ keywords: script.keywords }) } }] }));
+        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ needsSearch: script.needsSearch ?? true, keywords: script.keywords }) } }] }));
       });
     });
     server.listen(0, "127.0.0.1", () => {
@@ -387,13 +389,54 @@ async function testTermHintUsedAsFallbackKeyword(baseUrl: string): Promise<void>
   assert.equal(keywords[0], "Speculative Decoding", "关键词提取为空时，termHint 应作为兜底搜索关键词");
 }
 
-async function testKeywordFailureDoesNotSearch(baseUrl: string): Promise<void> {
+// j) 关键词提取失败（无 termHint）：转写非空 → 泛化兜底直接基于转写回答（零搜索、
+//    无来源）；完全无转写上下文 → degraded（无任何依据，拒绝编造）。
+async function testKeywordFailureFallsBackToTranscript(baseUrl: string): Promise<void> {
   const before = searchLayerCalls.length;
   const response = await POST(makeRequest(askBody(baseUrl, { question: "无法提取关键词的问题" })));
   const events = await collectEvents(response);
+  const searching = findEvents(events, "searching");
+  assert.equal(searching[0]?.searched, false, "提取失败 + 无术语提示 → 不发起搜索");
   const done = findEvents(events, "done");
-  assert.equal(done[0].finalState, "degraded");
+  assert.equal(done[0].finalState, "answered", "转写有内容时应基于转写回答");
+  assert.equal(done[0].searched, false, "done 事件应标记未搜索");
+  assert.deepEqual(done[0].sources, [], "未搜索时不得携带来源");
   assert.equal(searchLayerCalls.length, before, "关键词提取失败时不得访问搜索层");
+}
+
+async function testNoTranscriptContextDegrades(baseUrl: string): Promise<void> {
+  const response = await POST(makeRequest(askBody(baseUrl, {
+    question: "无法提取关键词的问题",
+    recentTranscript: "",
+  })));
+  const events = await collectEvents(response);
+  const done = findEvents(events, "done");
+  assert.equal(done[0].finalState, "degraded", "无关键词且无转写上下文 → degraded");
+}
+
+// k) 泛化问题（模型判定 needsSearch=false 且无 termHint）→ 跳过联网搜索，
+//    直接基于转写生成；回答不携带任何来源（杜绝无关来源引用幻觉）。
+async function testGenericQuestionSkipsSearch(baseUrl: string): Promise<void> {
+  const before = searchLayerCalls.length;
+  const response = await POST(makeRequest(askBody(baseUrl, {
+    question: "这次会议的核心内容是什么？",
+    recentTranscript: "我们讨论了 KV cache 优化，把通过率从 29% 提到 80%。",
+  })));
+  const events = await collectEvents(response);
+
+  const searching = findEvents(events, "searching");
+  assert.equal(searching.length, 1, "应有 searching 判定事件");
+  assert.equal(searching[0].searched, false, "泛化问题不应发起联网搜索");
+
+  const chunks = findEvents(events, "answer_chunk");
+  assert.ok(chunks.length > 0, "泛化问题仍应基于转写流式回答");
+  assert.equal(searchLayerCalls.length, before, "泛化问题不得访问搜索层");
+  assert.ok(!answerFromChunks(events).includes("[1]"), "未搜索时回答中的引用标记应被剥离");
+
+  const done = findEvents(events, "done");
+  assert.equal(done[0].finalState, "answered");
+  assert.equal(done[0].searched, false, "done 事件应标记未搜索");
+  assert.deepEqual(done[0].sources, [], "未搜索时不得携带（编造）来源");
 }
 
 // --- f) askPrompt 旧键迁移（localStorage 可注入 shim，无 jsdom 依赖）---
@@ -762,19 +805,50 @@ async function main(): Promise<void> {
       console.log("i) termHint 关键词兜底（关键词提取为空 → termHint 兜底）通过");
     }
 
-    // j) 关键词提取失败 → 本地降级，零搜索外发
+    // j) 关键词提取失败 → 转写兜底回答（零搜索）；j2) 无转写上下文 → degraded
     {
       askCacheClear();
       tavilyResultCount = 2;
       searchLayerCalls.length = 0;
-      const script: ProviderScript = { keywords: [], generationContent: "不得调用生成" };
+      const script: ProviderScript = {
+        keywords: [], // 模拟关键词提取失败
+        generationContent: JSON.stringify({
+          answer: "会议主要讨论了推理优化相关的内容。",
+          sources: [],
+          confidence: "low",
+        }),
+      };
       const { server, baseUrl } = await startMockProvider(script);
       try {
-        await testKeywordFailureDoesNotSearch(baseUrl);
+        await testKeywordFailureFallsBackToTranscript(baseUrl);
+        await testNoTranscriptContextDegrades(baseUrl);
       } finally {
         await stopMockServer(server);
       }
-      console.log("j) 关键词提取失败 → degraded + 零搜索通过");
+      console.log("j) 关键词提取失败 → 转写兜底 answered（零搜索）/ 无上下文 degraded 通过");
+    }
+
+    // k) 泛化问题（needsSearch=false + 无 termHint）→ 跳过搜索、无来源 answered
+    {
+      askCacheClear();
+      tavilyResultCount = 2;
+      searchLayerCalls.length = 0;
+      const script: ProviderScript = {
+        needsSearch: false,
+        keywords: ["会议核心", "关键结论"],
+        generationContent: JSON.stringify({
+          answer: "会议核心是 KV cache 优化，通过率从 29% 提到 80%。[1]",
+          sources: [],
+          confidence: "high",
+        }),
+      };
+      const { server, baseUrl } = await startMockProvider(script);
+      try {
+        await testGenericQuestionSkipsSearch(baseUrl);
+      } finally {
+        await stopMockServer(server);
+      }
+      console.log("k) 泛化问题（needsSearch=false）→ 跳过搜索、无来源 answered 通过");
     }
 
     // f) askPrompt 旧键迁移（纯 localStorage shim）：用户自定义旧值 → 保留

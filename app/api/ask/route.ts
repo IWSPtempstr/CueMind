@@ -286,14 +286,18 @@ export async function POST(
         // Failure degrades to termHint, then to the question prefix.
         const keywordStartedAt = performance.now();
         let keywords: string[] = [];
+        // 默认发起搜索（向后兼容）；仅当模型明确判定泛化问题且无术语提示时跳过。
+        let needsSearch = true;
+        // 关键词提取失败且无术语提示时的泛化兜底：转写有内容则直接基于转写回答。
+        let genericFallback = false;
         emitPipelineEvent("keyword_start", { status: "started" });
         try {
-          const extracted = await generateLlamaCppJson<{ keywords?: unknown }>({
+          const extracted = await generateLlamaCppJson<{ keywords?: unknown; needsSearch?: unknown }>({
             baseUrl: provider.baseUrl,
             model: provider.model,
             apiKey: provider.apiKey,
             system:
-              '从用户问题中提取最适合联网搜索的关键词。只返回 JSON：{"keywords":["..."]}。最多 3 个，保留术语原文，不要解释。',
+              '判断该问题是否需要联网搜索：只有答案依赖外部事实/术语时才需要（如“什么是KV Cache”“llama.cpp怎么装”）；只询问会议内容、追问转写本身（如“讲了什么”“结论是什么”）则不需要。需要搜索时提取最适合搜索的关键词。只返回 JSON：{"needsSearch": true 或 false, "keywords":["..."]}。最多 3 个关键词，保留术语原文，不要解释。',
             prompt: termHint
               ? `术语提示：${termHint}\n问题：${question}`
               : `问题：${question}`,
@@ -301,15 +305,24 @@ export async function POST(
             maxTokens: 96,
           });
           keywords = normalizeKeywords(extracted.keywords);
+          // needsSearch 缺失/非布尔时默认 true（保持既有搜索行为，向后兼容）。
+          needsSearch = extracted.needsSearch === false ? false : true;
         } catch {
           // Fall through to the deterministic fallback below.
         }
         if (keywords.length === 0 && termHint === "") {
           keywordMs = Math.round(performance.now() - keywordStartedAt);
-          emit({ event: "degraded", message: "未提取到可搜索关键词，未发起联网搜索。", keywords: [] });
-          done({ sources: [], failure: { reason: "keyword extraction failed" } }, "degraded");
-          finish();
-          return;
+          // 关键词提取失败：转写有内容时按泛化问题直接基于转写回答（fail-open 到本地
+          // 证据），避免本地模型偶发提取超时时用户连会议内容都问不了；完全无转写
+          // 上下文时才拒绝并返回 degraded。
+          if (recentTranscript.trim() !== "") {
+            genericFallback = true;
+          } else {
+            emit({ event: "degraded", message: "未提取到可搜索关键词，未发起联网搜索。", keywords: [] });
+            done({ sources: [], failure: { reason: "keyword extraction failed" } }, "degraded");
+            finish();
+            return;
+          }
         }
         if (keywords.length === 0) keywords = [termHint];
         keywordMs = Math.round(performance.now() - keywordStartedAt);
@@ -318,63 +331,72 @@ export async function POST(
         // most salient; joined multi-keyword queries degrade vertical recall.
         const searchKeyword = keywords[0];
 
-        emit({ event: "searching", keywords });
+        // 泛化问题（needsSearch=false 或关键词提取失败、无术语提示）直接基于转写
+        // 回答，不发起联网搜索——避免"会议讲了什么"这类问题被拆成无关词检索导致
+        // 引用幻觉。
+        const skipSearch = genericFallback || (needsSearch === false && termHint === "");
+        emit({ event: "searching", keywords, searched: !skipSearch });
 
         // [2] Search: term-level cache first (shared with the card pipeline's
         // one-way writes), then the vertical short-circuit + generic fallback.
         // Only the keyword ever leaves the machine.
         let sources: SearchResult[];
-        const effectiveCacheKey = cacheKey || searchKeyword;
-        const cachedSources = cacheMode === "cold" ? null : askCacheGet(effectiveCacheKey);
-        if (cachedSources !== null) {
-          cacheHit = true;
-          sources = cachedSources.results;
+        if (skipSearch) {
+          searchMs = 0;
+          sources = [];
         } else {
-          const searchStartedAt = performance.now();
-          let searchOutcome: SearchKeywordOutcome;
-          let searchAttempts = 0;
-          try {
-            searchOutcome = await searchAskSources({
-              keyword: searchKeyword,
-              tavilyApiKey:
-                process.env.TAVILY_API_KEY?.trim() || browserSearchApiKey,
-              enableAgentReachFallback,
-              onAttempt: (attempt) => {
-                searchAttempts = attempt;
-              },
-            });
-          } catch (caught) {
-            searchMs = Math.round(performance.now() - searchStartedAt);
-            // Fail-closed: no usable sources → no generation, never invent.
-            emit({
-              event: "degraded",
-              message: "没找到可靠来源，无法给出有依据的回答。",
-              keywords,
-              attempts: {
-                vertical: ["arxiv", "hackernews", "github", "stackoverflow"],
-                genericFallback: enableAgentReachFallback
-                  ? "tavily → agent-reach"
-                  : "tavily",
-                tries: searchAttempts,
-                reason:
-                  caught instanceof InsufficientSearchSourcesError
-                    ? "usable sources < 2"
-                    : caught instanceof Error
-                      ? caught.message
-                      : "search failed",
-              },
-            });
-            done({ sources: [] }, "degraded");
-            finish();
-            return;
-          }
-          searchMs = Math.round(performance.now() - searchStartedAt);
-          sources = searchOutcome.results;
-          if (cacheMode !== "cold") {
+          const effectiveCacheKey = cacheKey || searchKeyword;
+          const cachedSources = cacheMode === "cold" ? null : askCacheGet(effectiveCacheKey);
+          if (cachedSources !== null) {
+            cacheHit = true;
+            sources = cachedSources.results;
+          } else {
+            const searchStartedAt = performance.now();
+            let searchOutcome: SearchKeywordOutcome;
+            let searchAttempts = 0;
             try {
-              askCacheSet(effectiveCacheKey, sources);
-            } catch {
-              // Cache write failure must never affect the ask response.
+              searchOutcome = await searchAskSources({
+                keyword: searchKeyword,
+                tavilyApiKey:
+                  process.env.TAVILY_API_KEY?.trim() || browserSearchApiKey,
+                enableAgentReachFallback,
+                onAttempt: (attempt) => {
+                  searchAttempts = attempt;
+                },
+              });
+            } catch (caught) {
+              searchMs = Math.round(performance.now() - searchStartedAt);
+              // Fail-closed: no usable sources → no generation, never invent.
+              emit({
+                event: "degraded",
+                message: "没找到可靠来源，无法给出有依据的回答。",
+                keywords,
+                attempts: {
+                  vertical: ["arxiv", "hackernews", "github", "stackoverflow"],
+                  genericFallback: enableAgentReachFallback
+                    ? "tavily → agent-reach"
+                    : "tavily",
+                  tries: searchAttempts,
+                  reason:
+                    caught instanceof InsufficientSearchSourcesError
+                      ? "usable sources < 2"
+                      : caught instanceof Error
+                        ? caught.message
+                        : "search failed",
+                },
+              });
+              done({ sources: [] }, "degraded");
+              finish();
+              return;
+            }
+            searchMs = Math.round(performance.now() - searchStartedAt);
+            sources = searchOutcome.results;
+            if (cacheMode !== "cold") {
+              try {
+                askCacheSet(effectiveCacheKey, sources);
+              } catch {
+                // Cache write failure must never affect the ask response.
+              }
             }
           }
         }
@@ -419,7 +441,7 @@ export async function POST(
         clearIdleTimer();
         generationMs = Math.round(performance.now() - generationStartedAt);
 
-        const validated = validateAskAnswer(parseJsonLoose(rawAnswerJson));
+        const validated = validateAskAnswer(parseJsonLoose(rawAnswerJson), { requireSources: !skipSearch });
         if (validated === null) {
           // Fail-closed: schema violation → terminal state, no fabricated answer.
           const schemaDiagnostic = diagnoseAskSchema(rawAnswerJson);
@@ -446,6 +468,10 @@ export async function POST(
           return;
         }
 
+        // 未发起搜索（泛化问题）时模型不可能有可信引用：除丢弃 sources 外，还要剥离
+        // 回答中残留的 [1] 引用标记，避免"无来源却显示引文"的引用幻觉。
+        if (skipSearch) validated.answer = stripCitationMarkers(validated.answer);
+
         // Replay the validated answer as streaming delta frames using the
         // existing OpenAI-compatible chunk shape.
         for (
@@ -471,9 +497,11 @@ export async function POST(
 
         done(
           {
-            sources: mergeCitedWithSearchSources(validated.sources, sources),
+            // 未发起搜索（泛化问题）时模型不可能有可信引用：其 sources 一律丢弃。
+            sources: skipSearch ? [] : mergeCitedWithSearchSources(validated.sources, sources),
             confidence: validated.confidence,
             keywords,
+            searched: !skipSearch,
           },
           "answered",
         );
@@ -745,7 +773,20 @@ function diagnoseAskSchema(raw: string): string {
   return "sources_invalid";
 }
 
-function validateAskAnswer(value: unknown): ValidatedAskAnswer | null {
+/** 剥离未搜索回答中残留的引用标记（[1]、[1][2]、[1, 2]），并规整多余空白。 */
+function stripCitationMarkers(answer: string): string {
+  return answer
+    .replace(/\[\d+(?:[\s,，]\s*\d+)*\]/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function validateAskAnswer(
+  value: unknown,
+  options: { requireSources?: boolean } = {},
+): ValidatedAskAnswer | null {
+  const requireSources = options.requireSources !== false;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }
@@ -753,6 +794,12 @@ function validateAskAnswer(value: unknown): ValidatedAskAnswer | null {
 
   const answer = typeof record.answer === "string" ? record.answer.trim() : "";
   if (answer === "") return null;
+
+  // 未发起搜索（泛化问题）：不需要引用，模型即使输出 sources 也视为不可信，
+  // 一律以空数组呈现（调用方据此丢弃）。
+  if (!requireSources) {
+    return { answer, sources: [], confidence: "low" };
+  }
 
   if (!Array.isArray(record.sources)) return null;
   const sources: AskCitedSource[] = [];

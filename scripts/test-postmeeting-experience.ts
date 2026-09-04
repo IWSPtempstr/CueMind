@@ -20,6 +20,16 @@ assert.equal(fallback.status, "fallback_raw");
 assert.match(fallback.text, /alice@example.com/);
 assert.equal(fallback.failureReason, "offline");
 
+// B1：超长转写应分块 polish（每块 ≤4k 字符），逐块调用后拼接；单个大块直接一次调用。
+const longChunks = Array.from({ length: 12 }, (_, index) => ({ text: `第${index}段内容`.repeat(400) }));
+const calls: string[] = [];
+const chunked = await createPostmeetingTranscript(longChunks, { polish: async (text) => { calls.push(text); return text; } });
+assert.equal(chunked.status, "polished");
+assert.ok(calls.length > 1, `超长转写应分块 polish，实际 ${calls.length} 块`);
+assert.ok(calls.every((text) => text.length <= 4000), "每块字符数应 ≤ 4000");
+assert.equal(chunked.text, calls.join("\n"), "分块整理结果应按序拼接");
+assert.equal(chunked.rawHash.length, 64);
+
 const redacted = redactText("联系 alice@example.com，电话 13812345678。", { dictionary: { PERSON: ["张三"] } });
 assert.equal(redacted.text.includes("alice@example.com"), false);
 assert.equal(redacted.text.includes("13812345678"), false);

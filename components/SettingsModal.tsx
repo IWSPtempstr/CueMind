@@ -274,6 +274,7 @@ export default function SettingsModal({
                   浏览器转写语言
                   <select value={settings.transcriptionLanguage} onChange={(event) => updateSetting("transcriptionLanguage", event.target.value)} className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
                     <option value="auto">自动识别</option>
+                    <option value="zh">中文</option>
                     <option value="en">英文</option>
                     <option value="es">西班牙文</option>
                     <option value="fr">法文</option>
