@@ -628,8 +628,9 @@ function parseAskContext(value: unknown): { summary: AskContextSummary | null; r
     }
   }
   let summary: AskContextSummary | null = null;
-  if (record.summary !== undefined) {
-    if (typeof record.summary !== "object" || record.summary === null || Array.isArray(record.summary)) return null;
+  // summary: null（客户端无上下文摘要时发送）与 undefined 等价，均表示“无摘要”。
+  if (record.summary !== undefined && record.summary !== null) {
+    if (typeof record.summary !== "object" || Array.isArray(record.summary)) return null;
     const candidate = record.summary as Record<string, unknown>;
     if (typeof candidate.summaryVersion !== "string" || candidate.summaryVersion.length > ASK_CONTEXT_SUMMARY_VERSION_CHARS) return null;
     const validated: Record<string, unknown> = { summaryVersion: candidate.summaryVersion };

@@ -47,9 +47,10 @@ function belongs(entry: KnowledgeEntry, sessionId: string): boolean {
 // Promise<{}>）与动态 /api/knowledge/[id]（Promise<{ id: string }>）两条路径复用。
 type KnowledgeRouteContext = { params: Promise<{ id?: string }> };
 
-// 无 context（Next 运行时总是传，测试直调时可能缺）→ 从 pathname 解析 id。
+// 无 context 或无 params（Next 15 对静态 /api/knowledge 路由传 context={}，params 可能
+// 为 undefined；测试直调时甚至可能缺 context）→ 从 pathname 解析 id。
 function resolveId(context: KnowledgeRouteContext | undefined, request: Request): Promise<string> {
-  if (context) return context.params.then((params) => (params.id ?? "").trim());
+  if (context && context.params) return context.params.then((params) => (params.id ?? "").trim());
   const segments = new URL(request.url).pathname.split("/").filter(Boolean);
   const index = segments.indexOf("knowledge");
   return Promise.resolve(index >= 0 ? (segments[index + 1] ?? "").trim() : "");

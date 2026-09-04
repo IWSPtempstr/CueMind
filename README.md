@@ -36,6 +36,12 @@ CueMind 是一个本地优先的会议 AI 副驾：会议进行中，录音（�
 - **知识沉淀**：卡片一键存入本地知识库（乐观锁编辑、归档 / 恢复），`/knowledge` 页检索管理；可导出 Markdown Vault（幂等重导出，外部编辑冲突检测），并经本地只读 MCP server（stdio，14 个检索工具，无出网）暴露给 MCP 客户端
 - **隐私与安全**：知识条目隐私状态机（`clear / redacted / privacy_uncertain / blocked`），blocked 条目不出本地边界、对 MCP 不可见，导出走脱敏副本而原文不动；会话令牌鉴权、请求体上限、每路由 IP 限流、CSP 等安全响应头
 
+## 🖼️ 项目截图
+
+| 三栏工作台：实时转写 · 上下文卡片 · 会中问答 | 本地知识库管理页 |
+|---|---|
+| ![三栏工作台](docs/images/main.png) | ![知识库管理](docs/images/knowledge.png) |
+
 ## 🏗️ 技术架构
 
 系统流程：
