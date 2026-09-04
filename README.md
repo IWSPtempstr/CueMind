@@ -11,7 +11,6 @@
 [![SQLite](https://img.shields.io/badge/SQLite-WAL-003B57?style=flat&logo=sqlite&logoColor=white)](https://www.sqlite.org)
 [![whisper.cpp](https://img.shields.io/badge/whisper.cpp-local%20ASR-8A2BE2)](https://github.com/ggml-org/whisper.cpp)
 [![llama.cpp](https://img.shields.io/badge/llama.cpp-local%20LLM-F9D371)](https://github.com/ggml-org/llama.cpp)
-[![Electron](https://img.shields.io/badge/Electron-Desktop-47848F?style=flat&logo=electron&logoColor=white)](https://www.electronjs.org)
 [![MCP](https://img.shields.io/badge/MCP-read--only-7C3AED)](https://modelcontextprotocol.io)
 
 </div>
@@ -20,26 +19,22 @@
 
 ## 📖 项目简介
 
-CueMind 是一个本地优先的会议 AI 副驾：开会时把录音（或麦克风）实时转写成文字，每约 30 秒产出一批结构化现场建议；每个建议可以点开成**带来源的上下文卡片**（关键词检测 → arXiv / Hacker News / GitHub / Stack Overflow 垂直检索 → 通用 Web 兜底 → 逐候选溯源的中文解释卡）；会中可随时以转写为事实底座追问；停止会议自动生成决策 / 行动项 / 跟进清单报告。
+CueMind 是一个本地优先的会议 AI 副驾：会议进行中，录音（或上传的媒体文件）被实时转写成带时间戳的文字，并按节奏产出一批结构化的现场建议——此刻该追问什么、哪个说法需要核查、哪个新词值得展开；每条建议可以点开成**带来源的上下文卡片**（关键词检测 → arXiv / Hacker News / GitHub / Stack Overflow 垂直检索 → 通用 Web 兜底 → 逐候选溯源的中文解释卡）；会中可随时以转写为事实底座流式追问；散会后自动生成决策 / 行动项 / 跟进清单报告。
 
-沉淀不止于此。会中卡片可一键存入本地知识库（SQLite + JSONL fallback 双后端），在 `/knowledge` 三栏管理页检索、编辑、归档；知识条目可导出为 Markdown Vault（frontmatter 元数据 + 外部编辑冲突检测），并通过一个本地只读 MCP server 暴露给任意 MCP 客户端做知识检索。
+项目重点不在于简单调用模型，而是围绕几件具体的事：浏览器 MediaRecorder 分片的容器头陷阱与重叠录制、转写失败的分片级恢复、上下文窗口策略（早段摘要 vs 近段原文的取舍）、以及每一次出站检索的可溯源。这些环节都有流水事件（pipeline-events）、回放（replay）与固定评测夹具支撑，行为可复现。
 
-项目重点不在于简单调用模型，而是围绕浏览器 MediaRecorder 分片的容器头问题、转写失败恢复、上下文窗口策略（摘要 vs 截断）、隐私分级与出站闸门，搭了一条可观察、可回放的处理链路（pipeline-events 流水 + replay 回放）。
-
-**本地优先**：音频、转写、推理全部留在本机（whisper.cpp + llama.cpp）；联网检索是唯一的出站调用，且每个回答带来源可回溯；远端 OpenAI-compatible API 是显式配置的备选项，没有静默云默认。数据目录由 `CUEMIND_DATA_DIR` 决定，转写、卡片与原始音频从不外传。
+**本地优先**：音频、转写、推理全部留在本机（whisper.cpp + llama.cpp）；联网检索是唯一的出站调用，且每个回答带来源可回溯；远端 OpenAI-compatible API 是显式配置的备选项，没有静默云默认。数据统一落 `CUEMIND_DATA_DIR`（SQLite WAL 主后端 + JSONL fallback）。会话与卡片可沉淀入本地知识库并导出 Markdown Vault（外部编辑冲突检测），经一个本地只读 MCP server 供任意 MCP 客户端检索。
 
 ## ✨ 核心功能
 
-- **实时转写**：双 MediaRecorder 重叠录制（~30s 自包含分片）→ whisper.cpp 本地转写；失败分片指数退避重试、静默跳过空分片、可暂停续录，电平表实时可见
+- **实时转写**：双 MediaRecorder 重叠录制（~30s 自包含分片）或上传媒体文件 → ffmpeg 转码 16k 单声道 → whisper.cpp 按 60s 窗口转写；失败分片指数退避重试、静默跳过空分片、电平表实时可见
 - **现场建议**：早段摘要 + 近段窗口双层上下文，五种建议标签（question / talking_point / answer / fact_check / clarify），JSON Schema 约束输出 + 上一批建议做防重复回路；卡片可置顶、忽略、评分
 - **来源式上下文卡片**：关键词检测 → 垂直来源检索（arXiv / Hacker News / GitHub / Stack Overflow）→ 通用 Web 兜底 → 带来源解释卡，逐候选 trace，来源点击可溯
-- **会后报告与追问**：决策 / 行动项 / 跟进清单三段式报告，转写搜索与时间戳让长会可扫读；SSE 流式问答，转写作为独立 system 块锚定事实
-- **知识库沉淀**：卡片一键入库（最小编辑表单），bigram 检索，乐观锁并发编辑，归档 / 恢复 / 软删
-- **Vault 同步与冲突检测**：知识条目导出 Markdown（`<vaultRoot>/cuemind/knowledge/<slug>.md`），幂等重导出；检测到 CueMind 之外的文件编辑即阻断自动覆盖并标记冲突，用户显式确认才覆盖
-- **隐私状态机**：`clear / redacted / privacy_uncertain / blocked` 四态；SECRET 命中即阻断出站，`privacy_uncertain` 需人工复审，`redacted` 条目导出脱敏副本而库内原文不动；blocked 条目对 MCP 等同不存在
-- **会话隔离与安全**：会话令牌鉴权（`X-Session-Id` / `X-Session-Token`）、请求体大小上限、每路由 IP 限流、CSP 等安全响应头
-- **本地桌面模式**：Electron + C#/.NET 采集助手，WASAPI loopback + 麦克风双轨采集，解决浏览器拿不到系统音频的平台限制，实现虚拟会议两向转写
-- **只读 MCP server**：本地 stdio JSON-RPC，14 个知识 / 会话 / 卡片检索工具，无出网、无写操作、blocked 不可见
+- **会中追问**：SSE 流式问答，转写作为独立 system 块锚定事实，回答短促直接；支持中途停止、失败重试与追问 chips
+- **会后报告**：决策 / 行动项 / 跟进清单三段式报告；转写搜索与时间戳让长会可扫读
+- **会话与回放**：最近会话快照自动保存、刷新可恢复；流水事件落库，处理链路可回放排查
+- **知识沉淀**：卡片一键存入本地知识库（乐观锁编辑、归档 / 恢复），`/knowledge` 页检索管理；可导出 Markdown Vault（幂等重导出，外部编辑冲突检测），并经本地只读 MCP server（stdio，14 个检索工具，无出网）暴露给 MCP 客户端
+- **隐私与安全**：知识条目隐私状态机（`clear / redacted / privacy_uncertain / blocked`），blocked 条目不出本地边界、对 MCP 不可见，导出走脱敏副本而原文不动；会话令牌鉴权、请求体上限、每路由 IP 限流、CSP 等安全响应头
 
 ## 🏗️ 技术架构
 
@@ -91,10 +86,9 @@ sequenceDiagram
 | 数据存储 | better-sqlite3（WAL）+ JSONL fallback：会话、候选、询问、知识、流水事件 |
 | 检索 | 关键词 bigram 检索、arXiv / Hacker News / GitHub / Stack Overflow 垂直来源 + 通用 Web |
 | 隐私与安全 | 隐私状态机 + 脱敏副本导出、会话令牌鉴权、每路由限流、CSP 响应头 |
-| 桌面 | Electron + C#/.NET（NAudio，WASAPI loopback 双轨采集）、electron-builder（NSIS） |
 | MCP | `@modelcontextprotocol/sdk`（本地 stdio 只读 server） |
 | 部署 | Docker（模型目录只读挂载）、Vercel |
-| 语言 | TypeScript 5、C# |
+| 语言 | TypeScript 5 |
 
 ## 🚀 快速开始
 
@@ -148,22 +142,13 @@ npm run dev
 
 生产构建注意：`npm run build` 前必须停掉 `:3000` dev server——turbopack dev 与 next build 共写 `.next` 目录会导致产物损坏。
 
-### 5. 桌面模式（可选，Windows 10/11 x64）
-
-```bash
-npm run helper:build   # 编译 C#/.NET 采集助手（需 .NET 8 SDK）
-npm run desktop:build  # Next 构建 + Electron 打包 → NSIS 安装包
-```
-
-开发调试用 `npm run desktop:dev`。桌面模式由 Windows 助手实现系统音频（WASAPI loopback）+ 麦克风双轨采集，补齐浏览器模式下虚拟会议只能听到本地一侧的平台限制。
-
-### 6. Docker（可选）
+### 5. Docker（可选）
 
 ```bash
 docker compose up -d   # :3000，模型目录挂载 ./models 只读 /models
 ```
 
-### 7. 只读 MCP server（可选）
+### 6. 只读 MCP server（可选）
 
 ```bash
 cd mcp-server && npm install && npm run build
@@ -185,8 +170,6 @@ CueMind/
 ├── lib/                    # 业务核心：存储（SQLite+JSONL）、检索、隐私状态机、
 │                           # vault 同步、会话鉴权、redaction、telemetry
 ├── mcp-server/             # 本地只读 stdio MCP server（14 个检索工具）
-├── native/CueMind.Audio/   # C#/.NET Windows 采集助手（WASAPI loopback 双轨）
-├── desktop/                # Electron 主进程与打包脚本
 ├── docs/                   # 设计文档、部署指南与实施计划
 ├── scripts/                # 回归测试脚本（tsx 直跑路由 handler）
 ├── fixtures/               # 固定评测夹具（检索可复现）
