@@ -1,160 +1,195 @@
-# CueMind Live Suggestions
+<div align="center">
 
-## What This Is
+# CueMind
 
-CueMind is a **meeting copilot**: three columns, one conversation, and a stubborn belief that the best nudge is the one that arrives *while you’re still in the sentence*, not five minutes later.
+**会中予言，会后成识** — 本地优先的会议 AI 副驾
 
-The product bet behind CueMind is simple: during a live call, people do not need more noise—they need the *right* suggestion at the *right* moment. This repo delivers live transcription on a configurable cadence, contextual suggestion batches, streaming chat grounded in the same transcript, runtime controls, resumable sessions, and friendly JSON or Markdown exports.
+[![Next.js](https://img.shields.io/badge/Next.js-15-000000?style=flat&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=white)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![SQLite](https://img.shields.io/badge/SQLite-WAL-003B57?style=flat&logo=sqlite&logoColor=white)](https://www.sqlite.org)
+[![whisper.cpp](https://img.shields.io/badge/whisper.cpp-local%20ASR-8A2BE2)](https://github.com/ggml-org/whisper.cpp)
+[![llama.cpp](https://img.shields.io/badge/llama.cpp-local%20LLM-F9D371)](https://github.com/ggml-org/llama.cpp)
+[![Electron](https://img.shields.io/badge/Electron-Desktop-47848F?style=flat&logo=electron&logoColor=white)](https://www.electronjs.org)
+[![MCP](https://img.shields.io/badge/MCP-read--only-7C3AED)](https://modelcontextprotocol.io)
 
-Search evaluation is reproducible through the fixed fixtures and scripts under
-`fixtures/` and `scripts/`. The knowledge/vector retrieval path has been removed;
-its historical evaluation reports remain under `reports/`, and the web-search path
-stays separate from knowledge retrieval.
-
----
-
-## Getting Started
-
-**Live demo:** https://cuemind-live-suggestions-jet.vercel.app/
-
-You need **Node 18+**, a local **llama.cpp** server (`llama-server`, OpenAI-compatible) and a local **whisper.cpp** build (`whisper-cli`). This is a local-first setup: audio, transcription, and card generation stay on your machine; web search is the only outbound call (an explicit, sourced enhancement). A remote OpenAI-compatible API is available as an explicitly configured alternative — there is no silent cloud default and no API key required for local use.
-1. Clone the repo and install dependencies: `npm install`
-2. Start your local `llama-server` (see `docs/deployment/qwen3-4b-llama-cpp.md`)
-3. Start the app: `npm run dev`
-4. Upload a meeting recording (**Upload**) or click the mic and start talking
-5. Transcript chunks and live suggestions refresh automatically every ~30s
-6. Click any suggestion card to open it in chat (instant preview + streamed answer)
-7. Export the full session as JSON for machines or Markdown for humans
+</div>
 
 ---
 
-## Security upgrades: the bouncer got a clipboard 🛡️
+## 📖 项目简介
 
-The API no longer trusts a browser merely because it asked nicely. Chat context has a hard **32,000-character server ceiling**, every editable context setting is bounded, and large audio is rejected before it is parsed. Uploaded media must carry a real container header (WebM/WAV) and is transcoded to 16k mono WAV server-side before the local whisper.cpp pass.
+CueMind 是一个本地优先的会议 AI 副驾：开会时把录音（或麦克风）实时转写成文字，每约 30 秒产出一批结构化现场建议；每个建议可以点开成**带来源的上下文卡片**（关键词检测 → arXiv / Hacker News / GitHub / Stack Overflow 垂直检索 → 通用 Web 兜底 → 逐候选溯源的中文解释卡）；会中可随时以转写为事实底座追问；停止会议自动生成决策 / 行动项 / 跟进清单报告。
 
-Each API route now has a small per-IP burst limiter. It is a useful first fence for a single function instance; a large multi-region deployment should add Vercel Firewall or a shared limiter too. Responses also ship with CSP, clickjacking, MIME-sniffing, referrer, and microphone-permission headers.
+沉淀不止于此。会中卡片可一键存入本地知识库（SQLite + JSONL fallback 双后端），在 `/knowledge` 三栏管理页检索、编辑、归档；知识条目可导出为 Markdown Vault（frontmatter 元数据 + 外部编辑冲突检测），并通过一个本地只读 MCP server 暴露给任意 MCP 客户端做知识检索。
 
-The Groq-era key machinery has been retired with the move to local llama.cpp; the same one-place storage discipline now applies to the optional remote-API and search keys (browser, tab-session, or memory-only).
+项目重点不在于简单调用模型，而是围绕浏览器 MediaRecorder 分片的容器头问题、转写失败恢复、上下文窗口策略（摘要 vs 截断）、隐私分级与出站闸门，搭了一条可观察、可回放的处理链路（pipeline-events 流水 + replay 回放）。
 
-## Feature & UX upgrades: fewer “wait, did it hear that?” moments ✨
+**本地优先**：音频、转写、推理全部留在本机（whisper.cpp + llama.cpp）；联网检索是唯一的出站调用，且每个回答带来源可回溯；远端 OpenAI-compatible API 是显式配置的备选项，没有静默云默认。数据目录由 `CUEMIND_DATA_DIR` 决定，转写、卡片与原始音频从不外传。
 
-- Failed transcription chunks stay in a retry queue with exponential backoff instead of disappearing into the void. Overlapping recorders close the old stop/start gap, a live level meter shows the mic is listening, silence skips unnecessary calls, and recording can pause for coffee breaks.
-- The suggestion countdown now follows the actual recording timer. Cadence and transcription language are configurable, batches have timestamps, and cards can be pinned, dismissed, rated, or copied. Dismissed ideas feed the anti-repeat context so they are less likely to boomerang back.
-- Stopping a meeting creates a compact decisions/action-items/follow-ups report. Transcript search and timestamps make long calls skimmable, while copy buttons cover the transcript, report, suggestions, and chat.
-- Chat can be stopped mid-stream, retried after failure, and continued with handy follow-up chips. Markdown links open safely in a new tab.
-- Sessions autosave locally, the last one can be resumed after refresh, and a small session picker keeps recent meetings within reach. Exports now come in JSON and clean Markdown.
+## ✨ 核心功能
 
-The fun part is that none of these features need a database: the browser keeps a short local shelf of recent sessions, while the live model traffic still flows through the same narrow API routes.
+- **实时转写**：双 MediaRecorder 重叠录制（~30s 自包含分片）→ whisper.cpp 本地转写；失败分片指数退避重试、静默跳过空分片、可暂停续录，电平表实时可见
+- **现场建议**：早段摘要 + 近段窗口双层上下文，五种建议标签（question / talking_point / answer / fact_check / clarify），JSON Schema 约束输出 + 上一批建议做防重复回路；卡片可置顶、忽略、评分
+- **来源式上下文卡片**：关键词检测 → 垂直来源检索（arXiv / Hacker News / GitHub / Stack Overflow）→ 通用 Web 兜底 → 带来源解释卡，逐候选 trace，来源点击可溯
+- **会后报告与追问**：决策 / 行动项 / 跟进清单三段式报告，转写搜索与时间戳让长会可扫读；SSE 流式问答，转写作为独立 system 块锚定事实
+- **知识库沉淀**：卡片一键入库（最小编辑表单），bigram 检索，乐观锁并发编辑，归档 / 恢复 / 软删
+- **Vault 同步与冲突检测**：知识条目导出 Markdown（`<vaultRoot>/cuemind/knowledge/<slug>.md`），幂等重导出；检测到 CueMind 之外的文件编辑即阻断自动覆盖并标记冲突，用户显式确认才覆盖
+- **隐私状态机**：`clear / redacted / privacy_uncertain / blocked` 四态；SECRET 命中即阻断出站，`privacy_uncertain` 需人工复审，`redacted` 条目导出脱敏副本而库内原文不动；blocked 条目对 MCP 等同不存在
+- **会话隔离与安全**：会话令牌鉴权（`X-Session-Id` / `X-Session-Token`）、请求体大小上限、每路由 IP 限流、CSP 等安全响应头
+- **本地桌面模式**：Electron + C#/.NET 采集助手，WASAPI loopback + 麦克风双轨采集，解决浏览器拿不到系统音频的平台限制，实现虚拟会议两向转写
+- **只读 MCP server**：本地 stdio JSON-RPC，14 个知识 / 会话 / 卡片检索工具，无出网、无写操作、blocked 不可见
 
----
+## 🏗️ 技术架构
 
-## Stack & Architecture
+系统流程：
 
-**Next.js 15 (App Router)** — I chose this because route handlers are a natural place to sit between the browser and the model providers (local llama.cpp by default): the client never needs a hardcoded secret in the bundle. The App Router also keeps the UI and API colocated in a way that matches how I think about the product: pages compose panels; `/api/*` composes providers.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 用户
+    participant Web as Next.js 工作台
+    participant ASR as whisper.cpp
+    participant LLM as llama.cpp
+    participant Src as 垂直来源检索
+    participant Store as SQLite / JSONL
+    participant Vault as Markdown Vault
+    participant MCP as MCP 客户端
+    User->>Web: 上传录音 / 点击开麦
+    loop 每个分片（重叠录制 ~30s）
+        Web->>ASR: WebM/Opus 自包含分片
+        ASR-->>Web: 文本分片（领域词汇偏置）
+        alt 分片转写失败
+            Web->>Web: 指数退避入重试队列
+        end
+    end
+    loop 每 ~30s 建议刷新
+        Web->>LLM: 早段摘要 + 近段窗口 + 防重复上下文
+        LLM-->>Web: 结构化建议批次（Schema 约束）
+    end
+    Web->>Src: 关键词检索（arXiv / HN / GitHub / SO / Web）
+    Src-->>Web: 来源片段（逐候选 trace）
+    Web->>LLM: Context Card 生成（带来源）
+    User->>Web: 提问 / 点击建议卡
+    Web->>LLM: 转写为事实底座的流式回答（SSE）
+    Web->>Store: 会话 / 卡片 / 询问 / 流水落库
+    User->>Web: 停止会议 → 会后报告；卡片存入知识库
+    Web->>Vault: 知识条目导出（隐私门控 / 冲突检测 / 脱敏副本）
+    MCP->>Store: 只读检索（14 个 stdio 工具，无出网）
+```
 
-**Tailwind CSS** — No component library. I wanted speed and a dark, dense UI without fighting a design system I didn’t own. Tailwind let me iterate on spacing and borders until the three columns *felt* like a control room, not a slide deck.
+存储契约：会话快照、候选卡片、询问记录、知识条目与流水事件统一落 `CUEMIND_DATA_DIR`；SQLite（better-sqlite3 + WAL）为主后端，JSONL 为显式 fallback（`CUEMIND_SESSION_STORE` / `CUEMIND_KNOWLEDGE_STORE`），两套后端共享同一接口与语义。检索是确定性关键词检索（bigram 分词），不依赖向量库与 Embedding。
 
-**No cloud AI, no auth** — Live state stays in React and recent session snapshots autosave to browser storage; post-meeting follow-up chat persists to server-side SQLite (better-sqlite3, WAL). A refresh offers to resume the last meeting.
+## 🛠️ 技术栈
 
-**Local-first model providers** — The architecture lines up like this:
+| 类别 | 技术 |
+|---|---|
+| 应用框架 | Next.js 15（App Router，Route Handlers 即 API 层）、React 19 |
+| UI | Tailwind CSS 4、三栏工作台（转写 / 建议 / 对话） |
+| 本地推理 | whisper.cpp（`whisper-cli` 子进程，ASR）、llama.cpp / `llama-server`（LLM，OpenAI-compatible） |
+| 数据存储 | better-sqlite3（WAL）+ JSONL fallback：会话、候选、询问、知识、流水事件 |
+| 检索 | 关键词 bigram 检索、arXiv / Hacker News / GitHub / Stack Overflow 垂直来源 + 通用 Web |
+| 隐私与安全 | 隐私状态机 + 脱敏副本导出、会话令牌鉴权、每路由限流、CSP 响应头 |
+| 桌面 | Electron + C#/.NET（NAudio，WASAPI loopback 双轨采集）、electron-builder（NSIS） |
+| MCP | `@modelcontextprotocol/sdk`（本地 stdio 只读 server） |
+| 部署 | Docker（模型目录只读挂载）、Vercel |
+| 语言 | TypeScript 5、C# |
 
-1. **whisper.cpp** (local subprocess) for chunked speech-to-text — mic segments and uploaded media alike, with a domain-glossary prompt bias.
-2. **llama.cpp** (`llama-server`, OpenAI-compatible) for **summarization + live suggestions + session topic titles** — a small summarize hop, then structured suggestion batches in the middle column.
-3. **llama.cpp** again for **chat** and **context cards** — sourced Chinese explanation cards are the product core: keyword detection → vertical-source search (arXiv / Hacker News / GitHub / Stack Overflow) → generic web search fallback → card generation, all traced per candidate.
+## 🚀 快速开始
 
-A remote OpenAI-compatible API is an explicitly configured alternative provider; Groq has been fully removed. The Milvus/vector-retrieval path has been deleted — retrieval is deterministic keyword search, not embeddings.
+### 1. 准备环境
 
----
+- Node 18.18+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp)（`llama-server`，OpenAI-compatible）
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（`whisper-cli`）+ 一个 GGML 模型
+- FFmpeg（在 PATH 中，或用 `CUEMIND_FFMPEG_PATH` 指定）
 
-## How the Transcription Works
+### 2. 启动本地模型服务
 
-The browser’s **MediaRecorder** runs on a configurable cycle on the same `MediaStream`. One second before recorder A ends, recorder B starts; then A finalizes a self-contained WebM/Opus blob for `POST /api/transcribe`. That small overlap preserves the seam without returning to invalid timeslice fragments.
+```bash
+# LLM：推荐 Qwen3-4B 档小模型做低延迟结构化输出（详细调参见 docs/deployment/qwen3-4b-llama-cpp.md）
+llama-server -m Qwen3-4B-Instruct-2507-Q4_K_M.gguf --port 8082 -c 4096 --flash-attn
+```
 
-**Why I walked away from timeslice.** With `start(timeslice)`, **`ondataavailable` only carries the full WebM container header in the first chunk**; later chunks are mostly codec deltas without a valid standalone header. Whisper quite reasonably **400**s those “orphan” blobs. You can try to glue the header onto every delta (I did for a while), but then Whisper happily **re-transcribes the same opening audio** on every request—duplicate transcript hell. The stop/restart pattern sidesteps both problems: each upload is a real file.
+Whisper 通过 `CUEMIND_WHISPER_PATH` / `CUEMIND_WHISPER_MODEL_PATH` 指定可执行文件与模型，由应用按分片调用，无需常驻服务。
 
-**The seam is intentionally overlapped.** Starting the next recorder before stopping the current one removes the old dead-air window. The tradeoff is roughly one second of shared audio at each boundary, which is preferable to dropping a sentence; a future native pipeline could reconcile that overlap more precisely.
+### 3. 配置环境变量
 
-**Tiny blobs still happen.** The tail of a segment can still be effectively empty. On the client I **skip the transcribe call** if the finalized blob is under **1KB**; on the server **`/api/transcribe`** still returns **`{ text: "" }` with 200** for sub-1KB uploads so Groq never sees noise. Same spirit as before, updated for “one blob per segment” instead of “every timeslice tick.”
+```bash
+export CUEMIND_DATA_DIR="$PWD/.data"                    # 数据目录（SQLite/JSONL、流水事件）
+export CUEMIND_WHISPER_PATH=/path/to/whisper-cli        # whisper.cpp 可执行文件
+export CUEMIND_WHISPER_MODEL_PATH=/path/to/ggml-model.bin
+export CUEMIND_VAULT_DIR="$PWD/vault"                   # 可选：知识 vault 导出根目录
+export LLAMA_CPP_BASE_URL=http://127.0.0.1:8082/v1      # 可选：默认即此值
+export LLAMA_CPP_MODEL=qwen3-4b-instruct
+```
 
----
+| 变量 | 用途 |
+| --- | --- |
+| `CUEMIND_DATA_DIR` | 数据目录：会话 / 卡片 / 询问 / 知识 / 流水事件，默认 `./.data` |
+| `CUEMIND_WHISPER_PATH` / `CUEMIND_WHISPER_MODEL_PATH` | whisper.cpp 可执行文件与模型路径 |
+| `CUEMIND_FFMPEG_PATH` | ffmpeg 路径（默认取 PATH 中的 `ffmpeg`） |
+| `CUEMIND_VAD_MODEL_PATH` | 可选：VAD 模型，用于静默检测 |
+| `CUEMIND_VAULT_DIR` | 知识 vault 导出根目录（Markdown + 冲突检测元数据） |
+| `CUEMIND_SESSION_STORE` / `CUEMIND_KNOWLEDGE_STORE` | 存储后端：默认 sqlite；设为 `jsonl` 走 JSONL fallback |
+| `LLAMA_CPP_BASE_URL` / `LLAMA_CPP_MODEL` | 本地 llama-server 根地址与模型 |
 
-## Prompt Strategy
+推理设置（模型地址、上下文窗口、提示词）也可在应用 Settings 里运行时调整，路由优先取请求值、回退默认值。远端 OpenAI-compatible API 是显式配置的备选 Provider，不配置就只走本地。
 
-**Context windowing — two layers.** I split context into a **recent** verbatim tail and an **earlier** region. Recent is about **3,000 chars** (~last 3 minutes), because that is what people are reacting to right now. Earlier is up to **4,000 chars** from the end of the older transcript so background stays fresh. The cost is that this is character-window based, not speaker-turn aware, which is simpler and fast but can cut conversational boundaries.
+### 4. 启动应用
 
-**Why summarize instead of truncate.** I summarize the earlier slice before suggestion generation because truncation destroys context at sentence and entity boundaries. A short 3-5 sentence summary keeps decisions, names, numbers, and commitments coherent enough for the model to reason on. That gives better signal than shoving a broken raw chunk into the prompt. The cost is that summarization is lossy by design.
+```bash
+npm install
+npm run dev
+```
 
-**The two-call latency tradeoff.** Suggestion refresh is sequential: first `/api/summarize`, then `/api/suggestions`. I accept that because the summary is capped at **200 tokens**, so the added latency is usually tens to low hundreds of milliseconds, while quality gains are obvious in longer meetings. This keeps the suggestion model focused instead of context-confused. The cost is one extra network/model hop per refresh.
+打开 `http://localhost:3000`：上传会议录音（Upload）或点击麦克风开讲；转写与建议每 ~30s 自动刷新；点开建议卡即得带来源解释卡并可流式追问；停止会议生成会后报告；卡片一键存入知识库，访问 `/knowledge` 检索、编辑与导出。
 
-**Suggestion types — five labels, not a bingo card.** I use five labels (`question`, `talking_point`, `answer`, `fact_check`, `clarify`) as vocabulary, not quotas. The prompt explicitly forbids one-of-each output and asks for the three best fits for the current moment. That keeps batches useful instead of formulaic—type distribution is intentionally uneven across refreshes.
+生产构建注意：`npm run build` 前必须停掉 `:3000` dev server——turbopack dev 与 next build 共写 `.next` 目录会导致产物损坏。
 
-**JSON Schema mode.** Suggestions run in structured-output mode with a strict schema: exactly three items, each with `type`, `preview`, and `detail`. That gives me stable UI contracts and avoids regex cleanup or brittle post-processing. I still validate at the route boundary, but schema-first keeps the wire format predictable. The risk is that strict schema can reject otherwise reasonable free-form output.
+### 5. 桌面模式（可选，Windows 10/11 x64）
 
-**Previous suggestions in the loop.** Each refresh includes the last batch previews as anti-repeat context. That simple addition noticeably reduces duplicate nudges when conversation stalls or loops. It is cheap, explicit, and model-friendly. The risk is that if previous suggestions were wrong, they still influence the next pass.
+```bash
+npm run helper:build   # 编译 C#/.NET 采集助手（需 .NET 8 SDK）
+npm run desktop:build  # Next 构建 + Electron 打包 → NSIS 安装包
+```
 
-**Chat — transcript as ground truth, answers kept tight.** Chat always receives the meeting transcript as a separate system block, distinct from instruction text. That keeps answers anchored to what was actually said — the model can infer and synthesize, but it is not invited to invent missing meeting facts. The chat prompt also enforces conciseness explicitly: 3-5 sentences for most questions, lead with the answer, no preamble. A model this capable will happily write paragraphs when asked nothing — the prompt is what keeps it useful in a live meeting context rather than impressive in a vacuum.
+开发调试用 `npm run desktop:dev`。桌面模式由 Windows 助手实现系统音频（WASAPI loopback）+ 麦克风双轨采集，补齐浏览器模式下虚拟会议只能听到本地一侧的平台限制。
 
-**Instant detail preview + streaming.** Clicking a suggestion inserts its `detail` immediately, then streams a fuller answer underneath. This makes interaction feel responsive in live-call conditions where dead time kills trust. Users get immediate value plus richer follow-up without waiting on full completion—users may read the preview as final before the stream finishes.
+### 6. Docker（可选）
 
-**Prompt tuning results.** After testing across multiple real sessions — a classroom discussion on silence and poetry, a talk on the butterfly effect, and a full Dan Pink TED talk on motivation — the prompt strategy held up well. Fact checks fired on specific quantitative claims (Glucksberg's 3.5-minute incentive condition slowdown, the origin of the candle problem). Clarify suggestions caught newly introduced terms like 'functional fixedness' at exactly the right moment. Type distribution stayed varied across all 9 batches of the motivation session without feeling formulaic. No structural prompt changes were needed after live testing — the five-type vocabulary, the anti-repeat context, and the two-layer windowing held up across different conversation styles.
+```bash
+docker compose up -d   # :3000，模型目录挂载 ./models 只读 /models
+```
 
----
+### 7. 只读 MCP server（可选）
 
-## Tradeoffs & Decisions
+```bash
+cd mcp-server && npm install && npm run build
+node dist/index.js     # stdio JSON-RPC，stdout 仅协议、日志走 stderr、无出网
+```
 
-**We skip audio conversion** because WebM/Opus is already what Whisper accepts in practice, and every conversion step adds latency and failure modes. This keeps the transcription path short and debuggable. If mobile Safari constraints force a format bridge later, I will add it with clear justification.
+提供 14 个只读工具（会话 / 卡片 / 转写 / vault / 知识列表、详情、检索、版本、来源），可接入任意 MCP 客户端做本地知识检索；隐私 blocked 条目对 MCP 不可见。
 
-**Groq key storage is a choice.** *(Historical note — Groq has since been fully removed in favor of local llama.cpp; the same three storage modes now apply to the optional remote-API key.)*
+## 📁 项目结构
 
-**React owns live state; browser storage owns recovery.** Autosaved snapshots keep the last ten sessions and restore Date values explicitly, so refresh is recoverable without making live updates depend on storage writes.
-
-**Overlapped recorders vs MediaRecorder timeslice.** Timeslice produced non-standalone chunks that Whisper rejected. Independent, slightly overlapped recorders keep every upload valid while covering the rollover boundary.
-
-**Two Groq calls per suggestion refresh (summarize, then suggest).** The summarize hop buys coherent earlier context without flooding the suggestion prompt with raw transcript. Sequential latency is real, but bounded because the summary output is capped at 200 tokens. If latency becomes the top bottleneck, collapsing into one call is the straightforward optimization.
-
-**Streaming chat responses.** Chat uses SSE so first token latency is typically **~200-400ms** instead of waiting several seconds for full completion. In a live meeting, that response shape materially improves usability. Tradeoff: stream parsing/state handling is more complex than one-shot JSON.
-
-**Manual refresh flushes pending audio first.** The spec requires the reload button to update the transcript before generating suggestions. We implement this by calling `flushCurrentChunk()` — which stops the current recorder segment early and lets `onstop` transcribe it — then firing suggestion generation 500ms later. The gap is a pragmatic head start, not a guaranteed await; on slow networks suggestions can occasionally fire before the final transcript chunk lands. The tradeoff is simplicity over perfect sequencing.
-
-**System audio capture — attempted and removed.** We explored adding getDisplayMedia-based system audio capture so both sides of a virtual meeting could be transcribed. The implementation mixed mic and tab audio via Web Audio API's AudioContext into a single MediaRecorder stream. It proved unreliable on macOS Chrome due to how WebRTC audio is routed internally in tools like Google Meet — tab audio capture does not intercept WebRTC streams. Rather than ship a feature that works inconsistently, we removed it. The mic-only path is reliable and sufficient for the intended use case: during a live interview, the interviewer's questions provide enough spoken context for the suggestion engine to generate useful nudges from the speaker's side alone.
-
-**Chat history limit (20 turns).** I cap chat history at 20 turns and rely on transcript context as long-term memory. That keeps prompt size controlled without adding another summarization hop before every chat request. Tradeoff: very long side-thread nuance can fall out of chat history while transcript grounding remains.
-
-**Settings and prompt customization.** Prompts and context windows are editable at runtime in Settings, then sent on each request body. Routes prefer request values and fall back to `lib/prompts.ts` defaults, so reset behavior is deterministic. Tradeoff: prompt quality can degrade if users enter poor instructions, which is expected by design.
-
-## Known Limitations & Future Work
-
-### Desktop MVP direction
-The desktop MVP moves beyond browser microphone capture by using a Windows helper process for default system audio plus microphone capture. The planned stack is Electron + C#/.NET NAudio + local whisper.cpp + local llama.cpp + web-search-grounded context cards, with an explicitly configured OpenAI-compatible remote API as an alternative. See `docs/desktop-mvp.md` for the implementation contract and evidence checklist.
-
-### 本地桌面模式
-
-桌面 MVP 的定位是“本地推理 + 联网增强”：音频、转写和 llama.cpp 推理留在本机，检索时只发送关键词以获取来源；也可显式配置远端 OpenAI-compatible API。开发环境可运行 `npm run desktop:dev`；Windows 打包前先执行 `npm run helper:build`，再执行 `npm run desktop:build`。当前 Windows helper、whisper.cpp 模型、真实搜索卡片和 NSIS 安装包仍需要在 Windows 10 22H2/Windows 11 x64 上完成验收。
-
-### One-sided transcription in virtual meetings
-The app captures microphone input only. In an in-person meeting this works well — the mic picks up everyone in the room. In a virtual meeting (Zoom, Google Meet), only the local speaker's voice is captured; the remote participant's audio comes through speakers but isn't reliably transcribed. *(In browser mode this is a platform limitation; the desktop Windows helper — WASAPI loopback double-track capture, currently code-complete but pending on-machine acceptance — is the documented path to two-way capture.)*
-
-We explored getDisplayMedia-based tab audio capture to mix both mic and system audio into a single MediaRecorder stream via the Web Audio API's AudioContext. It works for standard browser tab audio (YouTube, etc.) but fails for virtual meeting tools like Google Meet because WebRTC routes received audio through a separate internal pipeline that tab capture doesn't intercept. This is a known platform-level limitation, not a code bug.
-
-A mobile version can work around this by physically capturing room audio—the phone microphone hears both the local speaker and the remote participant through the laptop speakers. A native desktop app can instead use system-level audio access that browsers fundamentally do not provide. Both approaches require leaving the browser sandbox.
-
-The practical workaround for virtual interviews: the suggestion engine generates useful nudges from the speaker's side alone. Narrating or paraphrasing what the other person says ("so you're asking about X...") feeds their context into the transcript naturally.
-
-### No speaker diarization
-The app transcribes speech as a single stream without identifying who said what. Reliable diarization requires a dedicated pipeline: voice activity detection, speaker embedding extraction (pitch, tone, and cadence fingerprinting), and clustering to label segments by speaker.
-
-Whisper Large V3 does not perform diarization—it transcribes only. Adding diarization would require a separate diarization API such as AssemblyAI, Deepgram, or Pyannote. It also conflicts architecturally with the real-time 30-second chunk approach because diarization usually needs a complete audio segment to cluster speakers accurately. It is a meaningful pipeline change, not a drop-in add-on.
-
----
-
-## Responsiveness & Accessibility
-
-The layout is desktop-first by design — a meeting copilot lives on the same screen as your video call, not on a phone. On large screens (1024px+) you get the full three-column experience. Below that, the columns stack vertically, each taking full width and 50vh of height with independent scroll, so the app remains usable on smaller displays without the layout collapsing.
-
-On the accessibility side: the mic button carries `aria-label` and `aria-pressed` so screen readers announce recording state. Suggestion cards are fully keyboard navigable with Enter/Space activation. The chat message list has `aria-live="polite"` so new messages are announced. The settings modal traps focus when open and auto-focuses the API key field. All icon-only buttons have explicit `aria-label` attributes.
-
----
-
-## 构建规范
-
-运行 npm run build 前必须停止 :3000 dev server——turbopack dev 与 next build 共写 .next 目录会导致产物损坏（ENOENT/500）。流程：pkill 停 dev → build → 重启 npm run dev。
+```text
+CueMind/
+├── app/                    # Next.js App Router：页面 + API 路由
+│   ├── api/                # sessions / suggestions / context-cards / ask /
+│   │                       # knowledge / vault-export / pipeline-events …
+│   └── knowledge/          # /knowledge 知识库管理页（三栏）
+├── components/             # 三栏工作台 UI 组件
+├── hooks/                  # 客户端 hooks（录音 / 上传 / 建议 / 卡片）
+├── lib/                    # 业务核心：存储（SQLite+JSONL）、检索、隐私状态机、
+│                           # vault 同步、会话鉴权、redaction、telemetry
+├── mcp-server/             # 本地只读 stdio MCP server（14 个检索工具）
+├── native/CueMind.Audio/   # C#/.NET Windows 采集助手（WASAPI loopback 双轨）
+├── desktop/                # Electron 主进程与打包脚本
+├── docs/                   # 设计文档、部署指南与实施计划
+├── scripts/                # 回归测试脚本（tsx 直跑路由 handler）
+├── fixtures/               # 固定评测夹具（检索可复现）
+├── reports/                # 评测与性能报告产物
+└── docker-compose.yml
+```
