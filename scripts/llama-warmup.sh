@@ -12,7 +12,7 @@ set -euo pipefail
 
 BASE_URL="${LLAMA_WARMUP_BASE_URL:-http://127.0.0.1:8082}"
 MODEL="${LLAMA_WARMUP_MODEL:-/home/work/models/cuemind/Qwen3-8B-Q4_K_M.gguf}"
-INTERVAL_SECONDS="${LLAMA_WARMUP_INTERVAL:-30}"
+INTERVAL_SECONDS="${LLAMA_WARMUP_INTERVAL:-10}"
 
 warmup_once() {
   # 最小 completion：json_object + 极短输出，开销最小，却能保持模型驻留/热态。
