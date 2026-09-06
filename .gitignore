@@ -52,3 +52,6 @@ next-env.d.ts
 # MCP server (independent package)
 /mcp-server/node_modules/
 /mcp-server/dist/
+
+# Dataset videos (large media, kept local only)
+dataset/*.mp4
