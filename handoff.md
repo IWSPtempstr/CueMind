@@ -129,6 +129,39 @@ CueMind 是**本地优先的实时会议认知副驾**：三栏界面（左=转�
 
 ---
 
+## 2.5 当前已知问题与缺陷（2026-09-06 本轮诊断）
+
+> 本轮（2026-09-06）围绕「README 主截图出现‘失败：N 次’横幅」做了完整排查与修复。下面区分**已修复**与**仍存在**，证据均为本轮实测，不虚标。
+
+### 已修复（本轮已提交入代码）
+
+| 问题 | 修复（提交） | 说明 |
+|---|---|---|
+| 卡片链路在 UI 运行时间歇性超时 | `3280bdb` / `39554a5` / `639ee86` | prompt 截断（关键词 750 / 生成 1500）、阶段预算 12s/15s、生成瞬态重试、让位机制（服务端 `cardPipelineInFlight` + 客户端 `cardBusy`） |
+| 卡片链路冷启动 | `05688de` + `scripts/llama-warmup.sh` | 新增 `cuemind-llama-warmup.service`（systemd，保活间隔 10s），降低单槽 8B 空闲冷却导致的首次请求慢 |
+| 页面默认模型与 llama 实际加载不一致 | 随 `3280bdb` | `hooks/useSettings.ts` 默认模型由 4B 改为 8B，与 `.env`/systemd/文档基线一致（此前页面发 4B model 名给 8B server 会走慢路径） |
+
+### 仍存在的缺陷（未根治，需后续处理）
+
+1. **卡片链路稳定性仍是硬件瓶颈**（核心残留）
+   - 环境：RTX 4060 Ti 8GB 单卡，llama 服务为 `-np 1` 单槽（**无法升并行槽**：8B 全卸载 6422MiB，升 `-np 4` 会 KV×4 直接 OOM）。
+   - 现象：卡片生成耗时**剧烈波动**，实测 `context-cards 200 in 26337ms`（4~26s 之间跳变）；即使加了截断/预算/重试/让位/warmup，UI 上传转写期间**仍会偶发**一次 `model_failed / timed out`（候选账本 `candidates` 表可查，`final_state=model_failed`，`suppress_reason=llama.cpp provider timed out`）。
+   - 深层原因：`useContextCards` 在每个转写窗口触发一次卡片请求，单槽 llama 处理慢瞬时（生成 >12s/15s 预算）即失败；卡片失败后 `useContextCards.failures` 累积，横幅「失败：N 次」一旦出现即在该会话内持久显示。
+   - **影响**：README 主截图的「失败：1 次」横幅即由此而来，属真实链路状态而非截图 bug；无法在不改硬件或换更小模型（4B，质量略降）的前提下，用 UI 稳定复现「多张卡片且零失败」。
+   - **建议**：如需「多卡 + 零失败」稳定演示，考虑换 Qwen3-4B（2.3GB，单槽更轻）做 A/B 复测，或接受单卡下卡片链路「偶发失败自恢复（重试后出卡）」事实。
+
+2. **README 主截图存在两图并存、引用不一致**
+   - 本地 `docs/images/` 现同时存在 `main.png`（本轮生成：多轮问答 + Agent Harness 卡，323KB）与 `main1.png`（他人上传，2.7MB）。README 当前引用 `main1.png`，而本地产物维护的是 `main.png`，导致 README 展示的示意图与本轮实际生成的截图不同源。
+   - 已处理：`main1.png` 与 `knowledge.png` 均加 `<img width="720">` 统一显示宽度（`e7c6a28` 已推 fork）。**建议接手者确认**：最终应以哪张为准（`main1.png` 是否为有意替换，或统一回 `main.png`），并清理另一张避免冗余。
+
+3. **服务当前未运行（运行态，非缺陷）**
+   - 写本文档时 `npm run dev`（:3000）未拉起；llama-server（:8082，systemd）与 `cuemind-llama-warmup.service` 为 active。接手前按第 3 节阶段 0 执行环境就绪。
+
+4. **工作区非本轮改动未提交**
+   - `hooks/useContextCards.ts`（终态分流：`model_skip`/`suppressed_as_duplicate` 不计入失败横幅）与 `reports/performance-resilience/native-events.jsonl`（生成产物）是仓库既有改动，非本轮缺陷；按「只提交本轮相关」原则未动。若接手者需要，可另行处理。
+
+---
+
 ## 3. 后续步骤（Follow-up Steps）
 
 阶段按依赖排序，不给时间承诺；每阶段有独立验收。
