@@ -7,6 +7,8 @@ import {
 /**
  * Local `llama.cpp`/`llama-server` provider. It wraps the shared
  * OpenAI-compatible JSON client and only supplies the `llama.cpp` identity.
+ * All calls go through the app-side single-slot queue (`withLlamaSlot`) so the
+ * per-call timeout budget covers model compute, not the wait for the slot.
  */
 export async function generateLlamaCppJson<T>(
   args: Omit<JsonChatRequest, "provider">,
@@ -17,7 +19,112 @@ export async function generateLlamaCppJson<T>(
       code: "model_unreachable",
     });
   }
-  return generateOpenAiCompatibleJson<T>({ provider: "llama.cpp", ...args });
+  return withLlamaSlot(() =>
+    generateOpenAiCompatibleJson<T>({ provider: "llama.cpp", ...args }),
+  );
+}
+
+/**
+ * App-side queue mirroring the deployment's single llama-server slot
+ * (`-np 1`; 8B fully offloaded on 8GB VRAM cannot raise it without OOM).
+ * llama-server serializes concurrent requests internally, so without this
+ * queue a caller's wall time silently includes the queue wait and its own
+ * timeout budget burns before the model even starts (the main source of
+ * card-pipeline `provider timed out`). Serializing in the app makes the wait
+ * explicit and starts each caller's timeout only once the slot is acquired.
+ *
+ * Callers may pass an `AbortSignal`: a caller that is aborted while still
+ * queued is dequeued and rejected instead of later consuming the slot — dead
+ * requests (client disconnected, watchdog fired) no longer burn the single
+ * slot for seconds. Aborts after slot acquisition are the caller's own
+ * business (its fetch has its own timeout/watchdog).
+ *
+ * FIFO; not reentrant — callers must never issue a llama call from inside
+ * another one (current routes never do). Kept on globalThis so dev-HMR /
+ * duplicate module instances share one queue (same pattern as cardInflight).
+ */
+export interface LlamaSlotOptions {
+  signal?: AbortSignal;
+}
+
+interface LlamaSlotWaiter {
+  resolve: () => void;
+  reject: (error: unknown) => void;
+  /** Dequeues+rejects this waiter on abort; no-op once the slot was handed over. */
+  onAbort: () => void;
+}
+
+interface LlamaSlotState {
+  busy: boolean;
+  /** Queued callers, in arrival order. */
+  queue: Array<LlamaSlotWaiter>;
+}
+const globalLlamaSlot = globalThis as typeof globalThis & {
+  cueMindLlamaSlot?: LlamaSlotState;
+};
+const llamaSlot: LlamaSlotState =
+  globalLlamaSlot.cueMindLlamaSlot ?? { busy: false, queue: [] };
+globalLlamaSlot.cueMindLlamaSlot = llamaSlot;
+
+export async function withLlamaSlot<T>(
+  fn: () => Promise<T>,
+  options?: LlamaSlotOptions,
+): Promise<T> {
+  const signal = options?.signal;
+  if (signal?.aborted) throw slotAbortedError();
+  if (llamaSlot.busy || llamaSlot.queue.length > 0) {
+    let waiter: LlamaSlotWaiter | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const entry: LlamaSlotWaiter = {
+          resolve,
+          reject,
+          onAbort: () => {
+            // Only act while still queued: a waiter the release() path already
+            // shifted owns the slot and must not be rejected out from under it.
+            const index = llamaSlot.queue.indexOf(entry);
+            if (index === -1) return;
+            llamaSlot.queue.splice(index, 1);
+            reject(slotAbortedError());
+          },
+        };
+        waiter = entry;
+        llamaSlot.queue.push(entry);
+        signal?.addEventListener("abort", entry.onAbort, { once: true });
+      });
+    } finally {
+      // 无论拿到槽还是排队中被 abort，都摘掉监听，避免长生命周期 signal 泄漏。
+      if (waiter !== undefined) {
+        signal?.removeEventListener("abort", waiter.onAbort);
+      }
+    }
+    // The slot was handed over by release() with busy left true.
+  } else {
+    llamaSlot.busy = true;
+  }
+  try {
+    return await fn();
+  } finally {
+    releaseLlamaSlot();
+  }
+}
+
+/** AbortError-shaped rejection for callers dequeued by their own signal. */
+function slotAbortedError(): Error {
+  const error = new Error("Aborted while waiting for the llama slot");
+  error.name = "AbortError";
+  return error;
+}
+
+function releaseLlamaSlot(): void {
+  const next = llamaSlot.queue.shift();
+  if (next === undefined) {
+    llamaSlot.busy = false;
+  } else {
+    // Keep busy=true through the microtask handover so a concurrent fast-path
+    // caller cannot double-own the slot.
+    next.resolve();
+  }
 }
 
 /** Endpoint configuration resolved for routes that call the local provider. */

@@ -30,6 +30,15 @@ export const CHAT_MAX_TOKENS = 1024;
  * 吞吐受限）；配合 ASK_PROMPT 的 80 字答案 + ≤2 条引用收紧输出长度。 */
 export const ASK_MAX_TOKENS = 512;
 
+/** Context-card keyword stage: output is one short JSON object {"keyword":"..."}.
+ * 卡片链路此前漏设 max_tokens（D3），输出长度不定导致 4~26s 耗时跳变；关键词
+ * 阶段输出极短，收紧到 64 消除该波动并缩短单槽位占用。 */
+export const CONTEXT_KEYWORD_MAX_TOKENS = 64;
+
+/** Context-card generation: keyword + 2-4 key points (≤40 chars each) + whyNow.
+ * 与要点卡 prompt 的输出契约对齐，留有余量但不放任长输出占用单槽位。 */
+export const CONTEXT_CARD_MAX_TOKENS = 256;
+
 /** User messages sent with chat requests (client + server cap). */
 export const CHAT_HISTORY_MAX_MESSAGES = 20;
 

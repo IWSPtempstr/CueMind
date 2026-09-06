@@ -12,6 +12,7 @@ import {
   isAbortTimeoutError,
   cardPipelineInFlight,
   resolveLocalProvider,
+  withLlamaSlot,
 } from "@/lib/llama-cpp";
 import {
   extractChatAssistantContent,
@@ -113,6 +114,12 @@ export async function POST(
 
   const provider = resolveLocalProvider(record);
 
+  // 方向1（前移到润色之前）：卡片链路在处理中时本轮整体让位——润色同样
+  // 占用单槽 llama，若在让位检查之后执行，卡片在途时润色仍会与卡片争槽。
+  if (cardPipelineInFlight()) {
+    return NextResponse.json({ yielded: true as const });
+  }
+
   // Optional LLM polish pass (typo/punctuation/paragraphing only). Failures
   // fall back to the raw transcript inside polishTranscript, never blocking.
   const transcriptForSummary = record.polish === true
@@ -123,15 +130,11 @@ export async function POST(
   const askContext = buildAskContext(record.askHistory);
 
   let upstreamResponse: Response;
-  // 方向1：卡片链路（关键词+生成）在处理中时，周期性摘要任务让位本轮，不与卡片
-  // 争抢单槽 llama。摘要同样是周期性/后台任务，本轮跳过、下轮再跑即可。
-  if (cardPipelineInFlight()) {
-    return NextResponse.json({ yielded: true as const });
-  }
   try {
-    upstreamResponse = await fetch(
-      normalizeChatCompletionsUrl(provider.baseUrl),
-      {
+    // 经应用侧单槽队列（此前直连 llama-server，绕过让位/排队语义）：
+    // 超时计时器在拿到槽之后才创建，预算不含排队等待。
+    upstreamResponse = await withLlamaSlot(() =>
+      fetch(normalizeChatCompletionsUrl(provider.baseUrl), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -147,7 +150,7 @@ export async function POST(
           temperature: SUMMARIZATION_TEMPERATURE,
         }),
         signal: AbortSignal.timeout(SUMMARIZE_TIMEOUT_MS),
-      },
+      }),
     );
   } catch (caught) {
     return NextResponse.json(

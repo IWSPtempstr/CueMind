@@ -4,6 +4,10 @@ import { enforceRateLimit, readJsonBodyWithLimit } from "@/lib/api-security";
 import { requireSessionAccess } from "@/lib/session-route";
 import { askCacheSet } from "@/lib/ask-cache";
 import { generateLlamaCppJson, withCardInflight } from "@/lib/llama-cpp";
+import {
+  CONTEXT_CARD_MAX_TOKENS,
+  CONTEXT_KEYWORD_MAX_TOKENS,
+} from "@/lib/prompts";
 import { generateRemoteApiJson } from "@/lib/remote-api";
 import {
   ModelProviderError,
@@ -189,6 +193,9 @@ export async function POST(
       prompt: `已知关键词：${parsed.cardContext?.shownKeywords.join(", ") || parsed.knownKeywords.join(", ") || "无"}\n当前主题：${parsed.cardContext?.currentTopics.join(", ") || "无"}\n未解决主题：${parsed.cardContext?.unresolvedTopics.join(", ") || "无"}\n最近转写：${transcriptForPrompt}`,
       // 单槽位 8B + 8GB 卡下生成易排队/偶发慢，提高预算吸收排队抖动（配生成重试）。
       timeoutMs: 12_000,
+      // D3：输出上限补齐（ask/suggestions 均已设），关键词输出极短，
+      // 固定上限消除 4~26s 耗时跳变并缩短单槽位占用。
+      maxTokens: CONTEXT_KEYWORD_MAX_TOKENS,
     };
     const result = await withCardInflight(async () => {
       for (;;) {
@@ -374,6 +381,9 @@ export async function POST(
       // 单槽位 8B + 8GB 卡下生成易排队/偶发慢：预算提高到 15s，配合下方一次
       // 瞬态重试（命中热态通常 ~4.5s），吸收排队抖动，避免误报超时。
       timeoutMs: 15_000,
+      // D3：要点卡输出契约固定（keyword + 2-4 条要点 + whyNow），上限收紧
+      // 生成耗时波动，避免长输出放大单槽位占用。
+      maxTokens: CONTEXT_CARD_MAX_TOKENS,
     };
     // 询问让位（红线 3）：卡片生成在途时计入 cardInflight，ask 路由在发起前等待归零。
     generated = await withCardInflight(async () => {
@@ -451,7 +461,7 @@ function resolveProvider(settings: ContextCardRequest["settings"]): ResolvedProv
 
 function generateProviderJson<T>(
   provider: ResolvedProvider,
-  args: { system: string; prompt: string; timeoutMs: number },
+  args: { system: string; prompt: string; timeoutMs: number; maxTokens: number },
 ): Promise<T> {
   const request = {
     baseUrl: provider.baseUrl,
@@ -460,6 +470,7 @@ function generateProviderJson<T>(
     system: args.system,
     prompt: args.prompt,
     timeoutMs: args.timeoutMs,
+    maxTokens: args.maxTokens,
   };
   return provider.name === "remote-api"
     ? generateRemoteApiJson<T>(request)

@@ -20,6 +20,7 @@ import {
   generateLlamaCppJson,
   llamaCppFailureMessage,
   resolveLocalProvider,
+  withLlamaSlot,
   type LocalLlamaCppProvider,
 } from "@/lib/llama-cpp";
 import { normalizeChatCompletionsUrl } from "@/lib/model-provider";
@@ -407,18 +408,25 @@ export async function POST(
         let rawAnswerJson = "";
         try {
           bumpIdleTimer();
-          rawAnswerJson = await streamAskCompletion({
-            provider,
-            messages: buildAskMessages({
-              askPromptText,
-              question,
-              sources,
-              recentTranscript,
-              askContext,
-            }),
-            upstreamSignal: upstream.signal,
-            bumpIdleTimer,
-          });
+          // 流式生成全程占用应用侧 llama 槽位（单槽服务器实际也只服务这一个
+          // 请求）：其他调用方的超时预算不再隐式包含排队等待。传入 upstream
+          // signal：客户端断开时排队中的本次生成直接出队，不烧单槽。
+          rawAnswerJson = await withLlamaSlot(
+            () =>
+              streamAskCompletion({
+                provider,
+                messages: buildAskMessages({
+                  askPromptText,
+                  question,
+                  sources,
+                  recentTranscript,
+                  askContext,
+                }),
+                upstreamSignal: upstream.signal,
+                bumpIdleTimer,
+              }),
+            { signal: upstream.signal },
+          );
         } catch (caught) {
           clearIdleTimer();
           generationMs = Math.round(performance.now() - generationStartedAt);
@@ -648,7 +656,9 @@ function parseAskContext(value: unknown): { summary: AskContextSummary | null; r
 
 // Streams one OpenAI-compatible chat completion (JSON mode) and returns the
 // accumulated assistant content. The idle watchdog aborts a stalled provider;
-// caller maps thrown errors onto the model_failed terminal state.
+// caller maps thrown errors onto the model_failed terminal state. The caller
+// wraps this in withLlamaSlot: the stream occupies the single-slot server from
+// connect to last token, so the slot must be held for exactly that duration.
 async function streamAskCompletion(args: {
   provider: LocalLlamaCppProvider;
   messages: Array<{ role: string; content: string }>;
