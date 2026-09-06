@@ -10,6 +10,7 @@ import {
 } from "@/lib/api-security";
 import {
   isAbortTimeoutError,
+  cardPipelineInFlight,
   resolveLocalProvider,
 } from "@/lib/llama-cpp";
 import {
@@ -66,7 +67,7 @@ function buildSummarizeUserMessage(transcript: string, askContext: string): stri
 
 export async function POST(
   request: NextRequest,
-): Promise<NextResponse<{ summary: string } | { error: string }>> {
+): Promise<NextResponse<{ summary: string } | { error: string } | { yielded: true }>> {
   const limited = enforceRateLimit(request, "summarize", 30);
   if (limited) return limited;
 
@@ -122,6 +123,11 @@ export async function POST(
   const askContext = buildAskContext(record.askHistory);
 
   let upstreamResponse: Response;
+  // 方向1：卡片链路（关键词+生成）在处理中时，周期性摘要任务让位本轮，不与卡片
+  // 争抢单槽 llama。摘要同样是周期性/后台任务，本轮跳过、下轮再跑即可。
+  if (cardPipelineInFlight()) {
+    return NextResponse.json({ yielded: true as const });
+  }
   try {
     upstreamResponse = await fetch(
       normalizeChatCompletionsUrl(provider.baseUrl),

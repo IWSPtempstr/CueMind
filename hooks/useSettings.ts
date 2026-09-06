@@ -97,7 +97,7 @@ export function getDefaultSettings(): Settings {
     vadModelPath: "/home/work/asr/.runtime/models/ggml-silero-v5.1.2.bin",
     modelProvider: "llama.cpp",
     llamaCppBaseUrl: "http://127.0.0.1:8082",
-    llamaCppModel: "/home/work/models/cuemind/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    llamaCppModel: "/home/work/models/cuemind/Qwen3-8B-Q4_K_M.gguf",
     llamaCppApiKey: "",
     remoteApiBaseUrl: "",
     remoteApiModel: "",

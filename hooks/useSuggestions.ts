@@ -23,6 +23,11 @@ function isSummarizeSuccess(value: unknown): value is SummarizeSuccessResponse {
   return typeof value === "object" && value !== null && "summary" in value && typeof (value as SummarizeSuccessResponse).summary === "string";
 }
 
+/** True when the server yielded this periodic tick to the card pipeline. */
+function isYielded(value: unknown): boolean {
+  return typeof value === "object" && value !== null && (value as { yielded?: unknown }).yielded === true;
+}
+
 function isSuggestionsSuccess(value: unknown): value is SuggestionsSuccessResponse {
   return typeof value === "object" && value !== null && "suggestions" in value && Array.isArray((value as SuggestionsSuccessResponse).suggestions) && (value as SuggestionsSuccessResponse).suggestions.length === 3;
 }
@@ -85,6 +90,8 @@ export default function useSuggestions({ transcriptChunks, isRecording, sessionI
           body: JSON.stringify({ sessionId, earlierTranscript: earlierText, summarizationPrompt: settings.summarizationPrompt }),
         });
         const payload: unknown = await response.json();
+        // 卡片 pipeline in-flight 时服务端让位（yielded:true）：周期任务本轮静默跳过，下轮再跑。
+        if (isYielded(payload)) return;
         if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Summarization failed");
         if (!isSummarizeSuccess(payload)) throw new Error("Invalid summarization response");
         earlierSummary = payload.summary;
@@ -98,6 +105,8 @@ export default function useSuggestions({ transcriptChunks, isRecording, sessionI
         body: JSON.stringify({ sessionId, recentTranscript: recentText, earlierSummary, previousSuggestions, suggestionsPrompt: settings.suggestionsPrompt }),
       });
       const payload: unknown = await response.json();
+      // 卡片 pipeline in-flight 时服务端让位（yielded:true）：周期任务本轮静默跳过，下轮再跑。
+      if (isYielded(payload)) return;
       if (!response.ok) throw new Error(isErrorResponseBody(payload) ? payload.error : "Suggestions failed");
       if (!isSuggestionsSuccess(payload)) throw new Error("Invalid suggestions response");
 

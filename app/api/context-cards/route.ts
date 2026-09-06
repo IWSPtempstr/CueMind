@@ -35,8 +35,15 @@ const MAX_CARD_CONTEXT_SERIALIZED_CHARS = 64_000;
 // prompt 内嵌转写截断上限：本地 llama-server 的 n_ctx 有限（如 -c 8192），
 // 校验层允许 32k 字符的 recentTranscript 直拼会触发瞬时 HTTP 500（上下文溢出）。
 // 关键词提取与要点生成都不需要全文，按用途截断到安全长度。
-const KEYWORD_PROMPT_TRANSCRIPT_CHARS = 4_000;
-const GENERATION_PROMPT_TRANSCRIPT_CHARS = 6_000;
+// 关键词提取只需要“此刻最值得补充背景”的聚焦片段。本地 Qwen3-8B 对长转写
+// prompt（json_object 约束）的 JSON 生成耗时随输入长度急剧上升：4k 字符实测
+// 高达百秒级、2k 到 112s、1k 到 8s、0.9k 到 0.4s。关键词阶段仅 5s 预算，
+// 故此上限收紧到 ~750 字符（取最近转写），确保生成稳定落在预算内，不再误报超时。
+const KEYWORD_PROMPT_TRANSCRIPT_CHARS = 750;
+// 生成卡片同样受本地 Qwen3-8B 的 prompt 长度影响：6k 字符实测 70s、3k 到 6.8s、
+// 1.5k 到 2.3s。生成阶段 8s 预算，故把转写截断到 ~1500 字符（最近片段），
+// 配合来源上下文中要点卡所需的近期语境，稳定落在预算内，不再误报超时。
+const GENERATION_PROMPT_TRANSCRIPT_CHARS = 1_500;
 // 关键词阶段瞬态失败（超时/5xx）的有界重试：本地单槽位 llama-server 被在途
 // 生成占满时，排队即可超过 5s 预算；一次重试吸收排队抖动，不放大尾延迟。
 const KEYWORD_MAX_RETRIES = 1;
@@ -178,17 +185,17 @@ export async function POST(
       prompt: `已知关键词：${parsed.cardContext?.shownKeywords.join(", ") || parsed.knownKeywords.join(", ") || "无"}\n当前主题：${parsed.cardContext?.currentTopics.join(", ") || "无"}\n未解决主题：${parsed.cardContext?.unresolvedTopics.join(", ") || "无"}\n最近转写：${transcriptForPrompt}`,
       timeoutMs: 5_000,
     };
-    let result: KeywordResponse;
-    for (;;) {
-      try {
-        result = await generateProviderJson<KeywordResponse>(provider, keywordArgs);
-        break;
-      } catch (caught) {
-        if (keywordRetries >= KEYWORD_MAX_RETRIES || !isTransientProviderFailure(caught)) throw caught;
-        keywordRetries += 1;
-        await new Promise((resolve) => setTimeout(resolve, KEYWORD_RETRY_BACKOFF_MS));
+    const result = await withCardInflight(async () => {
+      for (;;) {
+        try {
+          return await generateProviderJson<KeywordResponse>(provider, keywordArgs);
+        } catch (caught) {
+          if (keywordRetries >= KEYWORD_MAX_RETRIES || !isTransientProviderFailure(caught)) throw caught;
+          keywordRetries += 1;
+          await new Promise((resolve) => setTimeout(resolve, KEYWORD_RETRY_BACKOFF_MS));
+        }
       }
-    }
+    });
     keywordMs = Math.round(performance.now() - keywordStarted);
     emitPipelineEvent("keyword_end", { status: "completed" });
     keyword = result.keyword.trim();

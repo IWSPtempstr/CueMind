@@ -11,6 +11,7 @@ import {
 import {
   generateLlamaCppJson,
   llamaCppFailureMessage,
+  cardPipelineInFlight,
   resolveLocalProvider,
 } from "@/lib/llama-cpp";
 import {
@@ -79,7 +80,7 @@ function parseSuggestionsPayload(parsed: unknown): Suggestion[] | null {
 export async function POST(
   request: NextRequest,
 ): Promise<
-  NextResponse<{ suggestions: Suggestion[] } | { error: string }>
+  NextResponse<{ suggestions: Suggestion[] } | { error: string } | { yielded: true }>
 > {
   const limited = enforceRateLimit(request, "suggestions", 30);
   if (limited) return limited;
@@ -133,6 +134,11 @@ Return ONLY a valid JSON object with exactly 3 items in this shape:
 No markdown fences, no commentary.`;
 
   let payload: unknown;
+  // 方向1：卡片链路（关键词+生成）在处理中时，周期性建议任务让位本轮，不与卡片
+  // 争抢单槽 llama。建议是周期性任务，本轮跳过、下轮再跑即可，无需阻塞等待。
+  if (cardPipelineInFlight()) {
+    return NextResponse.json({ yielded: true as const });
+  }
   try {
     payload = await generateLlamaCppJson<unknown>({
       baseUrl: provider.baseUrl,

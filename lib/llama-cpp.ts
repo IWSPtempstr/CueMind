@@ -122,3 +122,14 @@ export async function withCardInflight<T>(fn: () => Promise<T>): Promise<T> {
     cardInflight.count -= 1;
   }
 }
+
+/**
+ * True while any context-card pipeline work (keyword extraction or generation)
+ * is in flight. Periodic tasks (suggestions / summarize) check this before
+ * calling the local model and yield for the current tick instead of contending
+ * with the card pipeline for a single-slot llama-server, which otherwise pushes
+ * the card pipeline past its 5s/8s budget and makes it time out.
+ */
+export function cardPipelineInFlight(): boolean {
+  return cardInflight.count > 0;
+}

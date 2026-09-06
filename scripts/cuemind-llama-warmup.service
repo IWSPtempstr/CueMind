@@ -1,0 +1,18 @@
+[Unit]
+Description=CueMind llama-server keep-warm heartbeat
+# 依赖 llama 服务：llama 未启动时 warmup 静默跳过，故无需硬 Before/After 阻塞。
+After=network.target
+Wants=cuemind-llama.service
+
+[Service]
+Type=simple
+# 定期向 8082 发最小 completion 请求保活，避免空闲冷启动导致卡片链路超时。
+ExecStart=/bin/bash /home/work/asr/CueMind/scripts/llama-warmup.sh
+Restart=always
+RestartSec=5
+Environment=LLAMA_WARMUP_BASE_URL=http://127.0.0.1:8082
+Environment=LLAMA_WARMUP_MODEL=/home/work/models/cuemind/Qwen3-8B-Q4_K_M.gguf
+Environment=LLAMA_WARMUP_INTERVAL=30
+
+[Install]
+WantedBy=multi-user.target
