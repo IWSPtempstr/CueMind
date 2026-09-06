@@ -142,7 +142,6 @@ export default function Home(): ReactElement {
     getTranscriptChunks: () => recorder.transcriptChunks,
   });
   const isCardFlowActive = (recorder.isRecording && !recorder.isPaused) || uploader.isProcessing;
-  const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive, sessionId: activeSessionId });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [meetingReport, setMeetingReport] = useState<MeetingReport | null>(null);
   const [postmeetingTranscript, setPostmeetingTranscript] = useState<PostmeetingTranscriptArtifact | null>(null);
@@ -163,6 +162,9 @@ export default function Home(): ReactElement {
   // M2-a：卡片请求透传 activeSessionId（账本归属）。activeSessionId 在上方声明后才能引用，
   // 故 useContextCards 置于 state 声明之后（hook 顺序跨渲染稳定即可）。
   const contextCards = useContextCards({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive, sessionId: activeSessionId });
+  // 建议链路在卡片处理中（contextCards.isLoading）时让位，避免与卡片争抢单槽 llama
+  // 导致卡片关键词/生成阶段超时（useSuggestions 需在 useContextCards 之后才能读取其 isLoading）。
+  const suggestions = useSuggestions({ transcriptChunks: recorder.transcriptChunks, isRecording: isCardFlowActive, sessionId: activeSessionId, cardBusy: contextCards.isLoading });
   const transcriptRef = useRef(recorder.transcriptChunks);
   useEffect(() => { transcriptRef.current = recorder.transcriptChunks; }, [recorder.transcriptChunks]);
   // M3-a：导出链路用 ref 读取最新会话上下文（回调闭包不随渲染刷新也不会读到过期值）。

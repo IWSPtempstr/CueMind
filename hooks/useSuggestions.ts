@@ -14,6 +14,8 @@ interface UseSuggestionsArgs {
   transcriptChunks: TranscriptChunk[];
   isRecording: boolean;
   sessionId?: string | null;
+  /** 卡片链路是否在处理中：建议链路此轮让位，避免与卡片争抢单槽 llama。 */
+  cardBusy?: boolean;
 }
 
 interface SummarizeSuccessResponse { summary: string }
@@ -39,7 +41,7 @@ function buildContextStrings(chunks: readonly TranscriptChunk[], recentChars: nu
   return { recentText, earlierText: earlierPart.slice(-earlierChars) };
 }
 
-export default function useSuggestions({ transcriptChunks, isRecording, sessionId }: UseSuggestionsArgs): {
+export default function useSuggestions({ transcriptChunks, isRecording, sessionId, cardBusy }: UseSuggestionsArgs): {
   batches: SuggestionBatch[];
   setBatches: (batches: SuggestionBatch[]) => void;
   isLoading: boolean;
@@ -74,7 +76,9 @@ export default function useSuggestions({ transcriptChunks, isRecording, sessionI
   }, []);
 
   const runCycle = useCallback(async (): Promise<void> => {
-    if (isLoadingRef.current || transcriptRef.current.length === 0) return;
+    // 卡片链路在处理中：建议链路此轮让位（周期任务下轮再跑），让卡片独占单槽 llama，
+    // 避免卡片关键词/生成阶段被建议的 summarize/suggestions 排队拖到超时。
+    if (cardBusy || isLoadingRef.current || transcriptRef.current.length === 0) return;
     const settings = loadCueMindSettings();
     isLoadingRef.current = true;
     setIsLoading(true);
@@ -131,7 +135,7 @@ export default function useSuggestions({ transcriptChunks, isRecording, sessionI
       isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [sessionId]);
+  }, [cardBusy, sessionId]);
 
   const triggerRefresh = useCallback((): void => {
     const interval = loadCueMindSettings().suggestionRefreshSeconds * 1000;
