@@ -40,7 +40,7 @@ CueMind 是一个本地优先的会议 AI 副驾：会议进行中，录音（�
 
 | 三栏工作台：实时转写 · 上下文卡片 · 会中问答 | 本地知识库管理页 |
 |---|---|
-| ![三栏工作台](docs/images/main.png) | ![知识库管理](docs/images/knowledge.png) |
+| ![三栏工作台](docs/images/main1.png) | ![知识库管理](docs/images/knowledge.png) |
 
 ## 🏗️ 技术架构
 
