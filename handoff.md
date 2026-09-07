@@ -54,7 +54,7 @@ CueMind 是**本地优先的实时会议认知副驾**：三栏界面（左=转�
 | 询问让位 ✅ | 卡片生成在途时询问排队（红线 3）；`hooks/useAsk.ts` 单飞锁 |
 | 搜索缓存 ✅ | `lib/ask-cache.ts`：term→results 短 TTL，卡片/询问单向共享 |
 | 询问面板 ✅ | `components/AskPanel.tsx`（右栏；来源链接渲染、降级态、阶段进度） |
-| 持久化 🟡 | 复用 `chat_messages` 表（`lib/chat-store.ts` + `/api/chat-messages`）；**仅存 role/content**——sources/keywords/终态丢失（路线图 P2） |
+| 持久化 ✅ | 复用 `chat_messages` 表（`lib/chat-store.ts` + `/api/chat-messages`）；存 role/content + sources/keywords/final_state（`b12821f`/`7806d54`）；`/replay` 渲染询问历史；训练导出读真实提取词（`keywords_json`，U2 收口） |
 | 延迟 🟡 | 完成 P95 13032→7119ms（-45%），预算 7s 线 ±6% 噪声带内残留（路线图 P0 待裁决）；测量脚本 `scripts/measure-ask-latency.ts`（冻结题集 8 题） |
 
 ### 1.4 建议内联标注（决策 68）✅
@@ -113,10 +113,10 @@ CueMind 是**本地优先的实时会议认知副驾**：三栏界面（左=转�
 | # | 事项 | 优先级 | 依赖 | 工作量 | 说明 |
 |---|---|---|---|---|---|
 | U1 | P0 延迟残留裁决 | **高** | 无 | S（仅决策+文档）或 L（架构改造） | 完成 P95 7119ms > 7s 预算（±6% 噪声带）。三选一：修订决策 67 预算口径 / 继续压答案质量 / 硬件手段（投机解码、量化、升级）。**须用户裁决，不得静默实施** |
-| U2 | P2 询问持久化完整性 | 高 | 无 | M | `chat_messages` 增列 `sources_json`/`keywords_json`/`final_state`（PRAGMA 检测 + ALTER，不迁移旧数据）；前端透传；`/replay` 渲染询问历史；训练导出改读真实提取词 |
+| U2 | ~~P2 询问持久化完整性~~ **已完成** | — | — | — | `chat_messages` 已增列 `sources_json`/`keywords_json`/`final_state`（PRAGMA + ALTER，`b12821f`）；前端透传与 `/replay` 渲染（`7806d54`）；训练导出改读真实提取词（`keywords_json` 优先，旧数据兜底问题子串匹配） |
 | U3 | P4 漏报裁决入口 | 高 | U2 | M | 卡片侧「该词应出卡」用户确认入口，打通决策 65 人工把关；自动命中降为候选，确认后才进 DPO |
 | U4 | P3 训练信号严谨化 | 中 | U2（提取词部分） | M | 时序约束（问题时间 ≥ 候选 created_at）、双通道去重（--useful 优先）、term <2 字符不匹配 |
-| U5 | 隐私降级口根治 | 中 | 无 | S | 关键词提取失败时兜底外发问题前 20 字（`app/api/ask/route.ts`）→ 改为不发起搜索；对齐「外发仅关键词」红线 |
+| U5 | ~~隐私降级口根治~~ **已完成** | — | — | — | 关键词提取失败不再外发问题前 20 字：有转写 → 泛化问题直接基于转写回答，无转写 → degraded 拒绝，均不发起搜索（`4c7ed2d`）；对齐「外发仅关键词」红线 |
 | U6 | P5 落库可靠性 | 中 | 无 | S | 询问落库失败重试（≤3 次退避）+ 失败可见，替代 fire-and-forget |
 | U7 | 失败模式可见 | 低 | U2 | M | 设置健康区展示询问降级率/来源不足率/近 20 次完成延迟（本地统计） |
 | U8 | 端到端用例补齐 | 低 | 无 | M | replay 含询问历史、summarize 前端传参链路（当前只测路由纯函数层） |

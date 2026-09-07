@@ -52,6 +52,10 @@ interface ChatMessageSeed {
   sessionId: string;
   role: "user" | "assistant";
   content: string;
+  /** 真实提取词（assistant 落库 keywords_json；缺省 → NULL，走旧数据兜底）。 */
+  keywords?: string[];
+  /** 缺省时按数组序自动生成递增时间戳（保证 user→assistant 配对顺序）。 */
+  createdAt?: string;
 }
 
 // --- 造库（表结构照抄 lib/session-store.ts 与 lib/candidate-store.ts 的 CREATE 语句）---
@@ -93,7 +97,8 @@ function buildDb(
       role TEXT NOT NULL CHECK(role IN ('user','assistant')),
       content TEXT NOT NULL,
       is_detail INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      keywords_json TEXT
     );
   `);
   const insertSession = db.prepare(
@@ -103,7 +108,7 @@ function buildDb(
     "INSERT INTO candidates (session_id, candidate_id, term, final_state, suppress_reason, card_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
   const insertChatMessage = db.prepare(
-    "INSERT INTO chat_messages (id, session_id, role, content, is_detail, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO chat_messages (id, session_id, role, content, is_detail, created_at, keywords_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
   for (const session of sessions) {
     insertSession.run(
@@ -136,7 +141,8 @@ function buildDb(
       message.role,
       message.content,
       0,
-      "2026-08-28T12:30:00.000Z",
+      message.createdAt ?? "2026-08-28T12:30:00.000Z",
+      message.keywords ? JSON.stringify(message.keywords) : null,
     );
   }
   db.close();
@@ -531,6 +537,72 @@ function testAskSignals(): void {
   console.log("ask signal suite passed");
 }
 
+function testAskRealKeywords(): void {
+  // k) U2：真实提取词（keywords_json）优先于问题子串匹配
+  const sessions: SessionRow[] = [{ id: "sk", transcriptJson: JSON.stringify([chunkAt(1, "窗口行")]) }];
+  const candidates: CandidateRow[] = [
+    // 问题不含 term，但该轮真实提取词含 term → 命中
+    { sessionId: "sk", candidateId: "k1", term: "KV Cache", finalState: "model_skip", createdAt: "2026-08-28T10:00:05.000Z" },
+    // 问题含 term，但该轮真实提取词不含 term → 不命中（真实信号优先）
+    { sessionId: "sk", candidateId: "k2", term: "PagedAttention", finalState: "card_shown", createdAt: "2026-08-28T10:00:06.000Z" },
+    // 提取词比 term 更具体（包含关系）→ 命中
+    { sessionId: "sk", candidateId: "k3", term: "LoRA", finalState: "model_skip", createdAt: "2026-08-28T10:00:07.000Z" },
+  ];
+  const chatMessages: ChatMessageRow[] = [
+    { sessionId: "sk", role: "user", content: "这个优化为什么快？", createdAt: "2026-08-28T10:01:00.000Z" },
+    { sessionId: "sk", role: "assistant", content: "因为复用。", keywordsJson: JSON.stringify(["KV Cache"]), createdAt: "2026-08-28T10:01:05.000Z" },
+    { sessionId: "sk", role: "user", content: "讲讲 PagedAttention", createdAt: "2026-08-28T10:02:00.000Z" },
+    { sessionId: "sk", role: "assistant", content: "是分页注意力。", keywordsJson: JSON.stringify(["vLLM"]), createdAt: "2026-08-28T10:02:05.000Z" },
+    { sessionId: "sk", role: "user", content: "微调方法呢？", createdAt: "2026-08-28T10:03:00.000Z" },
+    { sessionId: "sk", role: "assistant", content: "LoRA 微调方法。", keywordsJson: JSON.stringify(["LoRA 微调方法"]), createdAt: "2026-08-28T10:03:05.000Z" },
+  ];
+  const exported = buildTrainingExport({ candidates, sessions, chatMessages, usefulIds: new Set(), now: FIXED_NOW });
+  const hitIds = new Set(exported.dpo.filter((pair) => pair.chosen.includes("会中询问命中")).map((pair) => pair.candidateId));
+  assert.deepEqual([...hitIds].sort(), ["k1", "k3"], "真实提取词命中 k1/k3；k2 问题含 term 但提取词不含 → 不命中");
+  assert.equal(exported.askSignalStats.missedTriggerDpo, 2);
+  assert.equal(exported.askSignalStats.cardExplanationInsufficient, 0, "k2 属 card_shown 但未命中 → 不计");
+
+  // 非法/空 keywords_json → 该轮视为无真实提取词，兜底问题子串匹配
+  const fallbackExported = buildTrainingExport({
+    candidates: [{ sessionId: "sk", candidateId: "k4", term: "RAG", finalState: "model_skip", createdAt: "2026-08-28T10:00:08.000Z" }],
+    sessions,
+    chatMessages: [
+      { sessionId: "sk", role: "user", content: "RAG 是什么？", createdAt: "2026-08-28T10:04:00.000Z" },
+      { sessionId: "sk", role: "assistant", content: "检索增强。", keywordsJson: "not-json", createdAt: "2026-08-28T10:04:05.000Z" },
+    ],
+    usefulIds: new Set(),
+    now: FIXED_NOW,
+  });
+  assert.equal(fallbackExported.askSignalStats.missedTriggerDpo, 1, "非法 keywords_json → 兜底问题匹配仍命中");
+
+  // 单字符 term 不参与命中（与旧规则一致）
+  const shortExported = buildTrainingExport({
+    candidates: [{ sessionId: "sk", candidateId: "k5", term: "R", finalState: "model_skip", createdAt: "2026-08-28T10:00:09.000Z" }],
+    sessions,
+    chatMessages: [
+      { sessionId: "sk", role: "user", content: "R 是什么？", createdAt: "2026-08-28T10:05:00.000Z" },
+      { sessionId: "sk", role: "assistant", content: "…", keywordsJson: JSON.stringify(["R"]), createdAt: "2026-08-28T10:05:05.000Z" },
+    ],
+    usefulIds: new Set(),
+    now: FIXED_NOW,
+  });
+  assert.equal(shortExported.askSignalStats.missedTriggerDpo, 0, "单字符 term 不命中");
+
+  // user→assistant 乱序输入仍按 created_at 配对（确定性）
+  const shuffled = buildTrainingExport({
+    candidates: [{ sessionId: "sk", candidateId: "k1", term: "KV Cache", finalState: "model_skip", createdAt: "2026-08-28T10:00:05.000Z" }],
+    sessions,
+    chatMessages: [
+      { sessionId: "sk", role: "assistant", content: "因为复用。", keywordsJson: JSON.stringify(["KV Cache"]), createdAt: "2026-08-28T10:01:05.000Z" },
+      { sessionId: "sk", role: "user", content: "这个优化为什么快？", createdAt: "2026-08-28T10:01:00.000Z" },
+    ],
+    usefulIds: new Set(),
+    now: FIXED_NOW,
+  });
+  assert.equal(shuffled.askSignalStats.missedTriggerDpo, 1, "乱序输入按 created_at 排序后正确配对");
+  console.log("ask real-keyword suite passed");
+}
+
 function testCliAskSignal(): void {
   // 落盘链路：DB（含 chat_messages）→ CLI → dpo.jsonl / report.md 含会中询问信号
   const dbDir = path.join(TMP_ROOT, "dbAsk");
@@ -584,6 +656,7 @@ function main(): void {
   testPureIdempotency();
   testCliErrorPaths();
   testAskSignals();
+  testAskRealKeywords();
   testCliAskSignal();
 
   console.log("export-training-data regression tests passed");

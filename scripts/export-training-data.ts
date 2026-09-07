@@ -6,9 +6,11 @@
 //
 // 读取白名单：candidates 表整行（账本）+ sessions 表仅 id / transcript_json；
 // sessions 的 cards_json / metrics_json / title 等列一律不读；
-// chat_messages 表仅取 session_id / role / content（会中询问历史，决策 67 第二通道）。
-// 降级/失败回答不参与信号：信号仅匹配 role=user 的问题文本，降级文案均为
-// assistant 回答（角色过滤天然排除）；提取层（lib/ask-history）亦跳过降级回答。
+// chat_messages 表仅取 session_id / role / content / keywords_json（会中询问历史，
+// 决策 67 第二通道；keywords_json 为 /api/ask 落库的真实提取词——U2 改读真实信号）。
+// 信号命中规则（U2）：优先用 assistant 落库的真实提取词（keywords_json）匹配候选
+// term；旧数据无提取词时兜底为问题文本子串匹配。降级文案均为 assistant 回答，
+// 不产生 SFT/DPO 内容；提取层（lib/ask-history）亦跳过降级回答。
 //
 // 用法：npx tsx scripts/export-training-data.ts [--data-dir <dir>] [--out <dir>] [--useful <json-file>] [--now <iso>]
 // - --data-dir 默认 process.env.CUEMIND_DATA_DIR || <cwd>/.data
@@ -36,11 +38,22 @@ export interface SessionRow {
   transcriptJson: string;
 }
 
-/** 会中询问历史读取白名单：chat_messages 仅取 session_id / role / content。 */
+/** 会中询问历史读取白名单：chat_messages 仅取 session_id / role / content / keywords_json。 */
 export interface ChatMessageRow {
   sessionId: string;
   role: "user" | "assistant";
   content: string;
+  /** 真实提取词（assistant 落库 keywords_json；旧库无该列/旧数据为 null）。 */
+  keywordsJson?: string | null;
+  /** created_at 仅用于 user→assistant 配对的确定性排序，不导出。 */
+  createdAt?: string;
+}
+
+/** 一轮会中询问信号：用户问题 + 该轮真实提取词（无落库提取词的旧数据为空数组）。 */
+export interface AskTurn {
+  sessionId: string;
+  question: string;
+  keywords: string[];
 }
 
 /** 会中询问信号统计（决策 65 第二通道）。 */
@@ -138,11 +151,69 @@ function buildWindowText(transcriptJson: string, createdAt: string): string {
   return texts.slice(-WINDOW_SIZE).join("\n");
 }
 
-/** 询问提取词命中规则：用户问题（大小写不敏感）包含候选 term → 视为命中。 */
+/** 旧数据兜底命中规则：用户问题（大小写不敏感）包含候选 term → 视为命中。 */
 function questionMentionsTerm(question: string, term: string): boolean {
   const normalizedQuestion = question.toLowerCase();
   const normalizedTerm = term.trim().toLowerCase();
   return normalizedTerm.length >= 2 && normalizedQuestion.includes(normalizedTerm);
+}
+
+/**
+ * 一轮询问是否命中候选 term：
+ * - 该轮有真实提取词（keywords_json）→ 提取词（大小写不敏感）包含 term 即命中
+ *   （提取词往往比候选 term 更具体，如「KV Cache 优化」命中 term「KV Cache」）；
+ * - 该轮无真实提取词（旧库/旧数据）→ 兜底为问题文本子串匹配（原规则）。
+ */
+function turnMentionsTerm(turn: AskTurn, term: string): boolean {
+  if (turn.keywords.length > 0) {
+    const normalizedTerm = term.trim().toLowerCase();
+    if (normalizedTerm.length < 2) return false;
+    return turn.keywords.some((keyword) => keyword.toLowerCase().includes(normalizedTerm));
+  }
+  return questionMentionsTerm(turn.question, term);
+}
+
+/** 解析 assistant 落库的 keywords_json → string[]（非法/为空 → 空数组）。 */
+function parseKeywordsJson(value: string | null | undefined): string[] {
+  if (typeof value !== "string" || value.trim() === "") return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string" && item.trim() !== "");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * chat_messages → 询问轮次（按 created_at/rowid 确定性排序后 user→assistant 配对）。
+ * 每条 user 问题恰产生一轮：有 assistant 回复则取其真实提取词，无回复则空提取词
+ * （旧数据兜底走问题子串匹配）。
+ */
+export function buildAskTurns(messages: readonly ChatMessageRow[]): AskTurn[] {
+  const ordered = [...messages].sort((a, b) => {
+    const byCreatedAt = (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+    if (byCreatedAt !== 0) return byCreatedAt;
+    return 0;
+  });
+  const pendingQuestion = new Map<string, string>();
+  const turns: AskTurn[] = [];
+  for (const message of ordered) {
+    if (message.role === "user") {
+      const question = message.content.trim();
+      if (question !== "") pendingQuestion.set(message.sessionId, question);
+      continue;
+    }
+    const question = pendingQuestion.get(message.sessionId);
+    if (question === undefined) continue;
+    pendingQuestion.delete(message.sessionId);
+    turns.push({ sessionId: message.sessionId, question, keywords: parseKeywordsJson(message.keywordsJson) });
+  }
+  // 流末端未获回复的问题也计入一轮（空提取词 → 兜底问题匹配）。
+  for (const [sessionId, question] of pendingQuestion) {
+    turns.push({ sessionId, question, keywords: [] });
+  }
+  return turns;
 }
 
 /**
@@ -166,15 +237,12 @@ export function buildTrainingExport(args: {
   const sessionById = new Map<string, SessionRow>();
   for (const session of args.sessions) sessionById.set(session.id, session);
 
-  // 会中询问历史：sessionId → 用户问题列表（仅 role=user 非空内容）。
-  const questionsBySession = new Map<string, string[]>();
-  for (const message of args.chatMessages ?? []) {
-    if (message.role !== "user") continue;
-    const question = message.content.trim();
-    if (question === "") continue;
-    const list = questionsBySession.get(message.sessionId);
-    if (list !== undefined) list.push(question);
-    else questionsBySession.set(message.sessionId, [question]);
+  // 会中询问轮次：sessionId → 轮次列表（user 问题 + 该轮真实提取词；旧数据空提取词）。
+  const turnsBySession = new Map<string, AskTurn[]>();
+  for (const turn of buildAskTurns(args.chatMessages ?? [])) {
+    const list = turnsBySession.get(turn.sessionId);
+    if (list !== undefined) list.push(turn);
+    else turnsBySession.set(turn.sessionId, [turn]);
   }
 
   const sorted = [...args.candidates].sort((a, b) => {
@@ -206,8 +274,8 @@ export function buildTrainingExport(args: {
     }
     const askedAbout =
       candidate.term !== null &&
-      (questionsBySession.get(candidate.sessionId) ?? []).some((question) =>
-        questionMentionsTerm(question, candidate.term as string),
+      (turnsBySession.get(candidate.sessionId) ?? []).some((turn) =>
+        turnMentionsTerm(turn, candidate.term as string),
       );
     const manuallyUseful = candidate.finalState === "model_skip" && candidate.term !== null && args.usefulIds.has(candidate.candidateId);
     if (manuallyUseful) {
@@ -338,7 +406,7 @@ function renderReport(
   lines.push("");
   lines.push("- 纯离线：本脚本仅「只读 SQLite → 本地导出文件」，不接任何实时链路；不自动改 Prompt、不动态改权重，模型替换由人工评估后决定。");
   lines.push("- 双通道漏报构造：DPO 来自 --useful 人工标记（人工把关）与会中询问命中（自动信号，决策 67 第二通道）；两条通道在 chosen 文案中分别标注来源。");
-  lines.push("- 不含密钥与原始音频：导出字段白名单 = windowText/term/label/split/sessionId/candidateId/chosen/rejected 与统计数；sessions 只读 transcript_json，不读 cards_json / metrics_json；chat_messages 只读 role/content，不读任何 sources/密钥类字段；不触碰 settings / 密钥 / 音频文件。");
+  lines.push("- 不含密钥与原始音频：导出字段白名单 = windowText/term/label/split/sessionId/candidateId/chosen/rejected 与统计数；sessions 只读 transcript_json，不读 cards_json / metrics_json；chat_messages 只读 role/content/keywords_json（真实提取词，U2），不读 sources 等其余字段；不触碰 settings / 密钥 / 音频文件。");
   lines.push("");
   return `${lines.join("\n")}`;
 }
@@ -423,8 +491,17 @@ function readChatMessageRows(db: SqliteDatabase): ChatMessageRow[] {
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_messages'")
     .get() as { name: string } | undefined;
   if (table === undefined) return [];
+  // 旧库可能无 keywords_json 列（U2 之前）→ PRAGMA 检测后按白名单读取。
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(chat_messages)").all() as Array<{ name?: string }>).map(
+      (row) => row.name,
+    ),
+  );
+  const keywordSelect = columns.has("keywords_json") ? "keywords_json AS keywordsJson" : "NULL AS keywordsJson";
   return db
-    .prepare("SELECT session_id AS sessionId, role, content FROM chat_messages")
+    .prepare(
+      `SELECT session_id AS sessionId, role, content, ${keywordSelect}, created_at AS createdAt FROM chat_messages ORDER BY created_at ASC, rowid ASC`,
+    )
     .all() as ChatMessageRow[];
 }
 
