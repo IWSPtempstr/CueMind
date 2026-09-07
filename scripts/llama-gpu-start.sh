@@ -18,7 +18,7 @@ fi
 nohup "$LLAMA_SERVER" \
   -m "$MODEL_PATH" \
   --host 127.0.0.1 --port 8082 \
-  -c 8192 -ngl 99 -fa on --jinja --reasoning off \
+  -c 8192 -ngl 99 -fa on -np 2 --jinja --reasoning off \
   > "$LOG_DIR/llama-server-8082.log" 2>&1 &
 
 echo $! > "$PID_FILE"

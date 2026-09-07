@@ -68,6 +68,30 @@ interface AskEvaluationSummary {
 const DEFAULT_BASE_URL = "http://localhost:3000";
 const DEFAULT_OUTPUT_DIR = "reports/ask-extended-evaluation";
 const TIMEOUT_MS = 60_000;
+/** Unique per run so a bootstrap never collides with an existing session (401). */
+const EVAL_SESSION_ID = `ask-extended-eval-${Date.now().toString(36)}`;
+
+/** Bootstraps the eval session and returns its access token (null if denied). */
+async function bootstrapEvalSession(baseUrl: string): Promise<string | null> {
+  const response = await fetch(`${baseUrl}/api/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: EVAL_SESSION_ID,
+      title: "Ask extended evaluation",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      transcriptChunks: [],
+      suggestionBatches: [],
+      chatMessages: [],
+      meetingReport: null,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`session bootstrap HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  const payload = (await response.json()) as { sessionAccessToken?: unknown };
+  return typeof payload.sessionAccessToken === "string" ? payload.sessionAccessToken : null;
+}
 
 export function parseAskEvaluationManifest(raw: string): AskEvaluationManifest {
   let value: unknown;
@@ -137,7 +161,7 @@ export function summarizeAskResults(results: AskEvaluationResult[]): AskEvaluati
   };
 }
 
-async function measureOne(baseUrl: string, question: AskEvaluationQuestion): Promise<AskEvaluationResult> {
+async function measureOne(baseUrl: string, question: AskEvaluationQuestion, sessionToken: string | null): Promise<AskEvaluationResult> {
   const startedAt = performance.now();
   let firstEventMs: number | null = null;
   let firstByteMs: number | null = null;
@@ -148,8 +172,12 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion): Pro
   try {
     const response = await fetch(`${baseUrl}/api/ask`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+      },
       body: JSON.stringify({
+        sessionId: EVAL_SESSION_ID,
         question: question.question,
         cacheMode: question.cacheMode,
         cacheKey: question.termHint?.trim().toLowerCase() || question.id,
@@ -212,22 +240,31 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion): Pro
   }
 }
 
-async function warmOne(baseUrl: string, question: AskEvaluationQuestion): Promise<string> {
-  const response = await fetch(`${baseUrl}/api/ask`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question: question.question, recentTranscript: question.recentTranscript ?? "", termHint: question.termHint, cacheKey: question.termHint?.trim().toLowerCase() || question.id }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  const text = await response.text();
-  const matches = [...text.matchAll(/data:\s*(\{[^\n]+\})/g)];
-  for (const match of matches.reverse()) {
-    try {
-      const payload = JSON.parse(match[1]) as Record<string, unknown>;
-      if (payload.event === "done" && typeof payload.finalState === "string") return payload.finalState;
-    } catch { /* ignore malformed SSE */ }
+async function warmOne(baseUrl: string, question: AskEvaluationQuestion, sessionToken: string | null): Promise<string> {
+  try {
+    const response = await fetch(`${baseUrl}/api/ask`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+      },
+      body: JSON.stringify({ sessionId: EVAL_SESSION_ID, question: question.question, recentTranscript: question.recentTranscript ?? "", termHint: question.termHint, cacheKey: question.termHint?.trim().toLowerCase() || question.id }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const text = await response.text();
+    const matches = [...text.matchAll(/data:\s*(\{[^\n]+\})/g)];
+    for (const match of matches.reverse()) {
+      try {
+        const payload = JSON.parse(match[1]) as Record<string, unknown>;
+        if (payload.event === "done" && typeof payload.finalState === "string") return payload.finalState;
+      } catch { /* ignore malformed SSE */ }
+    }
+    return "no_done";
+  } catch {
+    // A warm request failure must never kill the whole run; the measured
+    // request below still records its own terminal state.
+    return "no_done";
   }
-  return "no_done";
 }
 
 async function main(): Promise<void> {
@@ -237,10 +274,11 @@ async function main(): Promise<void> {
   assertExtendedDatasetSize(manifest);
   const baseUrl = process.env.ASK_MEASURE_BASE_URL ?? DEFAULT_BASE_URL;
   const outputDir = resolve(process.env.ASK_EXTENDED_OUTPUT_DIR ?? DEFAULT_OUTPUT_DIR);
+  const sessionToken = await bootstrapEvalSession(baseUrl);
   const results: AskEvaluationResult[] = [];
   for (const question of manifest.questions) {
-    const warmFinalState = question.cacheMode === "hot" ? await warmOne(baseUrl, question) : undefined;
-    const result = await measureOne(baseUrl, question);
+    const warmFinalState = question.cacheMode === "hot" ? await warmOne(baseUrl, question, sessionToken) : undefined;
+    const result = await measureOne(baseUrl, question, sessionToken);
     if (warmFinalState !== undefined) {
       result.warmFinalState = warmFinalState;
       result.cacheEligible = warmFinalState === "answered";

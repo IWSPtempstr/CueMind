@@ -1,14 +1,28 @@
 // 槽位队列回归（D1/D4 修复验证）：withLlamaSlot 必须满足
-// 1) 串行化：并发调用互不重叠；
-// 2) FIFO：排队调用按到达顺序拿槽；
-// 3) 预算起算：每次调用的内部计时从拿到槽后才开始（排队不计入）；
-// 4) 异常安全：某次调用抛错不影响后续调用拿槽；
-// 5) Abort 语义：排队中被 abort 的调用直接出队（不烧槽），已拿槽的不受影响。
+// 1) 许可内并行、许可外串行：并发调用不超出 CUEMIND_LLAMA_SLOTS 许可数；
+// 2) FIFO：排队调用按到达顺序拿许可；
+// 3) 预算起算：每次调用的内部计时从拿到许可后才开始（排队不计入）；
+// 4) 异常安全：某次调用抛错不影响后续调用拿许可；
+// 5) Abort 语义：排队中被 abort 的调用直接出队（不烧许可），已拿的不受影响。
+// 单许可语义（slots=1）沿用 D1/D4 时期的全部断言；双许可语义（slots=2，
+// 与 cuemind-llama.service 的 -np 2 对应）单独验证并行度与 FIFO。
 
 import assert from "node:assert/strict";
 import { withLlamaSlot } from "@/lib/llama-cpp";
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Sets CUEMIND_LLAMA_SLOTS for the duration of one test; restores on exit. */
+async function withSlots<T>(slots: number, run: () => Promise<T>): Promise<T> {
+  const previous = process.env.CUEMIND_LLAMA_SLOTS;
+  process.env.CUEMIND_LLAMA_SLOTS = String(slots);
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env.CUEMIND_LLAMA_SLOTS;
+    else process.env.CUEMIND_LLAMA_SLOTS = previous;
+  }
+}
 
 async function testSerialAndFifo(): Promise<void> {
   const events: string[] = [];
@@ -125,13 +139,88 @@ async function testAbortAfterHandoverIsNoop(): Promise<void> {
   console.log("abort after handover is no-op passed");
 }
 
+async function testDualPermitConcurrencyAndFifo(): Promise<void> {
+  await withSlots(2, async () => {
+    const events: string[] = [];
+    const task = (name: string, delayMs: number): Promise<void> =>
+      withLlamaSlot(async () => {
+        events.push(`enter:${name}`);
+        await sleep(delayMs);
+        events.push(`exit:${name}`);
+      });
+    // a/b 各占一个许可并行；c/d 排队，且按到达顺序（c 先于 d）拿许可。
+    const a = task("a", 60);
+    await sleep(5); // 保证 a 先于 b 拿许可
+    const b = task("b", 60);
+    await sleep(5); // 保证 b 先于 c 排队
+    const c = task("c", 10);
+    await sleep(5);
+    const d = task("d", 10);
+    await Promise.all([a, b, c, d]);
+    // 1) 并行度恰好为 2：a、b 持许可期间，c/d 未进入。
+    assert.deepEqual(events.slice(0, 2), ["enter:a", "enter:b"], "a 与 b 应同时持许可");
+    // 2) FIFO：c 在 d 之前拿许可。
+    assert.ok(events.indexOf("enter:c") < events.indexOf("enter:d"), "排队必须 FIFO");
+    // 3) c 等到 a/b 之一释放后才能进入。
+    assert.ok(events.indexOf("enter:c") >= events.indexOf("exit:a") || events.indexOf("enter:c") >= events.indexOf("exit:b"), "c 必须等许可释放");
+    console.log("dual-permit concurrency + FIFO passed:", events.join(" "));
+  });
+}
+
+async function testQueueTimeout(): Promise<void> {
+  await withSlotsAndQueueTimeout(1, 30, async () => {
+    // holder 占许可 120ms；queuer 排队 30ms 后必须以队列超时错误拒绝，
+    // 且不占许可：后续调用在 holder 释放后立即成功。
+    const holder = withLlamaSlot(async () => {
+      await sleep(120);
+      return "holder";
+    });
+    const queuedAt = performance.now();
+    await assert.rejects(
+      withLlamaSlot(async () => "never"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error && error.name === "LlamaSlotQueueTimeoutError");
+        return true;
+      },
+    );
+    assert.ok(performance.now() - queuedAt < 90, "排队超时应在 30ms 附近触发");
+    assert.equal(await holder, "holder");
+    assert.equal(await withLlamaSlot(async () => "after"), "after");
+    console.log("queue timeout dequeues and rejects passed");
+  });
+}
+
+/** Sets CUEMIND_LLAMA_SLOTS and the queue timeout for one test. */
+async function withSlotsAndQueueTimeout<T>(
+  slots: number,
+  queueTimeoutMs: number,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previousSlots = process.env.CUEMIND_LLAMA_SLOTS;
+  const previousTimeout = process.env.CUEMIND_LLAMA_QUEUE_TIMEOUT_MS;
+  process.env.CUEMIND_LLAMA_SLOTS = String(slots);
+  process.env.CUEMIND_LLAMA_QUEUE_TIMEOUT_MS = String(queueTimeoutMs);
+  try {
+    return await run();
+  } finally {
+    if (previousSlots === undefined) delete process.env.CUEMIND_LLAMA_SLOTS;
+    else process.env.CUEMIND_LLAMA_SLOTS = previousSlots;
+    if (previousTimeout === undefined) delete process.env.CUEMIND_LLAMA_QUEUE_TIMEOUT_MS;
+    else process.env.CUEMIND_LLAMA_QUEUE_TIMEOUT_MS = previousTimeout;
+  }
+}
+
 async function main(): Promise<void> {
-  await testSerialAndFifo();
-  await testBudgetStartsAfterSlot();
-  await testErrorDoesNotLeakSlot();
-  await testAbortWhileQueued();
-  await testPreAbortedSignal();
-  await testAbortAfterHandoverIsNoop();
+  await withSlots(1, async () => {
+    await testSerialAndFifo();
+    await testBudgetStartsAfterSlot();
+    await testErrorDoesNotLeakSlot();
+    await testAbortWhileQueued();
+    await testPreAbortedSignal();
+    await testAbortAfterHandoverIsNoop();
+    await testQueueTimeout();
+  });
+  await testDualPermitConcurrencyAndFifo();
   console.log("llama slot queue tests passed");
 }
 

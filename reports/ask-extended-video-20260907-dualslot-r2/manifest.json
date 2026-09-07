@@ -1,0 +1,13 @@
+{
+  "evaluator": "ask-extended-evaluator-v1",
+  "generatedAt": "2026-09-07T13:28:32.249Z",
+  "sourceManifest": "/home/work/asr/CueMind/fixtures/ask-extended-v2.json",
+  "datasetVersion": "2026-09-07-video-derived-160q",
+  "questionCount": 160,
+  "baseUrl": "http://localhost:3000",
+  "cacheModes": [
+    "cold",
+    "hot"
+  ],
+  "evidenceBoundary": "Only questions supplied by the manifest are measured. The evaluator does not create, expand, or rewrite the dataset and does not clear application caches."
+}

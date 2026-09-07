@@ -7,7 +7,7 @@ After=network.target
 ExecStart=/home/work/llama.cpp/build/bin/llama-server \
   -m /home/work/models/cuemind/Qwen3-8B-Q4_K_M.gguf \
   --host 127.0.0.1 --port 8082 \
-  -c 8192 -ngl 99 -fa on -np 1 --jinja --reasoning off
+  -c 8192 -ngl 99 -fa on -np 2 --jinja --reasoning off
 Restart=always
 RestartSec=3
 

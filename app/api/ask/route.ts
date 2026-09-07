@@ -19,6 +19,7 @@ import {
   cardInflight,
   generateLlamaCppJson,
   llamaCppFailureMessage,
+  llamaSlotPermits,
   resolveLocalProvider,
   withLlamaSlot,
   type LocalLlamaCppProvider,
@@ -260,10 +261,12 @@ export async function POST(
       };
 
       try {
-        // Ask yield (red line 3): queue behind in-flight card generations.
+        // Ask yield (red line 3, dual-slot form): queue only when card
+        // generations occupy every llama-server permit. With one card in
+        // flight the second slot serves the ask, so no wait is needed.
         const yieldStartedAt = Date.now();
         while (
-          cardInflight.count > 0 &&
+          cardInflight.count >= llamaSlotPermits() &&
           Date.now() - yieldStartedAt < ASK_YIELD_MAX_MS &&
           !request.signal.aborted
         ) {
@@ -273,7 +276,7 @@ export async function POST(
         if (yieldedMs >= ASK_YIELD_POLL_MS) {
           console.log(`[ask] yielded ${yieldedMs}ms to the card pipeline`);
         }
-        if (cardInflight.count > 0) {
+        if (cardInflight.count >= llamaSlotPermits()) {
           console.warn(
             `[ask] proceeding after ${ASK_YIELD_MAX_MS}ms with ${cardInflight.count} card generation(s) still in flight`,
           );
@@ -658,8 +661,8 @@ function parseAskContext(value: unknown): { summary: AskContextSummary | null; r
 // Streams one OpenAI-compatible chat completion (JSON mode) and returns the
 // accumulated assistant content. The idle watchdog aborts a stalled provider;
 // caller maps thrown errors onto the model_failed terminal state. The caller
-// wraps this in withLlamaSlot: the stream occupies the single-slot server from
-// connect to last token, so the slot must be held for exactly that duration.
+// wraps this in withLlamaSlot: the stream occupies one llama-server slot from
+// connect to last token, so the permit must be held for exactly that duration.
 async function streamAskCompletion(args: {
   provider: LocalLlamaCppProvider;
   messages: Array<{ role: string; content: string }>;

@@ -1,0 +1,1928 @@
+{
+  "version": "2026-09-07-video-derived-160q",
+  "datasetVersion": "2026-09-07-video-derived-160q",
+  "dataSource": "frozen zh transcripts under /home/work/asr/CueMind/reports/video-reimport-20260830-cuda-zh/transcripts (video-reimport-20260830-cuda-zh); questions drafted by local Qwen3-8B from real segments at temperature 0",
+  "authorizationNote": "Derived from locally imported video transcripts for evaluation only; single-user research workload.",
+  "questions": [
+    {
+      "id": "e001c",
+      "question": "Azent架構中如何調用遠端大模型進行多輪對話？",
+      "termHint": "Azent framework remote model",
+      "topic": "agent-framework",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e002h",
+      "question": "學習Azent架構需要掌握哪些基礎知識？",
+      "termHint": "Azent basics framework",
+      "topic": "agent-framework",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e003c",
+      "question": "如何通過開源項目理解Azent的工業級應用？",
+      "termHint": "open source project Azent",
+      "topic": "agent-framework",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e004h",
+      "question": "Hernis工程與Spark如何結合應用於項目開發？",
+      "termHint": "Hernis Spark integration",
+      "topic": "engineering",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e005c",
+      "question": "Spike在技術文檔中如何體現設計經驗？",
+      "termHint": "spike technical document",
+      "topic": "agent-design",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e006h",
+      "question": "Agent設計中長期記憶和短期記憶如何實現？",
+      "termHint": "agent memory design",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e007c",
+      "question": "Cloud Code為何成為面試必考技術？",
+      "termHint": "cloud code interview",
+      "topic": "interview-techniques",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e008h",
+      "question": "大模型行業熱門技術如何影響面試內容？",
+      "termHint": "hot tech interview",
+      "topic": "industry-trends",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e009c",
+      "question": "Cloud Code的主Agent是如何調用工具的？",
+      "termHint": "cloud code agent tool",
+      "topic": "agent-tool",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e010h",
+      "question": "Open Cloud的長期記憶是如何實現的？",
+      "termHint": "open cloud memory",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e011c",
+      "question": "Z-Agent有哪些類型？",
+      "termHint": "z-agent types",
+      "topic": "agent-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e012h",
+      "question": "Cloud Code的循環處理過程是怎樣的？",
+      "termHint": "cloud code loop",
+      "topic": "agent-loop",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e013c",
+      "question": "为什么选择中心化架构而不是去中心化？？",
+      "termHint": "centralized architecture decentralized architecture",
+      "topic": "architecture-design",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 600,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e014h",
+      "question": "中心化架构如何保证系统的安全性？？",
+      "termHint": "centralized security control point",
+      "topic": "security-design",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 600,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e015c",
+      "question": "Agent之间通信是单向还是双向？？",
+      "termHint": "agent communication direction",
+      "topic": "agent-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 600,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e016h",
+      "question": "如何用理论知识分析架构选择？？",
+      "termHint": "architecture analysis theory",
+      "topic": "system-design",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 600,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e017c",
+      "question": "主Agent如何判断是否需要调用工具？？",
+      "termHint": "agent tool calling",
+      "topic": "agent-tool",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 810,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e018h",
+      "question": "指Agent是如何生成的？？",
+      "termHint": "agent generation",
+      "topic": "agent-creation",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 810,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e019c",
+      "question": "工具调用循环的终止条件是什么？？",
+      "termHint": "tool call loop",
+      "topic": "tool-loop",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 810,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e020h",
+      "question": "如何通过提示词指导Agent选择工具？？",
+      "termHint": "prompt engineering",
+      "topic": "prompt-agent",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 810,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e021c",
+      "question": "什么是工具调用？？",
+      "termHint": "tool invocation",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 990,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e022h",
+      "question": "移交在Agent通信中是什么意思？？",
+      "termHint": "handoff in agent communication",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 990,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e023c",
+      "question": "Agent通信的两种模式是什么？？",
+      "termHint": "agent communication modes",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 990,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e024h",
+      "question": "Agent之间如何进行通信？？",
+      "termHint": "agent-to-agent communication",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 990,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e025c",
+      "question": "如何在Agent之間隱藏信息傳遞？？",
+      "termHint": "agent communication security",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1170,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e026h",
+      "question": "Agent之間如何實現信息隔離？？",
+      "termHint": "agent information isolation",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1170,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e027c",
+      "question": "Cloud Code中Agent如何傳遞結果？？",
+      "termHint": "cloud code agent result",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1170,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e028h",
+      "question": "Agent通信方式有哪些？？",
+      "termHint": "agent communication methods",
+      "topic": "agent-communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1170,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e029c",
+      "question": "Cloud Code的原碼如何整理？",
+      "termHint": "cloud code source code",
+      "topic": "code-organization",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1350,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e030h",
+      "question": "如何查找Cloud Code相關文件？",
+      "termHint": "cloud code documentation",
+      "topic": "resource-search",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1350,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e031c",
+      "question": "AI能否幫助學習Cloud Code原碼？",
+      "termHint": "ai learning cloud code",
+      "topic": "ai-learning",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1350,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e032h",
+      "question": "Cloud Code的學習資源有哪些？",
+      "termHint": "cloud code resources",
+      "topic": "learning-resources",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37544067530-1-192.mp4",
+      "sourceTimeSec": 1350,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e033c",
+      "question": "Harman's Agent 是什麼？",
+      "termHint": "harman's agent",
+      "topic": "agent-theory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e034h",
+      "question": "Agent 的通信架構是什麼？",
+      "termHint": "agent communication architecture",
+      "topic": "agent-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e035c",
+      "question": "Agent 技能如何應用於實驗？",
+      "termHint": "agent skill application",
+      "topic": "agent-skill",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e036h",
+      "question": "大模型行業知識更新速度快嗎？",
+      "termHint": "model industry knowledge update",
+      "topic": "model-knowledge",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e037c",
+      "question": "Harmony's Agent和Open Cloud的架構是否相同？？",
+      "termHint": "harmony agent open cloud architecture",
+      "topic": "agent-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e038h",
+      "question": "Harmony's Agent的核心功能是什么？？",
+      "termHint": "harmony agent core functionality",
+      "topic": "agent-core",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e039c",
+      "question": "Auto Dream和自我進化能力有何相似？？",
+      "termHint": "auto dream self evolution",
+      "topic": "agent-learning",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e040h",
+      "question": "Cloud Code的技工能如何實現自我進化？？",
+      "termHint": "cloud code self evolution",
+      "topic": "code-evolution",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e041c",
+      "question": "Harmony's Agent的記憶功能與Open Cloud有何區別？",
+      "termHint": "agent memory comparison",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e042h",
+      "question": "Harmony's Agent如何實現自我進化？",
+      "termHint": "agent self-evolution mechanism",
+      "topic": "agent-evolution",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e043c",
+      "question": "Harmony's Agent的閉環架構是什麼意思？",
+      "termHint": "agent closed-loop architecture",
+      "topic": "agent-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e044h",
+      "question": "Harmony's Agent的觸發層是什麼作用？",
+      "termHint": "agent trigger layer function",
+      "topic": "agent-trigger",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e045c",
+      "question": "React範式在Agent核心層是如何實現的？",
+      "termHint": "react pattern agent core",
+      "topic": "agent-core",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e046h",
+      "question": "Agent核心層與Open Cloud的架構有何相似之處？",
+      "termHint": "agent architecture open cloud",
+      "topic": "agent-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e047c",
+      "question": "網關層主要處理哪些類型的消息？",
+      "termHint": "gateway message routing",
+      "topic": "gateway",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e048h",
+      "question": "Agent執行工具與記憶模塊之間的關係是什麼？",
+      "termHint": "tool memory module",
+      "topic": "memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e049c",
+      "question": "HarmusAgent的記憶模塊與Open Cloud有何區別？",
+      "termHint": "agent memory module",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e050h",
+      "question": "記憶系統中長期記憶和短期記憶是如何組織的？",
+      "termHint": "memory system architecture",
+      "topic": "memory-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e051c",
+      "question": "上下文窗口爆炸時如何進行壓縮？",
+      "termHint": "context window compression",
+      "topic": "context-compression",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e052h",
+      "question": "MD文件在記憶系統中起什麼作用？",
+      "termHint": "memory storage format",
+      "topic": "memory-storage",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e053c",
+      "question": "什么是Memory在系统中的作用？",
+      "termHint": "memory system",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e054h",
+      "question": "Sessen数据圆的存储格式是什么？",
+      "termHint": "json format",
+      "topic": "data-storage",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e055c",
+      "question": "用户画像模块使用了什么开源项目？",
+      "termHint": "hunkle library",
+      "topic": "user-profile",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e056h",
+      "question": "锁影数据圆的作用是什么？",
+      "termHint": "lock shadow memory",
+      "topic": "memory-management",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e057c",
+      "question": "Skill在Harmless Agent中是如何被存储和维护的？",
+      "termHint": "skill storage maintenance",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e058h",
+      "question": "Harmless Agent的Skill与OpenCloud有何不同？",
+      "termHint": "skill comparison opencloud",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e059c",
+      "question": "EOS Model在用户画像中的作用是什么？",
+      "termHint": "eos model user profile",
+      "topic": "agent-identity",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e060h",
+      "question": "用户画像在Harmless Agent中是动态更新的吗？",
+      "termHint": "user profile dynamic update",
+      "topic": "agent-identity",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e061c",
+      "question": "什么是双路减索？它的作用是什么？",
+      "termHint": "double indexing",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1260,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e062h",
+      "question": "Rug在Open Cloud Harmony中是否还在使用？",
+      "termHint": "Rug indexing",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1260,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e063c",
+      "question": "Session和Memory的区别是什么？",
+      "termHint": "session memory",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1260,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e064h",
+      "question": "如何通过Session实现对话回退？",
+      "termHint": "session rollback",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1260,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e065c",
+      "question": "Session和Memory的主要區別是什麼？",
+      "termHint": "session memory difference",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1440,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e066h",
+      "question": "OpenCloud如何存儲事實資訊？",
+      "termHint": "opencloud fact storage",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1440,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e067c",
+      "question": "Skew如何實現漸進式知識披露？",
+      "termHint": "skew progressive disclosure",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1440,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e068h",
+      "question": "Agent如何進行記憶反思與優化？",
+      "termHint": "agent memory reflection",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1440,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e069c",
+      "question": "什么是OpenCloud的压缩策略？",
+      "termHint": "open cloud compression strategy",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1620,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e070h",
+      "question": "如何分塊壓縮前九十輪對話？",
+      "termHint": "chunk compression technique",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1620,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e071c",
+      "question": "Cloud Code需要保留哪些上下文信息？",
+      "termHint": "cloud code context retention",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1620,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e072h",
+      "question": "Pretty Compaction Manhole的原理是什么？",
+      "termHint": "pretty compaction manhole",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1620,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e073c",
+      "question": "Harmus是如何定期更新和沉淀信息的？",
+      "termHint": "harmus periodic update",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1800,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e074h",
+      "question": "Harmus的反思机制是基于什么触发的？",
+      "termHint": "harmus reflection trigger",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1800,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e075c",
+      "question": "子Agent在Harmus中用于什么目的？",
+      "termHint": "sub-agent reflection",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1800,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e076h",
+      "question": "Harmus的沉淀机制如何实现定时任务？",
+      "termHint": "harmus timer task",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1800,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e077c",
+      "question": "UseMD是什么？它和用户画像有什么关系？",
+      "termHint": "user modeling user profile",
+      "topic": "user-modeling",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1980,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e078h",
+      "question": "Span机制在系统中是如何工作的？",
+      "termHint": "span mechanism communication",
+      "topic": "communication",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1980,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e079c",
+      "question": "自我进化能力在系统中如何体现？",
+      "termHint": "self-evolution system architecture",
+      "topic": "self-evolution",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "37726521437-1-192.mp4",
+      "sourceTimeSec": 1980,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e080h",
+      "question": "后训练包括强化学习和微调吗？",
+      "termHint": "fine-tuning reinforcement learning",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e081c",
+      "question": "如何判断模型能否在CPU上运行？",
+      "termHint": "model inference cpu",
+      "topic": "model-deployment",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e082h",
+      "question": "面试中常问模型部署相关问题吗？",
+      "termHint": "model deployment interview",
+      "topic": "interview-questions",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e083c",
+      "question": "后训练和推理有什么区别？",
+      "termHint": "training inference difference",
+      "topic": "model-lifecycle",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e084h",
+      "question": "什么是大模型的完整生命周期？",
+      "termHint": "large model lifecycle",
+      "topic": "model-lifecycle",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e085c",
+      "question": "什么是預訓練階段？",
+      "termHint": "pre-training model",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e086h",
+      "question": "監督式微調和強化學習有什麼區別？",
+      "termHint": "supervised fine-tuning reinforcement learning",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e087c",
+      "question": "RIO HF 是什麼意思？",
+      "termHint": "RIO HF model training",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e088h",
+      "question": "什么是大圆模型的部署和推理？？",
+      "termHint": "model deployment inference",
+      "topic": "model-deployment",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e089c",
+      "question": "训练过程中需要哪些硬件支持？？",
+      "termHint": "training hardware requirements",
+      "topic": "training-hardware",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e090h",
+      "question": "部署阶段依赖哪些硬件条件？？",
+      "termHint": "deployment hardware dependencies",
+      "topic": "deployment-hardware",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e091c",
+      "question": "推理过程如何通过HTTP协议实现？？",
+      "termHint": "http inference protocol",
+      "topic": "inference-protocol",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e092h",
+      "question": "训练阶段需要哪些额外的内存资源？？",
+      "termHint": "training memory requirements",
+      "topic": "training-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e093c",
+      "question": "前向传播和反向传播分别需要什么内存？？",
+      "termHint": "forward backward propagation memory",
+      "topic": "training-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e094h",
+      "question": "模型参数在训练和推理中是否都需要？？",
+      "termHint": "model parameters training inference",
+      "topic": "model-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e095c",
+      "question": "如何判断训练阶段所需的显存大小？？",
+      "termHint": "training memory calculation",
+      "topic": "training-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e096h",
+      "question": "什么是反向传播在训练过程中的作用？",
+      "termHint": "backpropagation training process",
+      "topic": "training-process",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 750,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e097c",
+      "question": "推理过程中为何不需要反向传播？",
+      "termHint": "inference forward propagation",
+      "topic": "inference",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 750,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e098h",
+      "question": "QKV在模型结构中起到什么作用？",
+      "termHint": "query-key-value transformer",
+      "topic": "transformer",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 750,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e099c",
+      "question": "空间换时间策略在推理中如何实现？",
+      "termHint": "space-time trade-off inference",
+      "topic": "inference-optimization",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 750,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e100h",
+      "question": "fps32和bf16的區別是什麼？",
+      "termHint": "fp32 vs bf16",
+      "topic": "general",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 930,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e101c",
+      "question": "激活值的計算與哪些變量相關？",
+      "termHint": "activation calculation",
+      "topic": "general",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 930,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e102h",
+      "question": "B、H、N在激活值計算中代表什麼？",
+      "termHint": "activation variables",
+      "topic": "general",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 930,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e103c",
+      "question": "如何估算模型的激活值大小？",
+      "termHint": "activation estimation",
+      "topic": "general",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 930,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e104h",
+      "question": "激活值的計算與模型規模之間有什麼關係？",
+      "termHint": "activation value model size",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1110,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e105c",
+      "question": "SFT微調中全餐微調和部分參數微調的區別是什麼？",
+      "termHint": "supervised fine-tuning full parameter",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1110,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e106h",
+      "question": "bf16數據格式在訓練中佔用多少存儲空間？",
+      "termHint": "bf16 data format storage",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1110,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e107c",
+      "question": "模型參數的存儲格式如何影響訓練空間需求？",
+      "termHint": "model parameter storage format",
+      "topic": "model-training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1110,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e108h",
+      "question": "什么是混合精度训练？它的原理是什么？",
+      "termHint": "mixed precision training",
+      "topic": "training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1290,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e109c",
+      "question": "激活值的大小取决于哪些因素？",
+      "termHint": "activation value factors",
+      "topic": "model",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1290,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e110h",
+      "question": "Laura是什么？它在模型训练中起什么作用？",
+      "termHint": "Laura model training",
+      "topic": "model",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1290,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e111c",
+      "question": "0.04B是如何计算得出的？",
+      "termHint": "parameter size calculation",
+      "topic": "training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1290,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e112h",
+      "question": "什么是全参数微调？它的硬件需求如何？",
+      "termHint": "full parameter tuning",
+      "topic": "training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1500,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e113c",
+      "question": "微调和全参数微调在效果和硬件需求上有何区别？",
+      "termHint": "fine-tuning full-tuning",
+      "topic": "training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1500,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e114h",
+      "question": "PPO和GRPO算法在强化学习中有什么区别？",
+      "termHint": "PPO GRPO reinforcement learning",
+      "topic": "reinforcement",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1500,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e115c",
+      "question": "参考模型在强化学习训练中起什么作用？",
+      "termHint": "reference model reinforcement learning",
+      "topic": "training",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1500,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e116h",
+      "question": "PBO算法相比SFT需要更高的硬件资源吗？",
+      "termHint": "PPO algorithm hardware requirements",
+      "topic": "reinforcement-learning",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1680,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e117c",
+      "question": "GRPO算法如何减少显存需求？",
+      "termHint": "GRPO critic network removal",
+      "topic": "reinforcement-learning",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1680,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e118h",
+      "question": "KW开始在推理阶段的作用是什么？",
+      "termHint": "KW start inference optimization",
+      "topic": "inference-optimization",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1680,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e119c",
+      "question": "Reward Model在GRPO中是否可以被替代？",
+      "termHint": "GRPO reward model replacement",
+      "topic": "reinforcement-learning",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1680,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e120h",
+      "question": "量化是什麼意思？它如何影響模型推理速度？",
+      "termHint": "model quantization",
+      "topic": "model-optimization",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1860,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e121c",
+      "question": "什麼是病情數？它與模型結構有什麼關係？",
+      "termHint": "model complexity",
+      "topic": "model-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1860,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e122h",
+      "question": "邊緣設備上使用量化模型有哪些優勢？",
+      "termHint": "edge computing quantization",
+      "topic": "model-deployment",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1860,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e123c",
+      "question": "面試中如何評估候選人對模型優化技術的理解？",
+      "termHint": "interview assessment",
+      "topic": "interview-techniques",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 1860,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e124h",
+      "question": "如何掌握面試中大體原則以回答細節問題？",
+      "termHint": "interview principles",
+      "topic": "interview-techniques",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 2070,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e125c",
+      "question": "面試中如何處理深入細節的問題？",
+      "termHint": "interview detailed questions",
+      "topic": "interview-techniques",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 2070,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e126h",
+      "question": "如何利用課程筆記提升面試表現？",
+      "termHint": "interview preparation notes",
+      "topic": "interview-techniques",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 2070,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e127c",
+      "question": "面試前應如何準備以應對各種問題？",
+      "termHint": "interview preparation strategies",
+      "topic": "interview-techniques",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38319360791-1-192.mp4",
+      "sourceTimeSec": 2070,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e128h",
+      "question": "Harness Engineering的核心思想是什麼？",
+      "termHint": "harness engineering principles",
+      "topic": "agent-engineering",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e129c",
+      "question": "Harness如何提升模型使用效果？",
+      "termHint": "model optimization techniques",
+      "topic": "model-usage",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e130h",
+      "question": "Harness Engineering對AI素養有什麼影響？",
+      "termHint": "ai literacy harness",
+      "topic": "ai-literacy",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e131c",
+      "question": "如何從零開始學習Harness？",
+      "termHint": "harness learning path",
+      "topic": "learning-path",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 0,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e132h",
+      "question": "Harness工程在實踐中如何應用？？",
+      "termHint": "harness engineering application",
+      "topic": "agent-engineering",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e133c",
+      "question": "Harness工程有哪些最佳實踐？？",
+      "termHint": "harness best practices",
+      "topic": "agent-engineering",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e134h",
+      "question": "Harness工程在架構選擇中起什麼作用？？",
+      "termHint": "harness architecture selection",
+      "topic": "agent-engineering",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e135c",
+      "question": "Harness工程在面試中常被問到哪些問題？？",
+      "termHint": "harness interview questions",
+      "topic": "agent-engineering",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 180,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e136h",
+      "question": "Harnes在面試中常被問到的應用場景有哪些？",
+      "termHint": "harness interview applications",
+      "topic": "harness-interview",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e137c",
+      "question": "如何通過開源項目理解Harnes的實踐方法？",
+      "termHint": "open source projects harness",
+      "topic": "harness-practice",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e138h",
+      "question": "Harnes在Cloud Code實戰中的思想體現是什麼？",
+      "termHint": "cloud code harness philosophy",
+      "topic": "harness-philosophy",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e139c",
+      "question": "Harnes如何幫助組織上下文信息？",
+      "termHint": "harness context organization",
+      "topic": "harness-context",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 360,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e140h",
+      "question": "什么是Harness？它在AI模型中有什么作用？",
+      "termHint": "harness in ai",
+      "topic": "agent-harness",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e141c",
+      "question": "Harness和Agent之间的关系是什么？",
+      "termHint": "agent harness relationship",
+      "topic": "agent-harness",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e142h",
+      "question": "Cloud Code如何利用Harness提升模型效果？",
+      "termHint": "cloud code harness",
+      "topic": "agent-harness",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e143c",
+      "question": "什么是Grid指令？它在Harness中有什么作用？",
+      "termHint": "grid instruction harness",
+      "topic": "agent-harness",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 540,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e144h",
+      "question": "什么是BMR5工具？？",
+      "termHint": "BMR5 tool",
+      "topic": "tool-usage",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e145c",
+      "question": "Grip工具的原理是什么？？",
+      "termHint": "Grip tool mechanism",
+      "topic": "tool-architecture",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e146h",
+      "question": "什么是embedding搜索？？",
+      "termHint": "embedding search",
+      "topic": "search-technique",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e147c",
+      "question": "Rack工具是否过时？？",
+      "termHint": "Rack tool status",
+      "topic": "tool-evolution",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 720,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e148h",
+      "question": "什么是Semitic Search？？",
+      "termHint": "semiotic search",
+      "topic": "search-technique",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e149c",
+      "question": "Argentic Rack和Rack有什么区别？？",
+      "termHint": "argentic rack rack",
+      "topic": "search-technique",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e150h",
+      "question": "为什么使用Argentic Rack会很耗时？？",
+      "termHint": "token usage ai",
+      "topic": "search-optimization",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e151c",
+      "question": "Grip和BMR5分别适用于什么场景？？",
+      "termHint": "grip bmr5 use-case",
+      "topic": "search-technique",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 900,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e152h",
+      "question": "什么是AI的上下文记忆？？",
+      "termHint": "context memory in ai",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e153c",
+      "question": "临时工作目录在AI中有什么作用？？",
+      "termHint": "temporary workspace ai",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e154h",
+      "question": "长期记忆在AI系统中如何实现？？",
+      "termHint": "long-term memory ai",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e155c",
+      "question": "Rack技术的发展趋势如何？？",
+      "termHint": "rack technology trend",
+      "topic": "tech-trend",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1080,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e156h",
+      "question": "什么是layer2和layer3在存储中的区别？",
+      "termHint": "layer2 layer3 storage",
+      "topic": "storage-layer",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1320,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e157c",
+      "question": "为什么需要使用零食工作文件？",
+      "termHint": "working file context",
+      "topic": "file-management",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1320,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e158h",
+      "question": "如何优化模型上下文窗口的使用？",
+      "termHint": "context window optimization",
+      "topic": "model-performance",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1320,
+      "cacheMode": "hot"
+    },
+    {
+      "id": "e159c",
+      "question": "compact指令的作用是什么？",
+      "termHint": "compact instruction compression",
+      "topic": "model-compression",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1320,
+      "cacheMode": "cold"
+    },
+    {
+      "id": "e160h",
+      "question": "什么是rebacking？它的作用是什么？",
+      "termHint": "rebacking concept",
+      "topic": "agent-memory",
+      "tags": [
+        "keyword-extraction"
+      ],
+      "sourceVideo": "38516621409-1-192.mp4",
+      "sourceTimeSec": 1500,
+      "cacheMode": "hot"
+    }
+  ]
+}

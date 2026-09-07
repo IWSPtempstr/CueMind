@@ -7,8 +7,8 @@ import {
 /**
  * Local `llama.cpp`/`llama-server` provider. It wraps the shared
  * OpenAI-compatible JSON client and only supplies the `llama.cpp` identity.
- * All calls go through the app-side single-slot queue (`withLlamaSlot`) so the
- * per-call timeout budget covers model compute, not the wait for the slot.
+ * All calls go through the app-side permit semaphore (`withLlamaSlot`) so the
+ * per-call timeout budget covers model compute, not the wait for a permit.
  */
 export async function generateLlamaCppJson<T>(
   args: Omit<JsonChatRequest, "provider">,
@@ -25,24 +25,45 @@ export async function generateLlamaCppJson<T>(
 }
 
 /**
- * App-side queue mirroring the deployment's single llama-server slot
- * (`-np 1`; 8B fully offloaded on 8GB VRAM cannot raise it without OOM).
- * llama-server serializes concurrent requests internally, so without this
- * queue a caller's wall time silently includes the queue wait and its own
- * timeout budget burns before the model even starts (the main source of
- * card-pipeline `provider timed out`). Serializing in the app makes the wait
- * explicit and starts each caller's timeout only once the slot is acquired.
+ * App-side permit semaphore mirroring the deployment's llama-server parallel
+ * slots (`-np 2`; permit count via `CUEMIND_LLAMA_SLOTS`, default 2, and must
+ * match the server's `-np` to avoid silent server-side queuing).
+ * llama-server serializes per slot, so without this semaphore a caller's wall
+ * time silently includes the queue wait and its own timeout budget burns
+ * before the model even starts (the main source of card-pipeline
+ * `provider timed out`). Gating in the app makes the wait explicit and starts
+ * each caller's timeout only once a permit is acquired.
  *
  * Callers may pass an `AbortSignal`: a caller that is aborted while still
- * queued is dequeued and rejected instead of later consuming the slot — dead
- * requests (client disconnected, watchdog fired) no longer burn the single
- * slot for seconds. Aborts after slot acquisition are the caller's own
- * business (its fetch has its own timeout/watchdog).
+ * queued is dequeued and rejected instead of later consuming a permit — dead
+ * requests (client disconnected, watchdog fired) no longer burn a slot for
+ * seconds. Aborts after acquisition are the caller's own business (its fetch
+ * has its own timeout/watchdog).
  *
  * FIFO; not reentrant — callers must never issue a llama call from inside
  * another one (current routes never do). Kept on globalThis so dev-HMR /
  * duplicate module instances share one queue (same pattern as cardInflight).
  */
+
+/** Number of llama-server parallel slots the app may occupy concurrently. */
+export function llamaSlotPermits(): number {
+  const raw = Number(process.env.CUEMIND_LLAMA_SLOTS ?? "2");
+  return Number.isInteger(raw) && raw >= 1 ? raw : 2;
+}
+
+/**
+ * Upper bound on how long a caller may sit in the queue before failing.
+ * Queued callers cannot time themselves out (their budget signal is created
+ * only after a permit is acquired — "budget starts after slot"), so without
+ * this bound a leaked/slow permit hold chains into silent unbounded waits.
+ * Expiry rejects with a queue-timeout error that routes map onto their
+ * explicit failure terminal states (fail-closed).
+ */
+export function llamaSlotQueueTimeoutMs(): number {
+  const raw = Number(process.env.CUEMIND_LLAMA_QUEUE_TIMEOUT_MS ?? "20000");
+  return Number.isFinite(raw) && raw >= 1 ? raw : 20000;
+}
+
 export interface LlamaSlotOptions {
   signal?: AbortSignal;
 }
@@ -50,12 +71,15 @@ export interface LlamaSlotOptions {
 interface LlamaSlotWaiter {
   resolve: () => void;
   reject: (error: unknown) => void;
-  /** Dequeues+rejects this waiter on abort; no-op once the slot was handed over. */
+  /** Dequeues+rejects this waiter on abort; no-op once a permit was handed over. */
   onAbort: () => void;
+  /** Clears the queue timeout once the waiter leaves the queue for any reason. */
+  onDeque?: () => void;
 }
 
 interface LlamaSlotState {
-  busy: boolean;
+  /** Permits currently held (0..llamaSlotPermits()). */
+  active: number;
   /** Queued callers, in arrival order. */
   queue: Array<LlamaSlotWaiter>;
 }
@@ -63,7 +87,7 @@ const globalLlamaSlot = globalThis as typeof globalThis & {
   cueMindLlamaSlot?: LlamaSlotState;
 };
 const llamaSlot: LlamaSlotState =
-  globalLlamaSlot.cueMindLlamaSlot ?? { busy: false, queue: [] };
+  globalLlamaSlot.cueMindLlamaSlot ?? { active: 0, queue: [] };
 globalLlamaSlot.cueMindLlamaSlot = llamaSlot;
 
 export async function withLlamaSlot<T>(
@@ -72,8 +96,14 @@ export async function withLlamaSlot<T>(
 ): Promise<T> {
   const signal = options?.signal;
   if (signal?.aborted) throw slotAbortedError();
-  if (llamaSlot.busy || llamaSlot.queue.length > 0) {
+  if (
+    llamaSlot.active < llamaSlotPermits() &&
+    llamaSlot.queue.length === 0
+  ) {
+    llamaSlot.active += 1;
+  } else {
     let waiter: LlamaSlotWaiter | undefined;
+    const queueTimeoutMs = llamaSlotQueueTimeoutMs();
     try {
       await new Promise<void>((resolve, reject) => {
         const entry: LlamaSlotWaiter = {
@@ -81,7 +111,7 @@ export async function withLlamaSlot<T>(
           reject,
           onAbort: () => {
             // Only act while still queued: a waiter the release() path already
-            // shifted owns the slot and must not be rejected out from under it.
+            // shifted owns a permit and must not be rejected out from under it.
             const index = llamaSlot.queue.indexOf(entry);
             if (index === -1) return;
             llamaSlot.queue.splice(index, 1);
@@ -90,17 +120,24 @@ export async function withLlamaSlot<T>(
         };
         waiter = entry;
         llamaSlot.queue.push(entry);
+        const queueTimer = setTimeout(() => {
+          const index = llamaSlot.queue.indexOf(entry);
+          if (index === -1) return;
+          llamaSlot.queue.splice(index, 1);
+          reject(slotQueueTimeoutError(queueTimeoutMs));
+        }, queueTimeoutMs);
+        queueTimer.unref?.();
+        entry.onDeque = () => clearTimeout(queueTimer);
         signal?.addEventListener("abort", entry.onAbort, { once: true });
       });
     } finally {
-      // 无论拿到槽还是排队中被 abort，都摘掉监听，避免长生命周期 signal 泄漏。
+      // 无论拿到槽还是排队中被 abort/超时，都摘掉监听，避免长生命周期 signal 泄漏。
       if (waiter !== undefined) {
+        waiter.onDeque?.();
         signal?.removeEventListener("abort", waiter.onAbort);
       }
     }
-    // The slot was handed over by release() with busy left true.
-  } else {
-    llamaSlot.busy = true;
+    // A permit was handed over by release() (it already incremented `active`).
   }
   try {
     return await fn();
@@ -116,13 +153,21 @@ function slotAbortedError(): Error {
   return error;
 }
 
+/** Distinctive rejection for callers that sat in the queue too long. */
+function slotQueueTimeoutError(waitedMs: number): Error {
+  const error = new Error(`llama slot queue timeout after ${waitedMs}ms`);
+  error.name = "LlamaSlotQueueTimeoutError";
+  return error;
+}
+
 function releaseLlamaSlot(): void {
+  llamaSlot.active -= 1;
   const next = llamaSlot.queue.shift();
-  if (next === undefined) {
-    llamaSlot.busy = false;
-  } else {
-    // Keep busy=true through the microtask handover so a concurrent fast-path
-    // caller cannot double-own the slot.
+  if (next !== undefined) {
+    // Hand the freed permit over synchronously (keep it counted as held
+    // through the microtask handover so a concurrent fast-path caller cannot
+    // over-subscribe the permits).
+    llamaSlot.active += 1;
     next.resolve();
   }
 }
