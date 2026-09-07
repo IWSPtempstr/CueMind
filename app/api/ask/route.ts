@@ -284,7 +284,8 @@ export async function POST(
         }
 
         // [1] Keyword extraction: single local JSON call, hard 1.5s budget.
-        // Failure degrades to termHint, then to the question prefix.
+        // Failure degrades to termHint; with no termHint it never falls back to
+        // question text (privacy red line: only keywords leave the machine).
         const keywordStartedAt = performance.now();
         let keywords: string[] = [];
         // 默认发起搜索（向后兼容）；仅当模型明确判定泛化问题且无术语提示时跳过。
