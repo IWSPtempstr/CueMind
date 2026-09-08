@@ -26,8 +26,8 @@ function testManifestSeparatesCacheModes(): void {
 
 function testSummaryKeepsFailuresInDenominator(): void {
   const results: AskEvaluationResult[] = [
-    { id: "a", cacheMode: "cold", question: "a", status: "answered", completionMs: 100, firstEventMs: 20, firstByteMs: 90, finalState: "answered", stages: null, error: null },
-    { id: "b", cacheMode: "cold", question: "b", status: "failed", completionMs: 200, firstEventMs: null, firstByteMs: null, finalState: "model_failed", stages: null, error: "timeout" },
+    { id: "a", cacheMode: "cold", question: "a", status: "answered", completionMs: 100, firstEventMs: 20, firstByteMs: 90, finalState: "answered", stages: null, error: null, answer: "x", sources: [], keywords: [] },
+    { id: "b", cacheMode: "cold", question: "b", status: "failed", completionMs: 200, firstEventMs: null, firstByteMs: null, finalState: "model_failed", stages: null, error: "timeout", answer: "", sources: [], keywords: [] },
   ];
   const summary = summarizeAskResults(results);
   assert.equal(summary.denominator.total, 2);

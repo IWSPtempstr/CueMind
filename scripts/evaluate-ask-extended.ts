@@ -39,6 +39,12 @@ export interface AskEvaluationResult {
   warmFinalState?: string;
   cacheEligible?: boolean;
   error: string | null;
+  /** Captured content quality fields (empty when the turn produced no answer text). */
+  answer: string;
+  sources: { title: string; url: string; sourceType?: string }[];
+  keywords: string[];
+  searched?: boolean;
+  persisted?: boolean;
 }
 
 interface Percentiles {
@@ -169,6 +175,10 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion, sess
   let finalState = "no_done";
   let stages: AskEvaluationResult["stages"] = null;
   let observedCacheHit: boolean | undefined;
+  let answerText = "";
+  let sources: { title: string; url: string; sourceType?: string }[] = [];
+  let keywords: string[] = [];
+  let searched: boolean | undefined;
   try {
     const response = await fetch(`${baseUrl}/api/ask`, {
       method: "POST",
@@ -198,6 +208,11 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion, sess
       if (firstEventMs === null) firstEventMs = performance.now() - startedAt;
       const event = typeof data.event === "string" ? data.event : "";
       if ((event === "answer_chunk" || event === "degraded") && firstByteMs === null) firstByteMs = performance.now() - startedAt;
+      if (event === "answer_chunk") {
+        const delta = (data as { choices?: { delta?: { content?: unknown } }[] }).choices?.[0]?.delta?.content;
+        if (typeof delta === "string") answerText += delta;
+        return;
+      }
       if (event !== "done") return;
       completionMs = performance.now() - startedAt;
       finalState = typeof data.finalState === "string" ? data.finalState : "no_done";
@@ -209,6 +224,15 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion, sess
           generationMs: numberOrZero(data.stages.generationMs),
         };
       }
+      if (Array.isArray(data.sources)) {
+        sources = data.sources.filter(isRecord).map((source) => ({
+          title: typeof source.title === "string" ? source.title : "",
+          url: typeof source.url === "string" ? source.url : "",
+          ...(typeof source.sourceType === "string" ? { sourceType: source.sourceType } : {}),
+        })).filter((source) => source.title !== "" && source.url !== "");
+      }
+      if (Array.isArray(data.keywords)) keywords = data.keywords.filter((k): k is string => typeof k === "string");
+      if (typeof data.searched === "boolean") searched = data.searched;
     };
     while (true) {
       const { done, value } = await reader.read();
@@ -224,7 +248,7 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion, sess
     for (const line of buffer.split("\n")) processLine(line);
     if (completionMs === 0) completionMs = performance.now() - startedAt;
     const status = finalState === "answered" || finalState === "degraded" ? finalState : "failed";
-    return { ...question, status, completionMs, firstEventMs, firstByteMs, finalState, stages, observedCacheHit, error: null };
+    return { ...question, status, completionMs, firstEventMs, firstByteMs, finalState, stages, observedCacheHit, error: null, answer: answerText, sources, keywords, searched };
   } catch (error) {
     return {
       ...question,
@@ -236,6 +260,10 @@ async function measureOne(baseUrl: string, question: AskEvaluationQuestion, sess
       stages,
       observedCacheHit,
       error: error instanceof Error ? error.message : String(error),
+      answer: answerText,
+      sources,
+      keywords,
+      searched,
     };
   }
 }
@@ -267,6 +295,45 @@ async function warmOne(baseUrl: string, question: AskEvaluationQuestion, session
   }
 }
 
+/** Persists one measured turn (user + assistant) for frontend replay; idempotent by message id. */
+async function persistEvalTurn(baseUrl: string, sessionToken: string | null, result: AskEvaluationResult): Promise<boolean> {
+  if (!sessionToken) return false;
+  const now = new Date().toISOString();
+  const messages: Record<string, unknown>[] = [
+    {
+      id: `ask-eval-${result.id}-user`,
+      role: "user",
+      content: result.question,
+      isDetail: false,
+      createdAt: now,
+      ...(result.keywords.length > 0 ? { keywords: result.keywords } : {}),
+    },
+  ];
+  if (result.answer.trim() !== "") {
+    messages.push({
+      id: `ask-eval-${result.id}-assistant`,
+      role: "assistant",
+      content: result.answer,
+      isDetail: false,
+      createdAt: now,
+      ...(result.sources.length > 0 ? { sources: result.sources } : {}),
+      ...(result.keywords.length > 0 ? { keywords: result.keywords } : {}),
+      finalState: result.finalState,
+    });
+  }
+  try {
+    const response = await fetch(`${baseUrl}/api/chat-messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-Token": sessionToken },
+      body: JSON.stringify({ sessionId: EVAL_SESSION_ID, messages }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function main(): Promise<void> {
   const manifestPath = process.env.ASK_EXTENDED_MANIFEST;
   if (!manifestPath) throw new Error("ASK_EXTENDED_MANIFEST is required; no dataset is created automatically");
@@ -284,6 +351,7 @@ async function main(): Promise<void> {
       result.cacheEligible = warmFinalState === "answered";
     }
     results.push(result);
+    result.persisted = await persistEvalTurn(baseUrl, sessionToken, result);
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }
   const summary = summarizeAskResults(results);
