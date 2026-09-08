@@ -6,6 +6,8 @@ import {
   CHAT_CONTEXT_CHARS,
   CHUNK_INTERVAL_SECONDS,
   EARLIER_CONTEXT_CHARS,
+  LEGACY_ASK_PROMPT_V1,
+  LEGACY_ASK_PROMPT_V2,
   LEGACY_DEFAULT_CHAT_PROMPT,
   MAX_CHUNK_INTERVAL_SECONDS,
   MAX_CONTEXT_CHARS,
@@ -137,8 +139,14 @@ export function loadCueMindSettings(): Settings {
   // 为新的引用式契约（幂等自愈），用户自定义（≠旧默认）原样保留。
   const storedAskPrompt =
     typeof o.askPrompt === "string" ? o.askPrompt : typeof o.chatPrompt === "string" ? o.chatPrompt : defaults.askPrompt;
-  const askPromptSelfHealed = typeof o.askPrompt === "string" && o.askPrompt === LEGACY_DEFAULT_CHAT_PROMPT;
-  const askPrompt = storedAskPrompt === LEGACY_DEFAULT_CHAT_PROMPT ? defaults.askPrompt : storedAskPrompt;
+  const legacyAskPromptMatch =
+    storedAskPrompt === LEGACY_DEFAULT_CHAT_PROMPT ||
+    storedAskPrompt === LEGACY_ASK_PROMPT_V1 ||
+    storedAskPrompt === LEGACY_ASK_PROMPT_V2;
+  const askPromptSelfHealed =
+    (typeof o.askPrompt === "string" &&
+      (o.askPrompt === LEGACY_DEFAULT_CHAT_PROMPT || o.askPrompt === LEGACY_ASK_PROMPT_V1 || o.askPrompt === LEGACY_ASK_PROMPT_V2));
+  const askPrompt = legacyAskPromptMatch ? defaults.askPrompt : storedAskPrompt;
 
   const settings: Settings = {
     apiKeyStorage: mode,
@@ -187,7 +195,7 @@ export function loadCueMindSettings(): Settings {
   // absent; persisting drops chatPrompt from the blob. Also self-heals blobs
   // already migrated with the legacy default: persisting stores the new
   // citation-contract default. Idempotent — once repaired, later reads find
-  // askPrompt !== LEGACY_DEFAULT_CHAT_PROMPT and touch nothing.
+  // askPrompt matches no known factory default and touch nothing.
   if ("chatPrompt" in o || askPromptSelfHealed) {
     persistPreferences(settings);
   }

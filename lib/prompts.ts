@@ -27,7 +27,7 @@ export const CHAT_MAX_TOKENS = 1024;
 
 /** Max tokens for the live-ask citation JSON generation.
  * P0 修复（2026-08-29）：生成段是完成延迟主导段（修复前实测均值 ~4.8s，8B 输出
- * 吞吐受限）；配合 ASK_PROMPT 的 80 字答案 + ≤2 条引用收紧输出长度。 */
+ * 吞吐受限）；配合 ASK_PROMPT 的 150 字答案 + ≤2 条引用收紧输出长度。 */
 export const ASK_MAX_TOKENS = 512;
 
 /** Context-card keyword stage: output is one short JSON object {"keyword":"..."}.
@@ -80,6 +80,40 @@ export const LEGACY_DEFAULT_CHAT_PROMPT = `You are a meeting copilot assistant w
 Keep answers concise and direct. Aim for 3-5 sentences for most questions. Only go longer if the complexity genuinely requires it. Never restate the question. Never add preamble like "Great question" or "Based on the transcript...". Lead with the answer.`;
 
 export const ASK_PROMPT = `你是会中询问助手。基于提供的来源回答用户在会议进行中提出的问题。
+
+只输出 JSON：{"answer": "...", "sources": [{"title": "...", "url": "...", "sourceType": "..."}], "confidence": "high|medium|low"}
+
+规则：
+- answer 控制在 150 字以内：先给结论，再给关键细节（步骤、数字、名称、机制），不铺垫不重复问题；
+- 禁止空泛作答（如"取决于具体需求"）：给不出具体信息时，如实说明并给出可操作的下一步；
+- 每个关键论断后紧跟 [1]、[2] 等编号引用，编号必须指向真正支撑该论断的来源，不得引用无关来源；
+- sources 只列 answer 中实际引用的来源（最多 2 条），且不得为空：answer 中至少保留 1 处编号引用；
+- 有搜索来源时至少引用 1 条最相关来源；可用来源不足时，如实回答无法确认并仍列出最相关来源，不得编造；
+- confidence 取值 high、medium、low 之一；
+- 除 JSON 外不要输出任何内容。`;
+
+/**
+ * v2 出厂默认（150 字初版，未含 sources 不得为空约束 → sources_empty 降级回归）。
+ * 存量设置等于它 → 升级为 ASK_PROMPT；用户自定义（≠它）→ 原样保留。
+ */
+export const LEGACY_ASK_PROMPT_V2 = `你是会中询问助手。基于提供的来源回答用户在会议进行中提出的问题。
+
+只输出 JSON：{"answer": "...", "sources": [{"title": "...", "url": "...", "sourceType": "..."}], "confidence": "high|medium|low"}
+
+规则：
+- answer 控制在 150 字以内：先给结论，再给关键细节（步骤、数字、名称、机制），不铺垫不重复问题；
+- 禁止空泛作答（如"取决于具体需求"）：给不出具体信息时，如实说明并给出可操作的下一步；
+- 每个关键论断后紧跟 [1]、[2] 等编号引用，编号必须指向真正支撑该论断的来源，不得引用无关来源；
+- sources 只列 answer 中实际引用的来源（最多 2 条）；
+- 有搜索来源时至少引用 1 条；可用来源不足时，如实回答无法确认，不得编造；
+- confidence 取值 high、medium、low 之一；
+- 除 JSON 外不要输出任何内容。`;
+
+/**
+ * v1 出厂默认（答案 80 字版本）。存量设置等于它 → 升级为 ASK_PROMPT；
+ * 用户自定义（≠它）→ 原样保留。与 LEGACY_DEFAULT_CHAT_PROMPT 同一迁移策略。
+ */
+export const LEGACY_ASK_PROMPT_V1 = `你是会中询问助手。基于提供的来源回答用户在会议进行中提出的问题。
 
 只输出 JSON：{"answer": "...", "sources": [{"title": "...", "url": "...", "sourceType": "..."}], "confidence": "high|medium|low"}
 

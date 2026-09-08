@@ -3,7 +3,8 @@
 // Scores sampled Q&A turns on three dimensions the latency metrics cannot see:
 //   - relevance:    does the answer address the question asked
 //   - faithfulness: are claims plausibly grounded in the cited sources (title-level
-//                   heuristic — source excerpts are not persisted, so this checks
+//                   heuristic — only sources actually cited via [n] markers are
+//                   judged; source excerpts are not persisted, so this checks
 //                   answer/citation consistency, not full grounding)
 //   - readability:  is the answer compact and scannable for a live meeting
 //
@@ -80,6 +81,22 @@ function parseVerdict(raw: string): JudgeVerdict | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Extracts the sources actually cited in the answer via [n] markers (1-based).
+ * Falls back to all sources when the answer cites none (e.g. skipSearch turns
+ * already had citations stripped), so legacy rows still get judged.
+ */
+function citedSourcesOf(answer: string, sources: { title: string; url: string }[]): { title: string; url: string }[] {
+  const citedIndices = new Set<number>();
+  for (const match of answer.matchAll(/\[(\d+)\]/g)) {
+    const index = Number(match[1]);
+    if (Number.isInteger(index) && index >= 1) citedIndices.add(index - 1);
+  }
+  if (citedIndices.size === 0) return sources;
+  const cited = [...citedIndices].filter((index) => index < sources.length).map((index) => sources[index]);
+  return cited.length > 0 ? cited : sources;
 }
 
 async function judgeOnce(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
@@ -197,7 +214,7 @@ async function main(): Promise<void> {
     const userPrompt = [
       `问题：${judgeCase.question}`,
       `回答：${judgeCase.answer}`,
-      `引用来源：${judgeCase.sources.length > 0 ? judgeCase.sources.map((s) => s.title).join("；") : "（无）"}`,
+      `引用来源（仅列回答中通过 [n] 实际引用的）：${(() => { const cited = citedSourcesOf(judgeCase.answer, judgeCase.sources); return cited.length > 0 ? cited.map((s) => s.title).join("；") : "（无）"; })()}`,
     ].join("\n");
     try {
       const raw = await judgeOnce(MODEL, JUDGE_SYSTEM_PROMPT, userPrompt);
