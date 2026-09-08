@@ -196,6 +196,12 @@ export async function POST(
       // D3：输出上限补齐（ask/suggestions 均已设），关键词输出极短，
       // 固定上限消除 4~26s 耗时跳变并缩短单槽位占用。
       maxTokens: CONTEXT_KEYWORD_MAX_TOKENS,
+      // GBNF 约束解码：{"keyword":"..."} 结构在采样期强制成立。
+      jsonSchema: {
+        type: "object",
+        properties: { keyword: { type: "string" } },
+        required: ["keyword"],
+      },
     };
     const result = await withCardInflight(async () => {
       for (;;) {
@@ -384,6 +390,23 @@ export async function POST(
       // D3：要点卡输出契约固定（keyword + 2-4 条要点 + whyNow），上限收紧
       // 生成耗时波动，避免长输出放大单槽位占用。
       maxTokens: CONTEXT_CARD_MAX_TOKENS,
+      // GBNF 约束解码：keyword/keyPoints(1-4)/whyNow 结构在采样期强制成立
+      // （normalizeKeyPoints 校验保留作纵深防御）。经 generateProviderJson
+      // 传入时仅本地 llama.cpp 生效，remote-api 自动回退 json_object。
+      jsonSchema: {
+        type: "object",
+        properties: {
+          keyword: { type: "string" },
+          keyPoints: {
+            type: "array",
+            minItems: 1,
+            maxItems: 4,
+            items: { type: "string" },
+          },
+          whyNow: { type: "string" },
+        },
+        required: ["keyword", "keyPoints", "whyNow"],
+      },
     };
     // 询问让位（红线 3）：卡片生成在途时计入 cardInflight，ask 路由在发起前等待归零。
     generated = await withCardInflight(async () => {

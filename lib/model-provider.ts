@@ -163,6 +163,14 @@ export interface JsonChatRequest {
   timeoutMs: number;
   /** Optional output token cap forwarded as `max_tokens` when provided. */
   maxTokens?: number;
+  /**
+   * Optional JSON Schema forwarded to llama-server as a `json_schema`
+   * response_format so the grammar sampler constrains the output shape at
+   * decode time (zero-latency structural guarantee; only applied for the
+   * local llama.cpp provider — arbitrary OpenAI-compatible endpoints may
+   * not accept `json_schema` response formats).
+   */
+  jsonSchema?: unknown;
 }
 
 export function normalizeChatCompletionsUrl(baseUrl: string): string {
@@ -240,7 +248,18 @@ async function postChatCompletions(
         { role: "user", content: request.prompt },
       ],
       temperature: 0,
-      response_format: { type: "json_object" },
+      // GBNF-constrained decoding: llama-server accepts a full JSON Schema via
+      // response_format and enforces it during sampling, making schema-invalid
+      // output structurally impossible (validation stays as defense-in-depth).
+      // Gated to the local provider: remote endpoints may reject json_schema.
+      ...(request.jsonSchema !== undefined && request.provider === "llama.cpp"
+        ? {
+            response_format: {
+              type: "json_schema",
+              json_schema: { schema: request.jsonSchema },
+            },
+          }
+        : { response_format: { type: "json_object" } }),
       ...(request.maxTokens !== undefined
         ? { max_tokens: request.maxTokens }
         : {}),

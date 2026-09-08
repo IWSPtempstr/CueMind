@@ -308,6 +308,14 @@ export async function POST(
               : `问题：${question}`,
             timeoutMs: ASK_KEYWORD_TIMEOUT_MS,
             maxTokens: 96,
+            jsonSchema: {
+              type: "object",
+              properties: {
+                needsSearch: { type: "boolean" },
+                keywords: { type: "array", items: { type: "string" }, maxItems: 3 },
+              },
+              required: ["needsSearch", "keywords"],
+            },
           });
           keywords = normalizeKeywords(extracted.keywords);
           // needsSearch 缺失/非布尔时默认 true（保持既有搜索行为，向后兼容）。
@@ -679,7 +687,34 @@ async function streamAskCompletion(args: {
         messages: args.messages,
         stream: true,
         temperature: 0,
-        response_format: { type: "json_object" },
+        // GBNF 约束解码：answer/sources/confidence 结构在采样期强制成立，
+        // schema 违规从"校验兜底"变为"结构上不可能"（校验仍保留作纵深防御）。
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            schema: {
+              type: "object",
+              properties: {
+                answer: { type: "string" },
+                sources: {
+                  type: "array",
+                  maxItems: 5,
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      url: { type: "string" },
+                      sourceType: { type: "string" },
+                    },
+                    required: ["title", "url"],
+                  },
+                },
+                confidence: { type: "string", enum: ["high", "medium", "low"] },
+              },
+              required: ["answer", "sources", "confidence"],
+            },
+          },
+        },
         max_tokens: ASK_MAX_TOKENS,
       }),
       signal: args.upstreamSignal,
