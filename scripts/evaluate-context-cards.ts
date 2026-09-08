@@ -62,6 +62,10 @@ interface CaseResult {
   excluded: boolean;
   exclusionReason?: string;
   failureCode?: string;
+  /** Actual generated card content (persisted for offline content-quality judging). */
+  card?: { keyword: string; explanation: string; whyNow: string };
+  usableSourceTitles?: string[];
+  transcriptExcerpt?: string;
 }
 
 interface ProviderConfig {
@@ -215,6 +219,9 @@ async function evaluateCase(
     sourceSupportScore,
     whyNowRelevanceScore,
     failureCode,
+    card: output && cardSchemaValid === true ? output : undefined,
+    usableSourceTitles: usableSources.map((source) => source.title),
+    transcriptExcerpt: testCase.input.recentTranscript.slice(0, 600),
   });
 }
 
@@ -235,6 +242,9 @@ function makeCaseResult(
     sourceSupportScore?: number | null;
     whyNowRelevanceScore?: number | null;
     failureCode?: string;
+    card?: { keyword: string; explanation: string; whyNow: string };
+    usableSourceTitles?: string[];
+    transcriptExcerpt?: string;
   } = {},
 ): CaseResult {
   const outputKeyword = keyword;
@@ -262,6 +272,9 @@ function makeCaseResult(
     },
     excluded: false,
     ...(extras.failureCode ? { failureCode: extras.failureCode } : {}),
+    ...(extras.card ? { card: extras.card } : {}),
+    ...(extras.usableSourceTitles ? { usableSourceTitles: extras.usableSourceTitles } : {}),
+    ...(extras.transcriptExcerpt ? { transcriptExcerpt: extras.transcriptExcerpt } : {}),
   };
 }
 
