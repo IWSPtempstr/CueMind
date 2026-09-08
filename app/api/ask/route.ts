@@ -49,7 +49,10 @@ const ASK_IDLE_TIMEOUT_MS = 30_000;
 const ASK_KEYWORD_TIMEOUT_MS = 1_500;
 const ASK_KEYWORDS_MAX = 3;
 // Search budget mirrors the card pipeline (vertical short-circuit + fallback).
-const ASK_SEARCH_TIMEOUT_MS = 4_000;
+// Path B 后 include_raw_content 给 Tavily 增加 0.5~6s（实测尾长 7.4s）：
+// 预算 4s 会把带 raw 的请求直接掐死（V4 首测 5/80 degraded 皆为搜索超时），
+// 提高到 6.5s 覆盖绝大多数 raw 请求，残余超时由重试的无 raw 快速路径兜底。
+const ASK_SEARCH_TIMEOUT_MS = 6_500;
 const ASK_SEARCH_MAX_ATTEMPTS = 2;
 // Ask yield queue (red line 3): wait for in-flight card generations to drain.
 const ASK_YIELD_POLL_MS = 100;
@@ -597,6 +600,9 @@ async function searchAskSources(args: {
         tavilyApiKey: args.tavilyApiKey,
         enableAgentReachFallback: args.enableAgentReachFallback,
         timeoutMs: ASK_SEARCH_TIMEOUT_MS,
+        // 重试感知 grounding：首次尝试带 raw 正文（+0.5~6s），超时重试降级为
+        // 无 raw 快速路径——完成率优先，证据质量优雅降级。
+        includeRawContent: attempt === 0,
       });
     } catch (caught) {
       lastError = caught;

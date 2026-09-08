@@ -49,6 +49,7 @@ export async function searchWeb(args: {
   query: string;
   timeoutMs: number;
   enableAgentReachFallback?: boolean;
+  includeRawContent?: boolean;
 }): Promise<SearchExecution> {
   if (args.provider !== "tavily" && !args.apiKey.trim()) {
     throw new Error("Search API key is not configured");
@@ -97,6 +98,13 @@ export async function searchKeywordSources(args: {
   tavilyApiKey?: string;
   enableAgentReachFallback?: boolean;
   timeoutMs?: number;
+  /**
+   * Path B (opt-in): request raw page content alongside the snippets.
+   * include_raw_content adds 0.5-6s to Tavily latency (measured tail 7.4s),
+   * so budget-critical callers retry with this off (graceful evidence
+   * degradation instead of completion loss).
+   */
+  includeRawContent?: boolean;
 }): Promise<SearchKeywordOutcome> {
   const fallbackTimeoutMs = args.timeoutMs ?? DEFAULT_KEYWORD_TIMEOUT_MS;
   const settled = await Promise.allSettled<SearchResult[]>([
@@ -132,6 +140,7 @@ export async function searchKeywordSources(args: {
         query: `${args.keyword} technology explanation`,
         timeoutMs: fallbackTimeoutMs,
         enableAgentReachFallback: args.enableAgentReachFallback,
+        includeRawContent: args.includeRawContent,
       },
       controller.signal,
     );
@@ -192,7 +201,7 @@ export function collectUsableResults(results: SearchResult[]): SearchResult[] {
 }
 
 async function searchTavilyWithFallback(
-  args: { apiKey: string; query: string; timeoutMs: number; enableAgentReachFallback?: boolean },
+  args: { apiKey: string; query: string; timeoutMs: number; enableAgentReachFallback?: boolean; includeRawContent?: boolean },
   signal: AbortSignal,
 ): Promise<SearchExecution> {
   try {
@@ -226,18 +235,23 @@ const TAVILY_MIN_SCORE = 0.2;
 // sizes stay bounded regardless of page length.
 const TAVILY_RAW_CONTENT_MAX_CHARS = 4_000;
 
-async function searchTavily(args: { apiKey: string; query: string }, signal: AbortSignal): Promise<SearchResult[]> {
+async function searchTavily(
+  args: { apiKey: string; query: string; includeRawContent?: boolean },
+  signal: AbortSignal,
+): Promise<SearchResult[]> {
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     // Path B: request raw page content in the same call (no extra round
     // trip) so generation prompts can ground against real page text.
+    // Opt-in: include_raw_content adds 0.5-6s latency, so budget-critical
+    // retry loops only pay it on the first attempt.
     body: JSON.stringify({
       api_key: args.apiKey,
       query: args.query,
       max_results: 5,
       search_depth: "basic",
-      include_raw_content: true,
+      ...(args.includeRawContent ? { include_raw_content: true } : {}),
     }),
     signal,
   });

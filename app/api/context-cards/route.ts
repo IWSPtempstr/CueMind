@@ -525,7 +525,12 @@ async function searchWithRetry(
         keyword,
         tavilyApiKey: process.env.TAVILY_API_KEY?.trim() || request.settings.searchApiKey,
         enableAgentReachFallback: request.settings.enableAgentReachFallback,
-        timeoutMs: 4_000,
+        // Path B 后 raw 请求尾长可达 7.4s：预算提高至 6.5s（与 ask 一致），
+        // 残余超时由无 raw 快速重试兜底。
+        timeoutMs: 6_500,
+        // 重试感知 grounding：首次尝试带 raw 正文（+0.5~6s），超时重试降级为
+        // 无 raw 快速路径——出卡优先，证据质量优雅降级。
+        includeRawContent: attempt === 0,
       });
       // Ask 缓存单向写：同关键词询问复用本次结果，避免重复外发（fire-and-forget，吞错）。
       try { askCacheSet(keyword, outcome.results, "context_card"); } catch { /* 不影响卡片链路 */ }
