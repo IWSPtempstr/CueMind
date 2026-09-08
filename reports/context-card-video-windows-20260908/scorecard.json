@@ -1,0 +1,28 @@
+{
+  "evaluator": "context-card-video-windows-v1",
+  "generatedAt": "2026-09-08T05:17:03.827Z",
+  "transcriptsDir": "/home/work/asr/CueMind/reports/video-reimport-20260830-cuda-zh/transcripts",
+  "windows": 40,
+  "finalStates": {
+    "card_shown": 26,
+    "model_skip": 14
+  },
+  "cardShownCount": 26,
+  "cardShownRate": 0.65,
+  "uniqueKeywords": 26,
+  "withSources": 26,
+  "latencyMs": {
+    "total": {
+      "p50": 7354,
+      "p95": 8655
+    },
+    "keyword": {
+      "p50": 839,
+      "p95": 1113
+    },
+    "generation": {
+      "p50": 3960,
+      "p95": 5107
+    }
+  }
+}
