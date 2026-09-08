@@ -40,6 +40,7 @@ import {
 } from "@/lib/search";
 import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
 import { appendPipelineEvents } from "@/lib/pipeline-event-store";
+import { fixCitations } from "@/lib/citation-fix";
 
 // Idle watchdog for the streamed generation: a stalled provider is aborted,
 // steady token output never is (same semantics as the old chat route).
@@ -56,6 +57,10 @@ const ASK_YIELD_MAX_MS = 15_000;
 // Generation evidence caps keep the local prompt bounded.
 const ASK_MAX_SOURCES_IN_PROMPT = 5;
 const ASK_SOURCE_SNIPPET_CHARS = 800;
+// Path B: top2 sources swap 300 snippet chars for 300 raw-content chars
+// (budget-neutral grounding; total prompt length is unchanged).
+const ASK_RAW_EVIDENCE_SOURCES = 2;
+const ASK_SOURCE_RAW_CHARS = 300;
 // Fail-closed: the citation JSON must cite at least one provided source; the
 // done event merges cited + search sources so clients always get ≥2 links.
 const ASK_MIN_CITED_SOURCES = 1;
@@ -492,6 +497,23 @@ export async function POST(
         // 回答中残留的 [1] 引用标记，避免"无来源却显示引文"的引用幻觉。
         if (skipSearch) validated.answer = stripCitationMarkers(validated.answer);
 
+        // CiteFix 式引用后校验：把 [n] 标记与检索来源做词面交叉核对，
+        // 错配引用重指向词面最佳匹配的来源（启发式、零模型调用、fail-open：
+        // 证据不足时保持原引用，标记只重指不删除）。
+        if (!skipSearch) {
+          const citationFixed = fixCitations(validated.answer, sources);
+          if (citationFixed.sources.length > 0) {
+            validated.answer = citationFixed.answer;
+            validated.sources = citationFixed.sources;
+            if (citationFixed.corrections > 0) {
+              emitPipelineEvent("citation_fix", {
+                status: "completed",
+                corrections: citationFixed.corrections,
+              });
+            }
+          }
+        }
+
         // Replay the validated answer as streaming delta frames using the
         // existing OpenAI-compatible chunk shape.
         for (
@@ -593,14 +615,25 @@ function buildAskMessages(args: {
 }): Array<{ role: string; content: string }> {
   const sourceLines = args.sources
     .slice(0, ASK_MAX_SOURCES_IN_PROMPT)
-    .map((source, index) =>
-      [
+    .map((source, index) => {
+      // Path B（预算中立）：top2 来源用 300 字原始正文换掉等量 snippet，
+      // 给模型真实页面文本作 grounding，prompt 总长不变以守住延迟预算。
+      const rawExcerpt =
+        index < ASK_RAW_EVIDENCE_SOURCES && source.content && source.content.trim()
+          ? source.content.slice(0, ASK_SOURCE_RAW_CHARS)
+          : "";
+      const snippetChars = rawExcerpt
+        ? ASK_SOURCE_SNIPPET_CHARS - ASK_SOURCE_RAW_CHARS
+        : ASK_SOURCE_SNIPPET_CHARS;
+      const lines = [
         `[${index + 1}] title: ${source.title}`,
         `url: ${source.url}`,
         `type: ${source.sourceType ?? "web"}`,
-        `snippet: ${source.snippet.slice(0, ASK_SOURCE_SNIPPET_CHARS)}`,
-      ].join("\n"),
-    )
+        `snippet: ${source.snippet.slice(0, snippetChars)}`,
+      ];
+      if (rawExcerpt) lines.push(`raw: ${rawExcerpt}`);
+      return lines.join("\n");
+    })
     .join("\n\n");
 
   const transcriptBlock =

@@ -14,7 +14,7 @@ import {
   type ModelProviderName,
 } from "@/lib/model-provider";
 import { InsufficientSearchSourcesError, searchKeywordSources, type SearchKeywordOutcome, type SearchResult } from "@/lib/search";
-import type { ContextCard, ContextCardDemoTrace } from "@/types/suggestions";
+import type { ContextCard, ContextCardDemoTrace, ContextCardSource } from "@/types/suggestions";
 import { getKnowledgeMemoryStore } from "@/lib/knowledge-memory-store";
 import type { MemoryHit } from "@/lib/knowledge-memory";
 import { appendPipelineEvent, createPipelineEvent, type PipelineEvent } from "@/lib/request-timeline";
@@ -48,6 +48,8 @@ const KEYWORD_PROMPT_TRANSCRIPT_CHARS = 750;
 // 1.5k 到 2.3s。生成阶段 8s 预算，故把转写截断到 ~1500 字符（最近片段），
 // 配合来源上下文中要点卡所需的近期语境，稳定落在预算内，不再误报超时。
 const GENERATION_PROMPT_TRANSCRIPT_CHARS = 1_500;
+// Path B: 每来源 raw 正文摘录上限（与 snippet 等量置换，prompt 总长不变）。
+const CARD_SOURCE_RAW_CHARS = 300;
 // 关键词阶段瞬态失败（超时/5xx）的有界重试：本地单槽位 llama-server 被在途
 // 生成占满时，排队即可超过 5s 预算；一次重试吸收排队抖动，不放大尾延迟。
 const KEYWORD_MAX_RETRIES = 1;
@@ -374,14 +376,24 @@ export async function POST(
           "</local_memory_untrusted>",
         ] : []),
         "<search_evidence_untrusted>",
-        sources.slice(0, 2).map((source, index) => [
-          `<source index="${index + 1}">`,
-          `title: ${limitPromptText(source.title, 300)}`,
-          `type: ${source.sourceType ?? "web"}`,
-          `url: ${source.url}`,
-          `snippet: ${limitPromptText(source.snippet, 1_200)}`,
-          "</source>",
-        ].join("\n")).join("\n"),
+        sources.slice(0, 2).map((source, index) => {
+          // Path B（预算中立）：有 raw 正文时用 300 字换掉等量 snippet，
+          // grounding 材料从"搜索摘要"升级为"真实页面文本"，prompt 总长不变。
+          const rawExcerpt =
+            source.content && source.content.trim()
+              ? limitPromptText(source.content, CARD_SOURCE_RAW_CHARS)
+              : "";
+          const snippetChars = rawExcerpt ? 1_200 - CARD_SOURCE_RAW_CHARS : 1_200;
+          return [
+            `<source index="${index + 1}">`,
+            `title: ${limitPromptText(source.title, 300)}`,
+            `type: ${source.sourceType ?? "web"}`,
+            `url: ${source.url}`,
+            `snippet: ${limitPromptText(source.snippet, snippetChars)}`,
+            ...(rawExcerpt ? [`raw: ${rawExcerpt}`] : []),
+            "</source>",
+          ].join("\n");
+        }).join("\n"),
         "</search_evidence_untrusted>",
       ].join("\n\n"),
       // 单槽位 8B + 8GB 卡下生成易排队/偶发慢：预算提高到 15s，配合下方一次
@@ -553,10 +565,22 @@ function validateCard(
     keyword: value.keyword.trim() || keyword,
     keyPoints,
     whyNow: value.whyNow.trim(),
-    sources: [sources[0], sources[1]],
+    // 只落 title/url/snippet/sourceType：score/content 是搜索层内部字段
+    // （raw 正文仅用于生成 prompt grounding），不得进入卡片持久化/客户端。
+    sources: [toCardSource(sources[0]), toCardSource(sources[1])],
     createdAt: new Date(),
     transcriptChunkIds: request.transcriptChunkIds,
     latencyMs,
+  };
+}
+
+/** 搜索层内部字段（score/raw content）不得进入卡片来源契约。 */
+function toCardSource(source: SearchResult): ContextCardSource {
+  return {
+    title: source.title,
+    url: source.url,
+    snippet: source.snippet,
+    ...(source.sourceType !== undefined ? { sourceType: source.sourceType } : {}),
   };
 }
 

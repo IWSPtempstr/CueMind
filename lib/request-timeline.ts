@@ -4,7 +4,7 @@ import { withSessionHeaders } from "@/lib/client-session-auth";
 export const REQUEST_TIMELINE_EVENTS = [
   "request_start", "capture_start", "capture_end", "asr_start", "asr_end", "keyword_start", "keyword_end",
   "search_start", "search_end", "generation_start", "generation_end", "render_start", "render_end",
-  "first_event", "first_token", "complete",
+  "first_event", "first_token", "complete", "citation_fix",
 ] as const;
 export type RequestTimelineEventName = (typeof REQUEST_TIMELINE_EVENTS)[number];
 export interface RequestTimelineEvent { name: RequestTimelineEventName; atMs: number }

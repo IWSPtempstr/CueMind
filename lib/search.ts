@@ -19,6 +19,15 @@ export interface SearchResult {
   url: string;
   snippet: string;
   sourceType?: SearchResultSourceType;
+  /** Provider relevance score (Tavily 0-1) when available; used to filter noise. */
+  score?: number;
+  /**
+   * Raw page content when the provider returns it (`include_raw_content`).
+   * Grounded evidence for generation prompts; never sent to clients (the
+   * client-facing mappers pick title/url/sourceType only). Capped at the
+   * search layer to bound prompt sizes.
+   */
+  content?: string;
 }
 
 export interface SearchExecution {
@@ -173,11 +182,11 @@ export function collectUsableResults(results: SearchResult[]): SearchResult[] {
     const url = normalizeHttpUrl(result.url);
     if (!title || !snippet || !url || seenUrls.has(url)) continue;
     seenUrls.add(url);
-    usable.push(
-      result.sourceType === undefined
-        ? { title, url, snippet }
-        : { title, url, snippet, sourceType: result.sourceType },
-    );
+    const entry: SearchResult = { title, url, snippet };
+    if (result.sourceType !== undefined) entry.sourceType = result.sourceType;
+    if (typeof result.score === "number" && Number.isFinite(result.score)) entry.score = result.score;
+    if (typeof result.content === "string" && result.content) entry.content = result.content;
+    usable.push(entry);
   }
   return usable;
 }
@@ -209,20 +218,54 @@ async function searchTavilyWithFallback(
   }
 }
 
+// Path A floor: Tavily 0-1 relevance scores below this are treated as noise
+// (the vw-009/vw-010 style off-topic sources). Fail-open: only filter while
+// >=2 results survive, otherwise keep the raw pool.
+const TAVILY_MIN_SCORE = 0.2;
+// Path B cap: raw page content is truncated at the search layer so prompt
+// sizes stay bounded regardless of page length.
+const TAVILY_RAW_CONTENT_MAX_CHARS = 4_000;
+
 async function searchTavily(args: { apiKey: string; query: string }, signal: AbortSignal): Promise<SearchResult[]> {
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ api_key: args.apiKey, query: args.query, max_results: 5, search_depth: "basic" }),
+    // Path B: request raw page content in the same call (no extra round
+    // trip) so generation prompts can ground against real page text.
+    body: JSON.stringify({
+      api_key: args.apiKey,
+      query: args.query,
+      max_results: 5,
+      search_depth: "basic",
+      include_raw_content: true,
+    }),
     signal,
   });
   if (!response.ok) throw new Error(`Tavily returned HTTP ${response.status}`);
   const payload: unknown = await response.json();
   const results = isRecord(payload) && Array.isArray(payload.results) ? payload.results : [];
-  return results.flatMap((result) => {
+  const mapped = results.flatMap((result) => {
     if (!isRecord(result) || !isString(result.title) || !isString(result.url)) return [];
-    return [{ title: result.title, url: result.url, snippet: isString(result.content) ? result.content : "" }];
+    const entry: SearchResult = {
+      title: result.title,
+      url: result.url,
+      snippet: isString(result.content) ? result.content : "",
+    };
+    // Path A: keep the provider's relevance score (was discarded) for
+    // downstream filtering / observability.
+    if (typeof result.score === "number" && Number.isFinite(result.score)) {
+      entry.score = Math.min(1, Math.max(0, result.score));
+    }
+    // Path B: raw page content as grounded evidence.
+    if (isString(result.raw_content) && result.raw_content.trim()) {
+      entry.content = result.raw_content.slice(0, TAVILY_RAW_CONTENT_MAX_CHARS);
+    }
+    return [entry];
   });
+  const filtered = mapped.filter(
+    (result) => typeof result.score !== "number" || result.score >= TAVILY_MIN_SCORE,
+  );
+  return filtered.length >= 2 ? filtered : mapped;
 }
 
 async function searchBing(args: { apiKey: string; query: string }, signal: AbortSignal): Promise<SearchResult[]> {
